@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "namazu-api"
+version = "0.1.0"
+description = "An API security workbench that shows its working: OpenAPI contract testing and an OWASP API Top 10 audit with reproducible evidence"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "cwsecur1ty" }]
+keywords = [
+  "api-security", "openapi", "swagger", "owasp", "pentest",
+  "security-testing", "dast", "api-testing", "bola", "oauth2",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Web Environment",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Information Technology",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Security",
+  "Topic :: Software Development :: Testing",
+  "Topic :: Internet :: WWW/HTTP",
+]
+dependencies = [
+  "fastapi>=0.115,<1", "uvicorn>=0.30,<1", "httpx>=0.27,<1",
+  "PyYAML>=6,<7", "jsonschema>=4.23,<5", "referencing>=0.35,<1",
+]
+
+[project.urls]
+Homepage = "https://github.com/cwsecur1ty/namazu"
+Repository = "https://github.com/cwsecur1ty/namazu"
+Issues = "https://github.com/cwsecur1ty/namazu/issues"
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+# Optional second-opinion tooling. nuclei is a Go binary and is installed separately.
+external = ["schemathesis>=4,<5"]
+
+[project.scripts]
+namazu = "namazu.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["namazu*"]
+
+[tool.setuptools.package-data]
+namazu = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning:starlette.*"]

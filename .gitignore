@@ -1,0 +1,30 @@
+# Environments
+.venv/
+venv/
+env/
+.test-deps/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+pytest-cache-files-*/
+.coverage
+htmlcov/
+
+# Tool output
+*.har
+namazu-audit-*.json
+namazu-log-*.json
+namazu-results-*.json
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+.hypothesis/
+.schemathesis/

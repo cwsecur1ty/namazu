@@ -1,0 +1,7 @@
+*
+!pyproject.toml
+!README.md
+!namazu/
+!namazu/**
+**/__pycache__
+**/*.pyc

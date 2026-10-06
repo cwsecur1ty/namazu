@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Namazu is a standalone API testing workbench. Import an OpenAPI contract, build requests, send them, and validate responses against the contract.">
+  <title>Namazu API testing workbench</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23234e8f'/%3E%3Cpath d='M9 7v18M23 7l-9 9 9 9' fill='none' stroke='white' stroke-width='3.6' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#work">Skip to request editor</a>
+
+<!-- ───────────────────────── top bar ───────────────────────── -->
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linejoin="round"><path d="M8 5v18M22 5l-9 9 9 9"/></svg></span>
+    <span class="brand-name">Namazu</span>
+  </div>
+
+  <div class="topbar-context" id="topbar-context" hidden>
+    <button type="button" class="context-chip" id="context-button" aria-label="Contract source">
+      <span id="ctx-title" class="context-title">No contract</span>
+      <span id="ctx-version" class="chip mono"></span>
+    </button>
+    <div class="base-field">
+      <label for="base-url">Base URL</label>
+      <input id="base-url" type="url" list="server-options" spellcheck="false" autocomplete="off" placeholder="https://api.example.com">
+      <datalist id="server-options"></datalist>
+      <button type="button" class="icon-btn" id="base-reset" title="Restore the contract server" aria-label="Restore the contract server">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11a8 8 0 1 1 2.5 5.8"/><path d="M4 5.5V11h5.5"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="topbar-tools">
+    <label class="switch" id="writes-switch" hidden>
+      <input type="checkbox" id="allow-writes">
+      <span class="switch-track" aria-hidden="true"></span>
+      <span class="switch-text">Allow writes</span>
+    </label>
+    <button type="button" class="icon-btn" id="theme-toggle" aria-label="Switch to light mode">
+      <svg data-icon="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M5.2 18.8l1.4-1.4M17.4 6.6l1.4-1.4"/></svg>
+      <svg data-icon="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>
+    </button>
+  </div>
+</header>
+
+<div id="notice" class="notice" role="status" hidden>
+  <span id="notice-text"></span>
+  <button type="button" class="icon-btn" id="notice-close" aria-label="Dismiss contract notices">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+</div>
+
+<!-- ───────────────────────── shell ───────────────────────── -->
+<div class="shell" id="shell">
+
+  <nav class="rail" aria-label="Workbench sections">
+    <button type="button" class="rail-btn" data-section="endpoints" aria-current="true" title="Endpoints">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 6.5h3.5M3 12h3.5M3 17.5h3.5M10.5 6.5H21M10.5 12H21M10.5 17.5h7"/></svg>
+      <span>Endpoints</span>
+    </button>
+    <button type="button" class="rail-btn" data-section="schemas" title="Schemas">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8.5 4.2L12 11.5 3.5 7.2 12 3z"/><path d="M3.5 12.2 12 16.5l8.5-4.3M3.5 16.8 12 21l8.5-4.2"/></svg>
+      <span>Schemas</span>
+    </button>
+    <button type="button" class="rail-btn" data-section="runner" title="Runner">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M9 5.5 19 12 9 18.5z"/><path d="M4.5 5v14" stroke-linecap="round"/></svg>
+      <span>Runner</span>
+      <span class="rail-badge" id="rail-selected" hidden>0</span>
+    </button>
+    <button type="button" class="rail-btn" data-section="history" title="History">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.6 12A8.4 8.4 0 1 1 6 17.9"/><path d="M3 7.5V12h4.5"/><path d="M12 8.3V12l2.8 1.8"/></svg>
+      <span>History</span>
+      <span class="rail-badge" id="rail-history" hidden>0</span>
+    </button>
+    <button type="button" class="rail-btn" data-section="audit" title="Security audit">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 2.6v5.6c0 4.2-2.9 7.6-7 8.8-4.1-1.2-7-4.6-7-8.8V5.6z"/><path d="M9.2 12l2 2 3.6-3.8"/></svg>
+      <span>Audit</span>
+      <span class="rail-badge" id="rail-findings" hidden>0</span>
+    </button>
+    <div class="rail-gap"></div>
+    <button type="button" class="rail-btn" data-section="source" title="Contract source">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7.5z"/><path d="M13.5 3v4.5H18M9.5 13h5M9.5 16.5h3.5"/></svg>
+      <span>Contract</span>
+    </button>
+    <button type="button" class="rail-btn" data-section="settings" title="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 7.5h7M15.5 7.5H20M4 16.5h3.5M12 16.5H20"/><circle cx="13" cy="7.5" r="2.4"/><circle cx="9.5" cy="16.5" r="2.4"/></svg>
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <!-- ─────────── list column ─────────── -->
+  <aside class="panel" id="list-panel" aria-label="Section list">
+
+    <!-- Endpoints -->
+    <section class="panel-section" id="panel-endpoints">
+      <div class="panel-head">
+        <h2>Endpoints</h2>
+        <span class="count" id="endpoint-count">0</span>
+      </div>
+      <div class="panel-filters">
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l4.5 4.5"/></svg>
+          <label class="sr-only" for="endpoint-search">Filter endpoints</label>
+          <input id="endpoint-search" type="search" placeholder="Filter path, summary, tag" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="filter-row">
+          <label class="sr-only" for="method-filter">Method</label>
+          <select id="method-filter" title="Method">
+            <option value="all">All methods</option>
+            <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option>
+            <option>DELETE</option><option>HEAD</option><option>OPTIONS</option><option>TRACE</option>
+          </select>
+          <label class="sr-only" for="group-mode">Grouping</label>
+          <select id="group-mode" title="Grouping">
+            <option value="tag">By tag</option>
+            <option value="method">By method</option>
+            <option value="path">By path</option>
+            <option value="none">Flat</option>
+          </select>
+        </div>
+      </div>
+      <div class="tree" id="endpoint-list" tabindex="-1"></div>
+      <div class="panel-foot">
+        <span id="selection-count" class="dim">0 selected</span>
+        <div class="foot-actions">
+          <button type="button" class="link" id="select-visible">Select shown</button>
+          <button type="button" class="link" id="clear-selection">Clear</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Schemas -->
+    <section class="panel-section" id="panel-schemas" hidden>
+      <div class="panel-head">
+        <h2>Schemas</h2>
+        <span class="count" id="schema-count">0</span>
+      </div>
+      <div class="panel-filters">
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l4.5 4.5"/></svg>
+          <label class="sr-only" for="schema-search">Filter schemas</label>
+          <input id="schema-search" type="search" placeholder="Filter component schemas" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+      <div class="tree flush" id="schema-list"></div>
+    </section>
+
+    <!-- Runner -->
+    <section class="panel-section" id="panel-runner" hidden>
+      <div class="panel-head">
+        <h2>Runner</h2>
+        <span class="count" id="runner-count">0</span>
+      </div>
+      <div class="panel-block">
+        <p class="hint">Runs each selected endpoint once, in order, with generated values and the shared connection settings.</p>
+        <div class="stack">
+          <button type="button" class="btn primary wide" id="run-suite" disabled>Run selected</button>
+          <button type="button" class="btn wide" id="cancel-suite" hidden>Stop after current</button>
+        </div>
+      </div>
+      <div class="queue" id="run-queue"></div>
+      <div class="panel-foot">
+        <span class="dim" id="runner-foot">No endpoints selected</span>
+        <div class="foot-actions"><button type="button" class="link" id="clear-queue">Clear</button></div>
+      </div>
+    </section>
+
+    <!-- History -->
+    <section class="panel-section" id="panel-history" hidden>
+      <div class="panel-head">
+        <h2>History</h2>
+        <span class="count" id="history-count">0</span>
+      </div>
+      <div class="tree flush" id="history-list"></div>
+      <div class="panel-foot">
+        <span class="dim">Session only</span>
+        <div class="foot-actions">
+          <button type="button" class="link" id="export-history" disabled>Export JSON</button>
+          <button type="button" class="link" id="clear-history" disabled>Clear</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Audit -->
+    <section class="panel-section" id="panel-audit" hidden>
+      <div class="panel-head">
+        <h2>Security audit</h2>
+        <span class="count" id="audit-count">0</span>
+      </div>
+      <div class="panel-block">
+        <div class="field">
+          <label for="audit-profile">Probe profile</label>
+          <select id="audit-profile">
+            <option value="passive">Passive: contract + one response</option>
+            <option value="readonly" selected>Read-only probes</option>
+            <option value="thorough">Read-only, thorough</option>
+            <option value="writes">Read-only + write probes</option>
+          </select>
+          <p class="hint" id="profile-note"></p>
+        </div>
+        <div class="field">
+          <label class="check"><input id="audit-inventory" type="checkbox" checked><span>Sweep for undocumented surface</span></label>
+          <label class="check"><input id="audit-selected-only" type="checkbox"><span>Selected endpoints only</span></label>
+        </div>
+        <details class="disclosure" id="identity-b-block">
+          <summary>Second identity <span class="dim" id="identity-b-state">not set</span></summary>
+          <div class="disclosure-body">
+            <p class="hint">A second account's credentials. Namazu replays the first identity's request as this one. If the same object comes back, that is a confirmed authorization break.</p>
+            <div class="kv-head"><span></span><span>Header</span><span>Value</span><span></span></div>
+            <div id="identity-b-rows" class="kv-list"></div>
+            <div class="row-actions"><button type="button" class="link" id="add-identity-b">+ Add header</button></div>
+          </div>
+        </details>
+        <div class="stack">
+          <button type="button" class="btn primary wide" id="run-audit">Run audit</button>
+          <button type="button" class="btn wide" id="cancel-audit" hidden>Stop after current</button>
+        </div>
+      </div>
+      <div class="sev-bar" id="audit-severity" hidden></div>
+      <div class="panel-filters" id="audit-filters" hidden>
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l4.5 4.5"/></svg>
+          <label class="sr-only" for="finding-search">Filter findings</label>
+          <input id="finding-search" type="search" placeholder="Filter title, endpoint, OWASP" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="filter-row">
+          <label class="sr-only" for="severity-filter">Severity</label>
+          <select id="severity-filter" title="Severity">
+            <option value="all">All severities</option>
+            <option value="critical">Critical</option><option value="high">High</option>
+            <option value="medium">Medium</option><option value="low">Low</option><option value="info">Info</option>
+          </select>
+          <label class="sr-only" for="confidence-filter">Confidence</label>
+          <select id="confidence-filter" title="Confidence">
+            <option value="all">Any confidence</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="probable">Probable+</option>
+          </select>
+        </div>
+      </div>
+      <div class="tree flush" id="finding-list"></div>
+      <div class="panel-foot">
+        <span class="dim" id="audit-foot">Not run</span>
+        <div class="foot-actions">
+          <button type="button" class="link" id="audit-report">Report</button>
+          <button type="button" class="link" id="audit-log">Log</button>
+          <button type="button" class="link" id="export-audit" disabled>Export</button>
+        </div>
+      </div>
+    </section>
+  </aside>
+
+  <div class="splitter" id="panel-splitter" role="separator" aria-orientation="vertical" aria-label="Resize list column" tabindex="0"></div>
+
+  <!-- ─────────── work area ─────────── -->
+  <main class="work" id="work" tabindex="-1">
+
+    <!-- empty state -->
+    <section class="view center-view" id="view-empty">
+      <div class="empty">
+        <h2 id="empty-title">No contract loaded</h2>
+        <p id="empty-text">Import a Swagger or OpenAPI document to list its operations, build requests and validate responses.</p>
+        <div class="empty-actions">
+          <button type="button" class="btn primary" id="empty-import">Import a contract</button>
+          <button type="button" class="btn" id="empty-sample">Load sample</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- operation workbench -->
+    <section class="view" id="view-operation" hidden>
+      <div class="op-bar">
+        <span id="op-method" class="method"></span>
+        <h2 id="op-path" class="op-path" tabindex="-1"></h2>
+        <span class="chip" id="op-tag" hidden></span>
+        <span class="chip warn" id="op-auth" hidden>auth required</span>
+        <span class="chip" id="op-saved" hidden>saved exchange</span>
+        <div class="op-actions">
+          <button type="button" class="icon-btn" id="layout-toggle" aria-label="Switch to stacked layout" title="Switch to stacked layout">
+            <svg data-icon="cols" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3.5" y="4.5" width="7" height="15" rx="1"/><rect x="13.5" y="4.5" width="7" height="15" rx="1"/></svg>
+            <svg data-icon="rows" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true" hidden><rect x="4.5" y="3.5" width="15" height="7" rx="1"/><rect x="4.5" y="13.5" width="15" height="7" rx="1"/></svg>
+          </button>
+          <button type="button" class="btn" id="prepare-request">Validate</button>
+          <button type="button" class="btn primary" id="send-request">Send<kbd>⌃⏎</kbd></button>
+        </div>
+      </div>
+      <p id="op-summary" class="op-summary" hidden></p>
+      <div id="work-error" class="msg error" role="alert" hidden></div>
+
+      <div class="split" id="op-split">
+        <!-- request -->
+        <section class="pane" aria-label="Request">
+          <div class="tabstrip" role="tablist" aria-label="Request editor">
+            <button type="button" class="tab active" role="tab" aria-selected="true" id="req-params-tab" aria-controls="req-params" data-req-tab="params">Params<span class="tab-count" id="params-count" hidden>0</span></button>
+            <button type="button" class="tab" role="tab" aria-selected="false" tabindex="-1" id="req-headers-tab" aria-controls="req-headers" data-req-tab="headers">Headers<span class="tab-count" id="headers-count" hidden>0</span></button>
+            <button type="button" class="tab" role="tab" aria-selected="false" tabindex="-1" id="req-auth-tab" aria-controls="req-auth" data-req-tab="auth">Auth<span class="dot" id="auth-dot" hidden></span></button>
+            <button type="button" class="tab" role="tab" aria-selected="false" tabindex="-1" id="req-body-tab" aria-controls="req-body" data-req-tab="body">Body<span class="dot" id="body-dot" hidden></span></button>
+            <button type="button" class="tab" role="tab" aria-selected="false" tabindex="-1" id="req-contract-tab" aria-controls="req-contract" data-req-tab="contract">Contract</button>
+          </div>
+
+          <div class="pane-body">
+            <div id="req-params" role="tabpanel" aria-labelledby="req-params-tab">
+              <div class="kv-head" id="param-head" hidden><span></span><span>Name</span><span>Value</span><span>Type</span></div>
+              <div id="parameter-fields" class="kv-list"></div>
+              <p class="pane-empty" id="no-params" hidden>This operation takes no path, query, header or cookie parameters.</p>
+            </div>
+
+            <div id="req-headers" role="tabpanel" aria-labelledby="req-headers-tab" hidden>
+              <div class="kv-head"><span></span><span>Header</span><span>Value</span><span></span></div>
+              <div id="header-rows" class="kv-list"></div>
+              <div class="row-actions">
+                <button type="button" class="link" id="add-header">+ Add header</button>
+                <button type="button" class="link" id="bulk-headers">Bulk edit</button>
+              </div>
+              <div id="header-bulk-wrap" hidden>
+                <label class="sr-only" for="header-bulk">Headers, one per line</label>
+                <textarea id="header-bulk" class="code-input" rows="7" spellcheck="false" placeholder="Authorization: Bearer token&#10;X-Request-Id: 42"></textarea>
+                <div class="row-actions"><button type="button" class="btn sm" id="apply-bulk">Apply</button><button type="button" class="link" id="cancel-bulk">Cancel</button></div>
+              </div>
+              <p class="hint" id="header-note">Sent with single requests and runner requests. Auth settings are applied on top of these.</p>
+            </div>
+
+            <div id="req-auth" role="tabpanel" aria-labelledby="req-auth-tab" hidden>
+              <div class="field">
+                <label for="auth-mode">Scheme</label>
+                <select id="auth-mode">
+                  <option value="none">No authentication</option>
+                  <option value="bearer">Bearer token</option>
+                  <option value="basic">Basic</option>
+                  <option value="apikey">API key header</option>
+                  <option value="oauth2">OAuth 2.0</option>
+                </select>
+              </div>
+              <div class="field" id="auth-bearer" hidden>
+                <label for="bearer-token">Token</label>
+                <input id="bearer-token" type="password" autocomplete="off" spellcheck="false" placeholder="Session token">
+              </div>
+              <div class="field-pair" id="auth-basic" hidden>
+                <div class="field"><label for="basic-user">Username</label><input id="basic-user" type="text" autocomplete="off" spellcheck="false"></div>
+                <div class="field"><label for="basic-pass">Password</label><input id="basic-pass" type="password" autocomplete="off"></div>
+              </div>
+              <div class="field-pair" id="auth-apikey" hidden>
+                <div class="field"><label for="apikey-name">Header name</label><input id="apikey-name" type="text" autocomplete="off" spellcheck="false" placeholder="X-API-Key"></div>
+                <div class="field"><label for="apikey-value">Value</label><input id="apikey-value" type="password" autocomplete="off"></div>
+              </div>
+              <div class="field-pair" id="auth-oauth-top" hidden>
+                <div class="field"><label for="oauth-grant">Grant</label>
+                  <select id="oauth-grant">
+                    <option value="authorization_code">Authorization code + PKCE</option>
+                    <option value="client_credentials">Client credentials</option>
+                    <option value="refresh_token">Refresh token</option>
+                    <option value="password">Password (deprecated)</option>
+                  </select>
+                </div>
+                <div class="field"><label for="oauth-preset">From contract</label>
+                  <select id="oauth-preset"><option value="">Choose a documented scheme…</option></select>
+                </div>
+              </div>
+              <div id="auth-oauth" hidden>
+                <div class="field">
+                  <label for="oauth-issuer">Issuer <span class="opt">optional, enables discovery</span></label>
+                  <div class="inline-field">
+                    <input id="oauth-issuer" type="url" autocomplete="off" spellcheck="false" placeholder="https://id.example.com">
+                    <button type="button" class="btn sm" id="oauth-discover">Discover</button>
+                  </div>
+                  <p class="hint" id="oauth-discovery-note"></p>
+                </div>
+                <div class="field" id="oauth-authorize-field">
+                  <label for="oauth-authorize-url">Authorization endpoint</label>
+                  <input id="oauth-authorize-url" type="url" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="field">
+                  <label for="oauth-token-url">Token endpoint</label>
+                  <input id="oauth-token-url" type="url" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="field-pair">
+                  <div class="field"><label for="oauth-client-id">Client ID</label>
+                    <input id="oauth-client-id" type="text" autocomplete="off" spellcheck="false"></div>
+                  <div class="field"><label for="oauth-client-secret">Client secret <span class="opt">public clients: leave empty</span></label>
+                    <input id="oauth-client-secret" type="password" autocomplete="off"></div>
+                </div>
+                <div class="field-pair">
+                  <div class="field"><label for="oauth-scope">Scope</label>
+                    <input id="oauth-scope" type="text" autocomplete="off" spellcheck="false" placeholder="openid profile orders:read"></div>
+                  <div class="field"><label for="oauth-audience">Audience <span class="opt">optional</span></label>
+                    <input id="oauth-audience" type="text" autocomplete="off" spellcheck="false"></div>
+                </div>
+                <div class="field-pair" id="oauth-password-fields" hidden>
+                  <div class="field"><label for="oauth-username">Username</label>
+                    <input id="oauth-username" type="text" autocomplete="off" spellcheck="false"></div>
+                  <div class="field"><label for="oauth-password">Password</label>
+                    <input id="oauth-password" type="password" autocomplete="off"></div>
+                </div>
+                <div class="field" id="oauth-refresh-field" hidden>
+                  <label for="oauth-refresh-token">Refresh token</label>
+                  <input id="oauth-refresh-token" type="password" autocomplete="off">
+                </div>
+                <div class="field-pair">
+                  <div class="field"><label for="oauth-client-auth">Client authentication</label>
+                    <select id="oauth-client-auth">
+                      <option value="post">Secret in body (client_secret_post)</option>
+                      <option value="basic">Basic header (client_secret_basic)</option>
+                    </select>
+                  </div>
+                  <div class="field"><label class="check"><input id="oauth-pkce" type="checkbox" checked><span>Use PKCE (S256)</span></label></div>
+                </div>
+                <p class="hint" id="oauth-redirect-note"></p>
+                <div class="row-actions">
+                  <button type="button" class="btn primary sm" id="oauth-get-token">Get token</button>
+                  <button type="button" class="btn sm" id="oauth-probe">Test authorization server</button>
+                  <button type="button" class="link" id="oauth-use-b">Assign to second identity</button>
+                </div>
+                <div id="oauth-status" class="verdict" role="status" hidden></div>
+                <div id="oauth-token-facts" hidden>
+                  <h4>Token</h4>
+                  <dl class="facts" id="oauth-token-list"></dl>
+                </div>
+              </div>
+              <p class="hint" id="auth-preview">Nothing is added to the request.</p>
+              <div class="schemes" id="security-schemes" hidden>
+                <h4>Declared in the contract</h4>
+                <div id="scheme-list"></div>
+              </div>
+            </div>
+
+            <div id="req-body" role="tabpanel" aria-labelledby="req-body-tab" hidden>
+              <div class="body-bar" id="body-bar">
+                <label class="sr-only" for="content-type">Content type</label>
+                <select id="content-type"></select>
+                <div class="body-bar-actions">
+                  <button type="button" class="link" id="format-body">Format</button>
+                  <button type="button" class="link" id="regenerate">Reset from schema</button>
+                </div>
+              </div>
+              <label class="sr-only" for="request-body">Request body</label>
+              <textarea id="request-body" class="code-input body-editor" spellcheck="false" aria-describedby="body-meta"></textarea>
+              <p class="hint" id="body-meta"></p>
+              <p class="pane-empty" id="no-body" hidden>This operation does not declare a request body.</p>
+            </div>
+
+            <div id="req-contract" role="tabpanel" aria-labelledby="req-contract-tab" hidden>
+              <div class="block">
+                <div class="block-head"><h4>Documented responses</h4><span class="dim mono" id="response-contract-count"></span></div>
+                <pre id="response-contract" class="code-block" tabindex="0" aria-label="Documented responses"></pre>
+              </div>
+              <div class="block">
+                <div class="block-head"><h4>Operation definition</h4><button type="button" class="link" id="copy-operation">Copy</button></div>
+                <pre id="operation-schema" class="code-block" tabindex="0" aria-label="Operation definition"></pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="pane-foot req-foot">
+            <div id="request-validation" class="verdict" role="status" hidden></div>
+            <div class="url-line" id="request-preview" hidden>
+              <code id="prepared-url"></code>
+              <button type="button" class="icon-btn" id="copy-url" aria-label="Copy prepared URL" title="Copy prepared URL">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="12" rx="1.5"/><path d="M15.5 9V4.5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1V14a1 1 0 0 0 1 1h4"/></svg>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <div class="splitter" id="op-splitter" role="separator" aria-orientation="vertical" aria-label="Resize request and response panes" tabindex="0"></div>
+
+        <!-- response -->
+        <section class="pane" aria-label="Response">
+          <div class="res-status" id="response-status">
+            <span class="dim">Response</span>
+          </div>
+          <div class="tabstrip" role="tablist" aria-label="Response data">
+            <button type="button" class="tab active" role="tab" aria-selected="true" id="response-body-tab" aria-controls="response-body-panel" data-response-tab="body">Body</button>
+            <button type="button" class="tab" role="tab" aria-selected="false" tabindex="-1" id="response-validation-tab" aria-controls="response-validation-panel" data-response-tab="validation">Validation<span class="dot" id="validation-dot" hidden></span></button>
+            <button type="button" class="tab" role="tab" aria-selected="false" tabindex="-1" id="response-headers-tab" aria-controls="response-headers-panel" data-response-tab="headers">Headers<span class="tab-count" id="response-headers-count" hidden>0</span></button>
+            <div class="tabstrip-tools">
+              <button type="button" class="link" id="wrap-toggle" aria-pressed="true">Wrap</button>
+              <button type="button" class="link" id="copy-response">Copy</button>
+            </div>
+          </div>
+          <div class="pane-body res-body">
+            <div id="response-empty" class="pane-empty tall">
+              <p>No response yet. Send the request to capture status, body, headers, timing and contract findings.</p>
+            </div>
+            <div id="response-result" hidden>
+              <div id="response-body-panel" role="tabpanel" aria-labelledby="response-body-tab">
+                <pre id="response-body" class="code-block flush wrap" tabindex="0" aria-label="Response body"></pre>
+              </div>
+              <div id="response-validation-panel" role="tabpanel" aria-labelledby="response-validation-tab" hidden>
+                <div id="response-validation" class="validation" role="status"></div>
+              </div>
+              <div id="response-headers-panel" role="tabpanel" aria-labelledby="response-headers-tab" hidden>
+                <div id="response-headers" class="header-table"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- schema detail -->
+    <section class="view" id="view-schema" hidden>
+      <div class="op-bar">
+        <span class="chip mono">schema</span>
+        <h2 id="schema-title" class="op-path" tabindex="-1"></h2>
+        <div class="op-actions"><button type="button" class="btn" id="copy-schema">Copy</button></div>
+      </div>
+      <div class="pane solo">
+        <pre id="schema-content" class="code-block flush" tabindex="0" aria-label="Component schema"></pre>
+      </div>
+    </section>
+
+    <!-- runner results -->
+    <section class="view" id="view-runner" hidden>
+      <div class="op-bar">
+        <h2 class="view-title">Runner</h2>
+        <span class="chip" id="run-state" hidden></span>
+        <div class="op-actions">
+          <button type="button" class="btn" id="download-results" disabled>Export JSON</button>
+        </div>
+      </div>
+      <p id="suite-summary" class="op-summary" role="status">Select endpoints in the Endpoints list, then run them here.</p>
+      <div class="progress" id="suite-progress" role="progressbar" aria-label="Run progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><div></div></div>
+      <div class="pane solo">
+        <div class="table-scroll" tabindex="0" aria-label="Run results">
+          <table class="results">
+            <thead><tr><th scope="col">Endpoint</th><th scope="col">Status</th><th scope="col">Contract</th><th scope="col">Time</th><th scope="col"></th></tr></thead>
+            <tbody id="suite-results"></tbody>
+          </table>
+        </div>
+        <p class="hint pad">Exports contain request and response bodies. Recognized credentials are masked; review before sharing.</p>
+      </div>
+    </section>
+
+    <!-- contract source -->
+    <section class="view scroll-view" id="view-source" hidden>
+      <div class="op-bar">
+        <h2 class="view-title">Contract source</h2>
+        <div class="op-actions"><button type="button" class="btn" id="source-back" hidden>Back to endpoints</button></div>
+      </div>
+
+      <div class="source-grid">
+        <form id="import-form" class="card" novalidate>
+          <div class="tabstrip inset" role="tablist" aria-label="Import source">
+            <button type="button" class="tab active" role="tab" aria-selected="true" id="url-tab" aria-controls="url-source" data-import-mode="url">From URL</button>
+            <button type="button" class="tab" role="tab" aria-selected="false" tabindex="-1" id="spec-tab" aria-controls="raw-source" data-import-mode="raw">Paste or upload</button>
+          </div>
+
+          <div class="card-body">
+            <div id="url-source" role="tabpanel" aria-labelledby="url-tab">
+              <div class="field">
+                <label for="spec-url">Documentation or specification URL</label>
+                <input id="spec-url" type="url" placeholder="https://api.example.com/openapi.json" autocomplete="off" spellcheck="false">
+                <p class="hint">A Swagger UI / ReDoc page or a direct JSON or YAML document.</p>
+              </div>
+            </div>
+
+            <div id="raw-source" role="tabpanel" aria-labelledby="spec-tab" hidden>
+              <div class="field">
+                <div class="field-label-row">
+                  <label for="raw-spec">OpenAPI document</label>
+                  <label class="file-btn" for="spec-file">Choose file<input id="spec-file" type="file" accept=".json,.yaml,.yml,application/json,text/yaml"></label>
+                </div>
+                <textarea id="raw-spec" class="code-input" rows="10" placeholder="Paste OpenAPI JSON or YAML" spellcheck="false"></textarea>
+              </div>
+              <div class="field">
+                <label for="source-url">Source URL <span class="opt">optional</span></label>
+                <input id="source-url" type="url" placeholder="https://api.example.com/openapi.json" autocomplete="off" spellcheck="false">
+                <p class="hint">Resolves relative server URLs in the document.</p>
+              </div>
+            </div>
+
+            <details class="disclosure" id="import-options">
+              <summary>Fetch options</summary>
+              <div class="disclosure-body">
+                <div class="kv-head"><span></span><span>Header</span><span>Value</span><span></span></div>
+                <div id="import-header-rows" class="kv-list"></div>
+                <div class="row-actions"><button type="button" class="link" id="add-import-header">+ Add header</button></div>
+                <p class="hint">Used only to fetch the documentation, and only for its own origin. API request headers are set under Auth and Headers.</p>
+                <div class="field-pair">
+                  <div class="field"><label for="import-timeout">Timeout (s)</label><input id="import-timeout" type="number" min="1" max="120" value="15"></div>
+                  <div class="field"><label class="check"><input id="import-verify-tls" type="checkbox" checked><span>Verify TLS certificates</span></label></div>
+                </div>
+              </div>
+            </details>
+
+            <div id="import-error" class="msg error" role="alert" hidden></div>
+          </div>
+
+          <div class="card-foot">
+            <button type="submit" class="btn primary" id="import-submit">Import</button>
+            <button type="button" class="link" id="sample-import">Load sample contract</button>
+            <span class="dim push">Import reads the document only. No API operations are called.</span>
+          </div>
+        </form>
+
+        <section class="card" id="loaded-card" hidden>
+          <div class="card-head"><h3>Loaded contract</h3></div>
+          <div class="card-body">
+            <dl class="facts">
+              <div><dt>Title</dt><dd id="fact-title"></dd></div>
+              <div><dt>API version</dt><dd id="fact-version"></dd></div>
+              <div><dt>Specification</dt><dd id="fact-spec"></dd></div>
+              <div><dt>Source</dt><dd id="fact-source" class="mono break"></dd></div>
+              <div><dt>Servers</dt><dd id="fact-servers" class="mono break"></dd></div>
+              <div><dt>Operations</dt><dd id="fact-operations"></dd></div>
+              <div><dt>Schemas</dt><dd id="fact-schemas"></dd></div>
+            </dl>
+            <div id="warning-block" hidden>
+              <h4 class="block-title">Import notices</h4>
+              <ul id="warning-list" class="issues"></ul>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- audit report -->
+    <section class="view scroll-view" id="view-audit-report" hidden>
+      <div class="op-bar">
+        <h2 class="view-title">Audit report</h2>
+        <span class="chip" id="audit-state" hidden></span>
+        <div class="op-actions"><button type="button" class="btn" id="export-audit-top" disabled>Export JSON</button></div>
+      </div>
+      <div class="progress" id="audit-progress" role="progressbar" aria-label="Audit progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><div></div></div>
+      <div class="report" id="audit-report-body">
+        <p class="pane-empty">No audit has run yet. Choose a profile on the left and select Run audit.</p>
+      </div>
+    </section>
+
+    <!-- finding detail -->
+    <section class="view scroll-view" id="view-finding" hidden>
+      <div class="op-bar">
+        <span class="chip" id="finding-severity"></span>
+        <h2 id="finding-title" class="finding-title" tabindex="-1"></h2>
+        <div class="op-actions">
+          <button type="button" class="link" id="expand-all">Expand all</button>
+          <button type="button" class="link" id="collapse-all">Collapse all</button>
+          <button type="button" class="btn" id="finding-back">Back to report</button>
+        </div>
+      </div>
+      <div class="report" id="finding-body"></div>
+    </section>
+
+    <!-- audit request log -->
+    <section class="view" id="view-audit-log" hidden>
+      <div class="op-bar">
+        <h2 class="view-title">Request log</h2>
+        <span class="count" id="log-count">0</span>
+        <span class="dim" id="log-shown"></span>
+        <div class="op-actions">
+          <button type="button" class="btn" id="log-back">Back to report</button>
+          <button type="button" class="btn" id="export-log">Export JSON</button>
+        </div>
+      </div>
+      <div class="log-filters">
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l4.5 4.5"/></svg>
+          <label class="sr-only" for="log-search">Filter requests</label>
+          <input id="log-search" type="search" placeholder="Filter path, probe, status, identity" autocomplete="off" spellcheck="false">
+        </div>
+        <label class="sr-only" for="log-filter">Show</label>
+        <select id="log-filter">
+          <option value="all">All requests</option>
+          <option value="probes">Probes only</option>
+          <option value="errors">Errors and 4xx/5xx</option>
+          <option value="mutating">State-changing only</option>
+        </select>
+      </div>
+      <div class="log-split">
+        <div class="table-scroll log-table-wrap" tabindex="0" aria-label="Audit request log">
+          <table class="results log-table">
+            <thead><tr>
+              <th scope="col">#</th><th scope="col">Method</th><th scope="col">Path</th>
+              <th scope="col">Probe</th><th scope="col">Status</th>
+              <th scope="col">Size</th><th scope="col">Time</th>
+            </tr></thead>
+            <tbody id="log-rows"></tbody>
+          </table>
+        </div>
+        <div class="log-detail" id="log-detail" hidden></div>
+      </div>
+    </section>
+
+    <!-- settings -->
+    <section class="view scroll-view" id="view-settings" hidden>
+      <div class="op-bar"><h2 class="view-title">Settings</h2></div>
+      <div class="settings-grid">
+        <section class="card">
+          <div class="card-head"><h3>Connection</h3></div>
+          <div class="card-body">
+            <div class="field-pair">
+              <div class="field"><label for="request-timeout">Request timeout (s)</label><input id="request-timeout" type="number" min="1" max="120" value="15"></div>
+              <div class="field"><label class="check"><input id="verify-tls" type="checkbox" checked><span>Verify TLS certificates</span></label><p class="hint">Disable only for an engagement's self-signed test server.</p></div>
+            </div>
+            <div class="field">
+              <label class="check"><input id="allow-writes-mirror" type="checkbox"><span>Allow POST, PUT, PATCH, DELETE and other write methods</span></label>
+              <p class="hint">Applies to single requests and runner requests. Enable only for targets you are authorized to test.</p>
+            </div>
+            <p class="hint">Requests are sent from the Namazu server process, not the browser. Redirects are not followed and requests are never retried.</p>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><h3>Workbench</h3></div>
+          <div class="card-body">
+            <div class="field">
+              <label for="theme-select">Theme</label>
+              <select id="theme-select"><option value="dark">Dark</option><option value="light">Light</option></select>
+            </div>
+            <div class="field">
+              <label class="check"><input id="auto-prepare" type="checkbox" checked><span>Generate a request when an endpoint is opened</span></label>
+              <p class="hint">Off keeps the editor empty until you choose Reset from schema.</p>
+            </div>
+            <div class="field">
+              <label for="history-limit">History entries kept</label>
+              <select id="history-limit"><option value="25">25</option><option value="100" selected>100</option><option value="250">250</option></select>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><h3>Shortcuts</h3></div>
+          <div class="card-body">
+            <dl class="facts">
+              <div><dt><kbd>Ctrl</kbd>+<kbd>Enter</kbd></dt><dd>Send the current request</dd></div>
+              <div><dt><kbd>Ctrl</kbd>+<kbd>K</kbd></dt><dd>Filter endpoints</dd></div>
+              <div><dt><kbd>Ctrl</kbd>+<kbd>G</kbd></dt><dd>Reset the request from the schema</dd></div>
+              <div><dt><kbd>Esc</kbd></dt><dd>Leave the filter or bulk editor</dd></div>
+            </dl>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><h3>Session data</h3></div>
+          <div class="card-body">
+            <p class="hint">Namazu keeps no database. Tokens, headers, requests and responses live in this browser session and the server process only; reloading the page clears them. Only theme and layout preferences are stored locally.</p>
+            <p class="hint">Exports include request and response bodies. Recognized credential headers and query parameters are masked, but body fields are not.</p>
+            <div class="row-actions"><button type="button" class="btn sm" id="reset-layout">Reset layout</button></div>
+            <p class="dim" id="about-line">Namazu</p>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ───────────────────────── status bar ───────────────────────── -->
+<footer class="statusbar">
+  <span class="status-left">
+    <span class="dot-state" id="state-dot" aria-hidden="true"></span>
+    <span id="session-state">Ready</span>
+  </span>
+  <span class="status-mid mono" id="status-context"></span>
+  <span class="status-right">
+    <span id="status-writes">writes off</span>
+    <span id="status-tls">TLS verify</span>
+    <span id="status-timeout">15s</span>
+  </span>
+</footer>
+
+<div id="live-status" class="sr-only" role="status" aria-live="polite"></div>
+<div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
