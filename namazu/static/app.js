@@ -3400,13 +3400,17 @@
   function renewableIdentity(headers) {
     if ($("auth-mode").value !== "oauth2") return headers;
     const config = oauthConfig();
+    // Client credentials and password can re-mint from what the operator
+    // typed. Every other grant needs a refresh token, whether it came back
+    // from the browser flow or was pasted into the field.
+    const carried = oauthState.refreshToken || config.refresh_token;
     const renewable = config.grant === "client_credentials" || config.grant === "password"
-      || (config.grant !== "client_credentials" && oauthState.refreshToken);
+      || Boolean(carried);
     if (!config.token_endpoint || !renewable) return headers;
     return {
       headers,
       oauth: {
-        grant: oauthState.refreshToken && config.grant === "authorization_code"
+        grant: carried && config.grant === "authorization_code"
           ? "refresh_token" : config.grant,
         token_endpoint: config.token_endpoint,
         client_id: config.client_id,
@@ -3415,7 +3419,7 @@
         audience: config.audience,
         username: config.username,
         password: config.password,
-        refresh_token: oauthState.refreshToken || config.refresh_token,
+        refresh_token: carried,
         auth_style: config.auth_style,
       },
     };
@@ -4377,8 +4381,9 @@
   /* ───────────────────────── OAuth 2 ───────────────────────── */
 
   // refreshToken is kept so a long audit can renew server-side without
-  // reopening the browser flow.
-  const oauthState = { token: null, pollTimer: 0, window: null, refreshToken: "", target: "primary" };
+  // reopening the browser flow. Which identity a token belongs to is passed to
+  // applyToken as an argument rather than parked here.
+  const oauthState = { token: null, pollTimer: 0, window: null, refreshToken: "" };
 
 
 
@@ -4525,8 +4530,14 @@
 
 
   function applyToken(token, target) {
-
     oauthState.token = token;
+    // Kept so a long audit renews server-side instead of carrying a snapshot
+    // that lapses partway through. Scoped to the primary identity on purpose:
+    // the second identity is a different account, and its refresh token must
+    // never end up minting tokens for the first.
+    if (target !== "secondary" && token.refresh_token) {
+      oauthState.refreshToken = token.refresh_token;
+    }
 
     if (target === "secondary") {
 
