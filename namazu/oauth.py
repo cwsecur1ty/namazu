@@ -29,7 +29,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 import httpx
 
 from .audit import jwtlab
-from .discovery import check_url, client_headers
+from .discovery import check_url, client_headers, describe_block
 
 SESSION_TTL = 600  # seconds a pending authorization stays collectable
 MAX_SESSIONS = 16
@@ -75,7 +75,9 @@ def discover(issuer: str, *, verify_tls: bool = True, timeout: float = 15.0,
             except httpx.HTTPError as exc:
                 tried.append({"url": url, "error": type(exc).__name__})
                 continue
-            tried.append({"url": url, "status": response.status_code})
+            blocked = describe_block(response.status_code, dict(response.headers), response.text)
+            tried.append({"url": url, "status": response.status_code,
+                          **({"blocked": blocked} if blocked else {})})
             if response.status_code != 200:
                 continue
             try:
@@ -104,8 +106,21 @@ def discover(issuer: str, *, verify_tls: bool = True, timeout: float = 15.0,
     finally:
         if owns:
             http.close()
-    raise ValueError("No OAuth metadata document was found. Tried: "
-                     + ", ".join(entry["url"] for entry in tried))
+    # Each attempt already knows why it failed. Listing only the URLs turns a
+    # WAF refusing every candidate into "no document found", which sends the
+    # operator looking at their issuer URL instead of at their network path.
+    attempts = []
+    for entry in tried:
+        if entry.get("blocked"):
+            outcome = f"HTTP {entry.get('status')}, blocked"
+        elif "status" in entry:
+            outcome = f"HTTP {entry['status']}"
+        else:
+            outcome = entry.get("error") or "no response"
+        attempts.append(f"{entry['url']} ({outcome})")
+    blocked = next((entry["blocked"] for entry in tried if entry.get("blocked")), "")
+    detail = "No OAuth metadata document was found. Tried: " + ", ".join(attempts)
+    raise ValueError(f"{blocked} {detail}".strip() if blocked else detail)
 
 
 def from_spec(spec: dict) -> list[dict]:
@@ -168,13 +183,19 @@ def request_token(token_url: str, form: dict, *, client_id: str = "", client_sec
     try:
         body = response.json()
     except ValueError:
+        blocked = describe_block(response.status_code, dict(response.headers), response.text)
         raise ValueError(
-            f"The token endpoint returned a non-JSON response (HTTP {response.status_code})."
+            blocked or
+            f"The token endpoint returned a non-JSON response (HTTP {response.status_code}). "
+            f"The first of it: {response.text[:200]!r}"
         ) from None
     if response.status_code >= 400 or not isinstance(body, dict) or "access_token" not in body:
         detail = ""
         if isinstance(body, dict):
             detail = body.get("error_description") or body.get("error") or ""
+        blocked = describe_block(response.status_code, dict(response.headers), response.text)
+        if blocked and not detail:
+            raise ValueError(blocked)
         raise ValueError(f"The token request failed (HTTP {response.status_code}){': ' + detail if detail else '.'}")
     return summarize_token(body)
 

@@ -26,6 +26,61 @@ MAX_FETCHES = 24
 DEFAULT_USER_AGENT = f"Namazu/{__version__} (+https://github.com/cwsecur1ty/namazu)"
 
 
+# Headers a security product adds to its own block page. None of these belong
+# to an API's own error response, so one of them plus a refusal status is a
+# reliable way to say which hop answered.
+WAF_HEADERS = {
+    "x-iinfo": "Imperva",
+    "x-cdn": "Imperva",
+    "cf-ray": "Cloudflare",
+    "cf-mitigated": "Cloudflare",
+    "x-akamai-transformed": "Akamai",
+    "akamai-grn": "Akamai",
+    "x-sucuri-id": "Sucuri",
+    "x-amz-apigw-id": "AWS",
+    "x-amzn-waf-action": "AWS WAF",
+    "x-azure-ref": "Azure Front Door",
+}
+# Wording block pages use. "Support ID" and "Ray ID" are the reference numbers
+# Imperva and Cloudflare tell you to quote, so they are worth pulling out.
+WAF_BODY = re.compile(
+    r"(?i)(blocked by our security service|request (?:was |has been )?blocked|"
+    r"attention required|access denied|incapsula|cloudflare|akamai|"
+    r"unusual (?:traffic|activity)|bot ?detect|security policy)")
+WAF_REFERENCE = re.compile(
+    r"(?i)(support id|ray id|reference (?:number|id))(?:\s+is)?[:\s#]*([0-9a-z-]{6,40})")
+
+
+def describe_block(status: int, headers: dict, body: str) -> str:
+    """Say so when a response is a security product refusing the request.
+
+    Returns an empty string when nothing suggests one, so the caller can fall
+    back to reporting the response on its own terms.
+    """
+    lowered = {str(name).lower(): str(value) for name, value in (headers or {}).items()}
+    vendors = sorted({label for header, label in WAF_HEADERS.items() if header in lowered})
+    sample = (body or "")[:4000]
+    wording = WAF_BODY.search(sample)
+    if not vendors and not wording:
+        return ""
+    reference = WAF_REFERENCE.search(sample)
+    who = " or ".join(vendors) if vendors else "a security service"
+    parts = [
+        f"HTTP {status} came from {who}, not from the authorization server. "
+        "The request was refused before it arrived, so this is not an OAuth error "
+        "and no credential of yours was rejected."
+    ]
+    if wording:
+        parts.append(f"The response says: \u201c{wording.group(0)}\u201d.")
+    if reference:
+        parts.append(f"Quote {reference.group(1)} {reference.group(2)} if you raise it with them.")
+    if vendors:
+        shown = ", ".join(f"{name}: {lowered[name]}" for name in sorted(lowered)
+                          if name in WAF_HEADERS)
+        parts.append(f"Identifying headers: {shown}.")
+    return " ".join(parts)
+
+
 def client_headers(user_agent: str | None = None) -> dict:
     """Default headers for any client Namazu builds."""
     chosen = str(user_agent or "").strip() or DEFAULT_USER_AGENT
