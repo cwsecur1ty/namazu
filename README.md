@@ -10,7 +10,7 @@ produced it and the command to reproduce them.
 
 [![Tests](https://github.com/cwsecur1ty/namazu/actions/workflows/ci.yml/badge.svg)](https://github.com/cwsecur1ty/namazu/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![OWASP API Top 10](https://img.shields.io/badge/OWASP-API%20Top%2010%3A2023-orange.svg)](https://owasp.org/API-Security/editions/2023/en/0x11-t10/)
 
 </div>
@@ -268,7 +268,7 @@ version.
 node --check namazu/static/app.js
 ```
 
-195 tests. Detections are asserted in both directions: the finding fires on the
+202 tests across 84 checks. Detections are asserted in both directions: a check fires on the
 broken handler, and stays silent on the correct one.
 
 The HTTP API is `POST /api/import`, `/api/prepare`, `/api/run`, `/api/audit`,
@@ -279,4 +279,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the bar a new check has to meet.
 
 ## Licence
 
-[Apache 2.0](LICENSE) © 2026 cwsecur1ty
+[MIT](LICENSE) © 2026 cwsecur1ty

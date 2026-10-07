@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "An API security workbench that shows its working: OpenAPI contract testing and an OWASP API Top 10 audit with reproducible evidence"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "Apache-2.0"
+license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "cwsecur1ty" }]
 keywords = [
