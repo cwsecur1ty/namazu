@@ -317,15 +317,32 @@
 
     function count() { return Object.keys(safeRead()).length; }
     function text() { return rows().map((row) => `${row.querySelector(".kv-name").value}: ${row.querySelector(".kv-value").value}`).filter((line) => line.trim() !== ":").join("\n"); }
+    /** Headers the transport sets itself, and refuses to be handed. */
+    const MANAGED = new Set(["host", "content-length", "transfer-encoding",
+                             "connection", "proxy-authorization", "upgrade"]);
+
     function fromText(value) {
       const entries = {};
+      const dropped = [];
       for (const line of String(value).split("\n")) {
         if (!line.trim()) continue;
+        // A devtools paste carries HTTP/2 pseudo-headers, which are not
+        // headers at all and have no value half worth keeping.
+        if (line.trim().startsWith(":")) {
+          dropped.push(line.trim().split(":")[1] || "pseudo-header");
+          continue;
+        }
         const split = line.indexOf(":");
         if (split < 1) throw new Error(`Use “Name: value” on each line. Could not read “${line.trim().slice(0, 40)}”.`);
-        entries[line.slice(0, split).trim()] = line.slice(split + 1).trim();
+        const name = line.slice(0, split).trim();
+        if (MANAGED.has(name.toLowerCase())) {
+          dropped.push(name);
+          continue;
+        }
+        entries[name] = line.slice(split + 1).trim();
       }
       setAll(entries);
+      return dropped;
     }
 
 
@@ -3262,10 +3279,12 @@
     $("cancel-bulk").addEventListener("click", () => { $("header-bulk-wrap").hidden = true; $("bulk-headers").focus(); });
     $("apply-bulk").addEventListener("click", () => {
       try {
-        headerKv.fromText($("header-bulk").value);
+        const dropped = headerKv.fromText($("header-bulk").value);
         $("header-bulk-wrap").hidden = true;
         $("bulk-headers").focus();
-        toast("Headers updated.");
+        toast(dropped.length
+          ? `Headers updated. Namazu sets ${[...new Set(dropped)].join(", ")} itself, so those lines were left out.`
+          : "Headers updated.");
       } catch (error) { toast(errorText(error)); }
     });
     $("auth-mode").addEventListener("change", renderAuthState);
