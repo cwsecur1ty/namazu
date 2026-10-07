@@ -94,16 +94,33 @@ response against its declared contract.
 **Audit.** Run the security checks across the contract, choosing how much
 traffic you are willing to send.
 
-| Profile | Budget | What it adds |
-|---|---|---|
-| `passive` | 1 request per operation | Contract analysis plus the single baseline response. |
-| `readonly` | ≤60 per operation | Authorization, CORS, TLS, bypass and input probes. GET, HEAD and OPTIONS only. |
-| `thorough` | ≤120 per operation | More parameters per endpoint, plus a bounded rate-limit burst. |
-| `writes` | ≤140 per operation | Mass assignment and write authorization. **Creates and modifies data.** |
+| Profile | Budget | In flight | What it adds |
+|---|---|---|---|
+| `passive` | 1 request per operation | 1 | Contract analysis plus the single baseline response. |
+| `readonly` | ≤90 per operation | 4 | Authorization, CORS, TLS, bypass and input probes. GET, HEAD and OPTIONS only. |
+| `thorough` | ≤160 per operation | 6 | More parameters per endpoint, plus a bounded rate-limit burst. |
+| `writes` | ≤220 per operation | 4 | Mass assignment, write authorization and body-field injection. **Creates and modifies data.** |
 
 Write probes need `allow_mutating` *and* the Allow-writes switch. The transport
 refuses a state-changing request without both, so a misconfigured profile cannot
 quietly start writing to a target.
+
+**In flight** is how many probes may be sent at once. Independent work runs in
+parallel: the surface sweep, the bypass battery, and each injection point's
+battery. Dependent work does not, because a payload and its control have to be
+compared against the same target in the same state, and a write has to finish
+before the read-back that confirms it. The request log merges in submission
+order, so a concurrent run and a serial one produce the same log, the same
+requests and the same findings. Set **Requests in flight** to 1 to send one at
+a time.
+
+How much that saves depends on how much of the endpoint's work is independent.
+Against a target 40 ms away: an endpoint with six injection points costs 83
+requests and runs in 3.6s serially, 1.3s with eight in flight; one with three
+points costs 48 requests and goes from 3.7s to 3.1s. The ceiling is the number
+of independent points rather than the number of workers, because the probes
+within a point run in sequence, and the per-endpoint single-request checks and
+the rate-limit burst are still serial.
 
 ### Coverage
 
@@ -145,10 +162,23 @@ quietly start writing to a target.
 
 Error-based and boolean-based SQL, document-database operators, LDAP filters,
 server-side template injection across four engine families (`{{ }}`, `${ }`,
-`#{ }`, `<%= %>`), path traversal, open redirect and unencoded HTML reflection.
-Probed in query parameters and in documented header parameters.
+`#{ }`, `<%= %>`), path traversal, open redirect, CRLF response-header
+injection, duplicate parameters and unencoded HTML reflection.
 
-Every payload is a detection canary. Nothing sleeps, writes a file, runs a
+The same battery runs wherever the contract declares an input, because the sinks
+do not care how the value arrived:
+
+| Declared in | Notes |
+|---|---|
+| `query` | Parameters the request carried, plus documented optional ones a generated request would omit. |
+| `path` | Identifier positions, which reach the same sinks a query parameter does. |
+| `header` | Easy to overlook, because the value never appears in a URL. |
+| `cookie` | Probed by replacing one cookie and leaving the rest of the jar intact, so a session is not dropped mid-probe. |
+| request body | Write profile only. Scalar fields including nested ones (`items[0].sku`); booleans are skipped, since a string payload is rejected before it reaches a sink. |
+
+A line terminator is never placed in a header or a cookie: malforming the
+request itself is request smuggling, which is a different class and an invasive
+one. Every payload is a detection canary. Nothing sleeps, writes a file, runs a
 command, or reads real data beyond the marker that proves the sink exists.
 
 </details>
@@ -235,7 +265,12 @@ finding is disputed or when something on the target breaks mid-test.
 ## Safety
 
 - Read-only HTTP methods unless you explicitly enable writes, refused at the transport.
-- Hard request budget per operation; reaching it is reported, not hidden.
+- Hard request budget per operation, held atomically so concurrency cannot
+  overshoot it; reaching it is reported, not hidden.
+- Parallel work is read-only by construction: the transport refuses a
+  state-changing request sent from inside a fan-out.
+- Body injection writes. The report names the fields probed and counts the
+  state-changing requests sent, so the objects it created can be removed.
 - Detection-only payloads. No sleeps, no file writes, no command execution.
 - No outbound callback service: nuclei runs with `-no-interactsh`.
 - Redirects are read, never followed. Requests are never retried.
@@ -266,7 +301,7 @@ version.
 node --check namazu/static/app.js
 ```
 
-226 tests across 89 checks. Detections are asserted in both directions: a check fires on the
+248 tests across 89 checks. Detections are asserted in both directions: a check fires on the
 broken handler, and stays silent on the correct one.
 
 The HTTP API is `POST /api/import`, `/api/prepare`, `/api/run`, `/api/audit`,

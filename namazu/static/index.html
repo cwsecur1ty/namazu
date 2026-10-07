@@ -204,6 +204,18 @@
           <p class="hint" id="profile-note"></p>
         </div>
         <div class="field">
+          <label for="audit-concurrency">Requests in flight</label>
+          <select id="audit-concurrency">
+            <option value="" selected>Profile default</option>
+            <option value="1">1: one request at a time</option>
+            <option value="2">2</option>
+            <option value="4">4</option>
+            <option value="8">8</option>
+            <option value="16">16: fastest</option>
+          </select>
+          <p class="hint" id="concurrency-note"></p>
+        </div>
+        <div class="field">
           <label class="check"><input id="audit-inventory" type="checkbox" checked><span>Sweep for undocumented surface</span></label>
           <label class="check"><input id="audit-selected-only" type="checkbox"><span>Selected endpoints only</span></label>
         </div>

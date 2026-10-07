@@ -96,6 +96,23 @@ def _is_real_hit(exchange: Exchange, calibration: dict) -> bool:
     return True
 
 
+def _sweep(executor: Executor, paths, origin: str, headers: dict):
+    """Probe a set of independent paths and pair each with its response.
+
+    Every path here is a plain read of a different URL, so nothing in the set
+    depends on anything else in it. That is exactly the shape ``fan_out``
+    parallelises, and it merges the exchanges back in path order so the
+    request log reads the same as a serial sweep.
+    """
+    def one(branch, path):
+        if not branch.affordable(1):
+            return None
+        return branch.send("GET", _join(origin, path), label=f"inventory {path}", headers=headers)
+
+    paths = list(paths)
+    return list(zip(paths, executor.fan_out(paths, one)))
+
+
 def run(executor: Executor, *, spec: dict, base_url: str, headers: dict,
         documented_paths: set[str], check_zombies: bool = True) -> tuple[list, dict]:
     """Probe around the documented surface. Returns (findings, summary)."""
@@ -116,17 +133,19 @@ def run(executor: Executor, *, spec: dict, base_url: str, headers: dict,
         findings += _versions(executor, base_url, headers, calibration, documented_paths, summary)
     except BudgetExhausted:
         summary["budget_exhausted"] = True
+    # A probe that could not afford its request returns quietly, and a
+    # fan-out absorbs the exhaustion rather than unwinding the whole sweep, so
+    # the counters are what the report has to read.
+    if executor.budget.declined or executor.budget.refused:
+        summary["budget_exhausted"] = True
     summary["probed"] = len([e for e in executor.exchanges if e.label.startswith(("inventory", "404"))])
     return findings, summary
 
 
 def _documents(executor, origin, headers, calibration, summary) -> list:
     out = []
-    for path in DOC_PATHS:
-        if not executor.affordable(1):
-            break
-        exchange = executor.send("GET", _join(origin, path), label=f"inventory {path}", headers=headers)
-        if not _is_real_hit(exchange, calibration) or exchange.status >= 400:
+    for path, exchange in _sweep(executor, DOC_PATHS, origin, headers):
+        if exchange is None or not _is_real_hit(exchange, calibration) or exchange.status >= 400:
             continue
         if not DOC_MARKERS.search(exchange.body[:4000] or ""):
             continue
@@ -152,11 +171,8 @@ def _documents(executor, origin, headers, calibration, summary) -> list:
 
 def _operations(executor, origin, headers, calibration, summary) -> list:
     out = []
-    for path in OPS_PATHS:
-        if not executor.affordable(1):
-            break
-        exchange = executor.send("GET", _join(origin, path), label=f"inventory {path}", headers=headers)
-        if not _is_real_hit(exchange, calibration) or exchange.status >= 400:
+    for path, exchange in _sweep(executor, OPS_PATHS, origin, headers):
+        if exchange is None or not _is_real_hit(exchange, calibration) or exchange.status >= 400:
             continue
         summary["shadow"].append(path)
         sensitive = bool(SENSITIVE_OPS.search(path))
@@ -184,16 +200,17 @@ def _operations(executor, origin, headers, calibration, summary) -> list:
 
 def _graphql(executor, origin, headers, calibration, summary) -> list:
     """Introspection is a read-only GraphQL query, so it runs without write consent."""
-    out = []
-    for path in GRAPHQL_PATHS:
-        if not executor.affordable(1):
-            break
-        url = _join(origin, path)
-        exchange = executor.send(
-            "POST", url, label=f"inventory {path} introspection", headers=headers,
+    def one(branch, path):
+        if not branch.affordable(1):
+            return None
+        return branch.send(
+            "POST", _join(origin, path), label=f"inventory {path} introspection", headers=headers,
             body=INTROSPECTION, content_type="application/json", mutating=False,
         )
-        if not exchange.ok or exchange.status >= 400:
+
+    out = []
+    for path, exchange in zip(GRAPHQL_PATHS, executor.fan_out(GRAPHQL_PATHS, one)):
+        if exchange is None or not exchange.ok or exchange.status >= 400:
             continue
         if '"__schema"' not in (exchange.body or "") and '"types"' not in (exchange.body or ""):
             continue
@@ -233,14 +250,21 @@ def _versions(executor, base_url, headers, calibration, documented_paths, summar
 
     current = int(match.group(3))
     candidates = sorted({n for n in (current - 1, current - 2, current + 1) if n >= 0 and n != current})
-    for version in candidates:
-        if not executor.affordable(1):
-            break
+
+    def sibling_url(version: int) -> str:
         replaced = container[:match.start(3)] + str(version) + container[match.end(3):]
-        url = (urlunsplit((parts.scheme, parts.netloc, replaced, "", "")) if template == "base"
-               else _join(_origin(base_url), replaced))
-        exchange = executor.send("GET", url, label=f"inventory version sibling v{version}", headers=headers)
-        if not _is_real_hit(exchange, calibration) or exchange.status >= 400:
+        return (urlunsplit((parts.scheme, parts.netloc, replaced, "", "")) if template == "base"
+                else _join(_origin(base_url), replaced))
+
+    def one(branch, version):
+        if not branch.affordable(1):
+            return None
+        return branch.send("GET", sibling_url(version),
+                           label=f"inventory version sibling v{version}", headers=headers)
+
+    for version, exchange in zip(candidates, executor.fan_out(candidates, one)):
+        url = sibling_url(version)
+        if exchange is None or not _is_real_hit(exchange, calibration) or exchange.status >= 400:
             continue
         summary["shadow"].append(url)
         older = version < current
@@ -316,11 +340,8 @@ def _source_files(executor, origin, headers, calibration, summary) -> list:
     for everything cannot turn this into a page of findings.
     """
     out = []
-    for path in SOURCE_PATHS:
-        if not executor.affordable(1):
-            break
-        exchange = executor.send("GET", _join(origin, path), label=f"inventory {path}", headers=headers)
-        if not _is_real_hit(exchange, calibration) or exchange.status >= 400:
+    for path, exchange in _sweep(executor, SOURCE_PATHS, origin, headers):
+        if exchange is None or not _is_real_hit(exchange, calibration) or exchange.status >= 400:
             continue
         marker = SOURCE_MARKERS.get(path)
         if not marker or not marker.search(exchange.body or ""):
@@ -370,14 +391,16 @@ def _graphql_suggestions(executor, origin, headers, calibration, summary) -> lis
     out = []
     probe_field = "namazuProbeFieldZz"
     query = json.dumps({"query": "{ " + probe_field + " }"})
-    for path in GRAPHQL_PATHS:
-        if not executor.affordable(1):
-            break
-        exchange = executor.send(
+    def one(branch, path):
+        if not branch.affordable(1):
+            return None
+        return branch.send(
             "POST", _join(origin, path), label=f"inventory {path} field suggestion",
             headers=headers, body=query, content_type="application/json", mutating=False,
         )
-        if not exchange.ok or exchange.status >= 500:
+
+    for path, exchange in zip(GRAPHQL_PATHS, executor.fan_out(GRAPHQL_PATHS, one)):
+        if exchange is None or not exchange.ok or exchange.status >= 500:
             continue
         body = exchange.body or ""
         if '"errors"' not in body:

@@ -78,22 +78,31 @@ def probe(executor: Executor, *, baseline: Exchange, endpoint: str, headers: dic
     return findings
 
 
+def _rewrite(build, path: str) -> str | None:
+    try:
+        variant = build(path)
+    except (IndexError, ValueError):
+        return None
+    return variant if variant and variant != path else None
+
+
 def _path_variants(executor, baseline, endpoint, headers, path) -> list:
-    for label, build in PATH_VARIANTS:
-        if not executor.affordable(1):
-            break
-        try:
-            variant = build(path)
-        except (IndexError, ValueError):
-            continue
-        if not variant or variant == path:
-            continue
-        probe_exchange = executor.send(
+    """Six rewrites of the same refused path, each a single independent GET."""
+    def one(branch, item):
+        label, build = item
+        variant = _rewrite(build, path)
+        if variant is None or not branch.affordable(1):
+            return None
+        return branch.send(
             baseline.method, _with_path(baseline.url, variant),
             label=f"access control bypass: {label}", headers=headers, identity="identity A",
         )
-        if not _is_data(probe_exchange):
+
+    for (label, build), probe_exchange in zip(PATH_VARIANTS,
+                                              executor.fan_out(PATH_VARIANTS, one)):
+        if probe_exchange is None or not _is_data(probe_exchange):
             continue
+        variant = _rewrite(build, path)
         return [finding(
             "authz.path-bypass", f"Refused route is reachable with a {label}",
             "high", "confirmed", owasp="API5:2023 Broken Function Level Authorization",
@@ -128,14 +137,19 @@ def _path_variants(executor, baseline, endpoint, headers, path) -> list:
 
 
 def _header_variants(executor, baseline, endpoint, headers, path) -> list:
-    for name, build in HEADER_VARIANTS:
-        if not executor.affordable(1):
-            break
-        probe_exchange = executor.send(
+    """Six forwarding headers an application sometimes trusts, one request each."""
+    def one(branch, item):
+        name, build = item
+        if not branch.affordable(1):
+            return None
+        return branch.send(
             baseline.method, baseline.url, label=f"access control bypass: {name}",
             headers={**headers, name: build(path)}, identity="identity A",
         )
-        if not _is_data(probe_exchange):
+
+    for (name, build), probe_exchange in zip(HEADER_VARIANTS,
+                                             executor.fan_out(HEADER_VARIANTS, one)):
+        if probe_exchange is None or not _is_data(probe_exchange):
             continue
         return [finding(
             "authz.header-bypass", f"Refused route is reachable by sending {name}",

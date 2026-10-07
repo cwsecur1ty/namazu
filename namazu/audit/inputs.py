@@ -21,6 +21,7 @@ Each probe carries its own oracle, so none of them fire on mere reflection:
 """
 from __future__ import annotations
 
+import copy
 import json
 import re
 import secrets
@@ -30,6 +31,9 @@ from .model import Exchange, finding, mark, similarity
 from .transport import BudgetExhausted, Executor
 
 MAX_FIELDS = 4
+# Header and cookie parameters are capped separately: a contract that declares
+# a dozen of them is usually declaring plumbing, not inputs worth probing.
+NAMED_FIELDS = 2
 REDIRECT_HOST = "namazu-probe.invalid"
 
 SQL_ERRORS = re.compile(
@@ -60,27 +64,73 @@ def _replace_query(url: str, key: str, value: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(replaced), parts.fragment))
 
 
+def _header_value(headers: dict, name: str) -> str:
+    """A request header by name, case-insensitively."""
+    for key, value in (headers or {}).items():
+        if key.lower() == name.lower():
+            return str(value)
+    return ""
+
+
+def _without_header(headers: dict, name: str) -> dict:
+    return {key: value for key, value in (headers or {}).items() if key.lower() != name.lower()}
+
+
+def _parse_cookies(header: str) -> list:
+    pairs = []
+    for part in (header or "").split(";"):
+        if "=" not in part:
+            continue
+        name, _, value = part.partition("=")
+        pairs.append((unquote(name.strip()), unquote(value.strip())))
+    return pairs
+
+
+def _set_cookie(header: str, name: str, value: str) -> str:
+    """The Cookie header with one cookie replaced, or added if it was absent."""
+    pairs = _parse_cookies(header)
+    if any(existing == name for existing, _ in pairs):
+        pairs = [(existing, value if existing == name else carried)
+                 for existing, carried in pairs]
+    else:
+        pairs.append((name, value))
+    # The value goes in raw. A payload percent-encoded here would arrive at the
+    # sink already decoded into something inert, and the transport rejects the
+    # control characters that would otherwise break the header.
+    return "; ".join(f"{existing}={carried}" for existing, carried in pairs)
+
+
 class Point(str):
     """An injection point, which renders as its parameter name.
 
     Subclassing str so every probe that formats or compares the name keeps
-    working unchanged. ``index`` is None for a query parameter and the path
-    segment index for a path parameter.
+    working unchanged. ``location`` is where the contract declares the value:
+    ``query``, ``path``, ``header`` or ``cookie``. A cookie or header
+    parameter reaches the same sinks a query parameter does and is easier to
+    overlook, because it never appears in a URL, so all four locations get the
+    same battery rather than a reduced one.
     """
 
-    __slots__ = ("index",)
+    __slots__ = ("index", "location", "example")
 
-    def __new__(cls, name: str, index: int | None = None):
+    def __new__(cls, name: str, index: int | None = None, location: str | None = None,
+                example=None):
         point = super().__new__(cls, name)
         point.index = index
+        point.location = location or ("path" if index is not None else "query")
+        point.example = None if example is None else str(example)
         return point
 
     @property
     def in_path(self) -> bool:
-        return self.index is not None
+        return self.location == "path"
+
+    @property
+    def in_url(self) -> bool:
+        return self.location in ("query", "path")
 
     def apply(self, url: str, value: str) -> str:
-        """The URL with this point's value replaced."""
+        """The URL with this point's value replaced. URL-borne points only."""
         if self.index is None:
             return _replace_query(url, str(self), value)
         parts = urlsplit(url)
@@ -91,12 +141,176 @@ class Point(str):
         return urlunsplit((parts.scheme, parts.netloc, "/".join(segments),
                            parts.query, parts.fragment))
 
-    def current(self, url: str) -> str:
-        """The value this point currently carries in the URL."""
+    def place(self, baseline: Exchange, value: str, base_headers: dict) -> dict:
+        """The ``send()`` arguments for a request carrying ``value`` at this point."""
+        headers = dict(base_headers or {})
+        if self.location == "header":
+            return {"method": baseline.method, "url": baseline.url,
+                    "headers": {**_without_header(headers, str(self)), str(self): value}}
+        if self.location == "cookie":
+            carried = (_header_value(headers, "Cookie")
+                       or _header_value(baseline.request_headers, "Cookie"))
+            return {"method": baseline.method, "url": baseline.url,
+                    "headers": {**_without_header(headers, "Cookie"),
+                                "Cookie": _set_cookie(carried, str(self), value)}}
+        return {"method": baseline.method, "url": self.apply(baseline.url, value),
+                "headers": headers}
+
+    def current(self, baseline: Exchange) -> str:
+        """The value this point carries in the baseline request."""
+        if self.location == "header":
+            return _header_value(baseline.request_headers, str(self))
+        if self.location == "cookie":
+            carried = _header_value(baseline.request_headers, "Cookie")
+            return dict(_parse_cookies(carried)).get(str(self), "")
         if self.index is None:
-            return dict(parse_qsl(urlsplit(url).query, keep_blank_values=True)).get(str(self), "")
-        segments = urlsplit(url).path.split("/")
+            return dict(parse_qsl(urlsplit(baseline.url).query,
+                                  keep_blank_values=True)).get(str(self), "")
+        segments = urlsplit(baseline.url).path.split("/")
         return unquote(segments[self.index]) if self.index < len(segments) else ""
+
+
+# A request body can nest without limit and an array can repeat without limit.
+# Neither is worth following: the fields that reach a sink are near the top, and
+# probing the hundredth element of a list says nothing the first did not.
+MAX_BODY_DEPTH = 4
+MAX_BODY_ITEMS = 2
+MAX_BODY_LEAVES = 60
+
+
+def _render_pointer(pointer: list) -> str:
+    out = ""
+    for part in pointer:
+        if isinstance(part, int):
+            out += f"[{part}]"
+        else:
+            out += f".{part}" if out else str(part)
+    return out
+
+
+def _get_in(document, pointer: list):
+    node = document
+    for part in pointer:
+        node = node[part]
+    return node
+
+
+def _set_in(document, pointer: list, value):
+    node = document
+    for part in pointer[:-1]:
+        node = node[part]
+    node[pointer[-1]] = value
+    return document
+
+
+class BodyPoint(Point):
+    """A scalar field inside a JSON request body.
+
+    The battery is the same one the query parameters get, because the sinks
+    are the same: an ORM filter built by concatenation does not care whether
+    the value arrived in a URL or a body. The difference is cost, not kind.
+    Every probe here is a state-changing request, so this point only exists
+    when write probes are enabled, and the findings it produces are marked
+    mutating.
+    """
+
+    __slots__ = ("pointer",)
+
+    def __new__(cls, pointer: list, example=None):
+        point = super().__new__(cls, _render_pointer(pointer), location="body",
+                                example=example)
+        point.pointer = list(pointer)
+        return point
+
+    def place(self, baseline: Exchange, value: str, base_headers: dict) -> dict:
+        document = _parse_json(baseline.request_body)
+        mutated = _set_in(copy.deepcopy(document), self.pointer, value)
+        content_type = (_header_value(baseline.request_headers, "content-type")
+                        or "application/json")
+        return {"method": baseline.method, "url": baseline.url,
+                "headers": _without_header(dict(base_headers or {}), "content-type"),
+                "body": json.dumps(mutated), "content_type": content_type,
+                "mutating": True}
+
+    def current(self, baseline: Exchange) -> str:
+        try:
+            value = _get_in(_parse_json(baseline.request_body), self.pointer)
+        except (KeyError, IndexError, TypeError):
+            return ""
+        return "" if value is None else str(value)
+
+
+def _parse_json(raw):
+    if isinstance(raw, (dict, list)):
+        return raw
+    try:
+        return json.loads(raw or "null")
+    except (TypeError, ValueError):
+        return None
+
+
+def _body_leaves(node, pointer: list, out: list, depth: int = 0) -> None:
+    if len(out) >= MAX_BODY_LEAVES or depth > MAX_BODY_DEPTH:
+        return
+    if isinstance(node, dict):
+        for key, value in node.items():
+            _body_leaves(value, pointer + [str(key)], out, depth + 1)
+    elif isinstance(node, list):
+        for index, value in enumerate(node[:MAX_BODY_ITEMS]):
+            _body_leaves(value, pointer + [index], out, depth + 1)
+    elif isinstance(node, bool):
+        # A boolean field rejects a string payload before it reaches anything.
+        return
+    elif isinstance(node, (str, int, float)):
+        out.append((pointer, node))
+
+
+def _body_points(baseline: Exchange, limit: int) -> list:
+    """Scalar fields in the request body, highest signal first."""
+    document = _parse_json(baseline.request_body)
+    if not isinstance(document, (dict, list)):
+        return []
+    leaves: list = []
+    _body_leaves(document, [], leaves)
+    # Named-for-a-sink first, then strings, which reach more sinks than a
+    # number does without being rejected by validation on the way.
+    leaves.sort(key=lambda leaf: (0 if INTERESTING.match(str(leaf[0][-1])) else 1,
+                                  0 if isinstance(leaf[1], str) else 1))
+    return [BodyPoint(pointer, example=value) for pointer, value in leaves[:limit]]
+
+
+# How a finding describes a point that is not an ordinary query parameter.
+WHERE = {
+    "path": "a path parameter",
+    "header": "a documented header parameter",
+    "cookie": "a documented cookie parameter",
+    "body": "a field in the request body",
+}
+
+
+def _named_points(documented: list | None, location: str, limit: int) -> list:
+    """Points for the header or cookie parameters the contract declares."""
+    out = []
+    for entry in (documented or []):
+        if not isinstance(entry, dict) or not entry.get("name"):
+            continue
+        out.append(Point(entry["name"], location=location,
+                         example=entry.get("example") or entry.get("default")))
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _locate(findings: list, field) -> list:
+    """Say where the point lives, so a bare name is not read as a query field."""
+    if not isinstance(field, Point) or field.location == "query":
+        return findings
+    for item in findings:
+        if isinstance(item.evidence, dict):
+            item.evidence.setdefault("location", field.location)
+        item.detail = ((item.detail or "").rstrip()
+                       + f" “{field}” is {WHERE[field.location]}, not a query parameter.")
+    return findings
 
 
 def _path_points(baseline, path_template: str, documented_path: list | None) -> list:
@@ -150,9 +364,13 @@ def _documented_value(field: str, documented: list | None):
 def _seed_value(baseline: Exchange, field, documented: list | None):
     """A plausible value for this point: what the request carried, else the contract's."""
     if isinstance(field, Point):
-        current = field.current(baseline.url)
+        current = field.current(baseline)
         if current:
             return current
+        if field.example:
+            return field.example
+        if not field.in_url:
+            return None  # the documented list passed in holds query parameters
     else:
         present = dict(parse_qsl(urlsplit(baseline.url).query, keep_blank_values=True))
         if present.get(field):
@@ -182,52 +400,97 @@ def _query_fields(url: str, documented: list | None = None, limit: int = MAX_FIE
                                       0 if name in present else 1))
     for name in candidates:
         if name not in out:
-            out.append(Point(name))
+            out.append(Point(name, example=_documented_value(name, documented)))
     return out[:limit]
 
 
 
-def probe(executor: Executor, *, baseline: Exchange, endpoint: str, base_headers: dict,
-          documented_query: list | None = None, documented_header: list | None = None,
-          documented_path: list | None = None, path_template: str = "",
-          max_fields: int = MAX_FIELDS) -> list:
-    """Run read-only input probes over the request's query fields."""
+def battery(executor: Executor, *, baseline: Exchange, endpoint: str, field,
+            base_headers: dict, documented_query: list | None = None) -> list:
+    """Every read-only input probe against one point.
+
+    The probes inside are ordered and share a point, so they run in sequence:
+    several of them send a payload and then a control, and that pair has to be
+    compared against the same target in the same state.
+    """
     findings: list = []
-    if baseline.method not in ("GET", "HEAD") or not baseline.ok:
-        return findings
-    # No query parameters does not mean nothing to probe: header parameters and
-    # forwarding headers are tested either way.
-    # Path parameters carry identifiers and reach the same sinks as query
-    # parameters, so they get the same battery rather than only an id swap.
+    findings += _sql_error(executor, baseline, endpoint, field, base_headers)
+    findings += _template_injection(executor, baseline, endpoint, field, base_headers)
+    findings += _reflection(executor, baseline, endpoint, field, base_headers)
+    findings += _open_redirect(executor, baseline, endpoint, field, base_headers)
+    findings += _traversal(executor, baseline, endpoint, field, base_headers)
+    findings += _nosql(executor, baseline, endpoint, field, base_headers)
+    findings += _ldap_error(executor, baseline, endpoint, field, base_headers)
+    findings += _sql_boolean(executor, baseline, endpoint, field, base_headers, documented_query)
+    findings += _ssrf(executor, baseline, endpoint, field, base_headers)
+    findings += _crlf(executor, baseline, endpoint, field, base_headers)
+    findings += _parameter_pollution(executor, baseline, endpoint, field, base_headers,
+                                     documented_query)
+    return _locate(findings, field)
+
+
+def points(baseline: Exchange, *, documented_query: list | None = None,
+           documented_header: list | None = None, documented_path: list | None = None,
+           documented_cookie: list | None = None, path_template: str = "",
+           max_fields: int = MAX_FIELDS) -> list:
+    """Every injection point this operation documents, highest signal first.
+
+    Path parameters carry identifiers and reach the same sinks as query
+    parameters, so they get the same battery rather than only an id swap.
+    Header and cookie parameters do too, and are capped lower because a
+    contract rarely declares an interesting number of them.
+    """
     fields = _path_points(baseline, path_template, documented_path)
     fields += _query_fields(baseline.url, documented_query, max_fields)
     fields = fields[:max_fields + 2]
+    fields += _named_points(documented_header, "header", NAMED_FIELDS)
+    fields += _named_points(documented_cookie, "cookie", NAMED_FIELDS)
+    return fields
+
+
+def probe(executor: Executor, *, baseline: Exchange, endpoint: str, base_headers: dict,
+          documented_query: list | None = None, documented_header: list | None = None,
+          documented_path: list | None = None, documented_cookie: list | None = None,
+          path_template: str = "", max_fields: int = MAX_FIELDS) -> list:
+    """Run the read-only input probes over every documented point."""
+    findings: list = []
+    if baseline.method not in ("GET", "HEAD") or not baseline.ok:
+        return findings
+    # No query parameters does not mean nothing to probe: header and cookie
+    # parameters and the forwarding headers are tested either way.
+    fields = points(baseline, documented_query=documented_query,
+                    documented_header=documented_header, documented_path=documented_path,
+                    documented_cookie=documented_cookie, path_template=path_template,
+                    max_fields=max_fields)
+
+    def one(branch, field):
+        # Points are independent of each other, so they are the unit of
+        # parallelism. Each branch draws on the same request budget.
+        if not branch.affordable(4):
+            return []
+        return battery(branch, baseline=baseline, endpoint=endpoint, field=field,
+                       base_headers=base_headers, documented_query=documented_query)
+
     try:
-        for field in fields:
-            if not executor.affordable(4):
-                break
-            findings += _sql_error(executor, baseline, endpoint, field, base_headers)
-            findings += _template_injection(executor, baseline, endpoint, field, base_headers)
-            findings += _reflection(executor, baseline, endpoint, field, base_headers)
-            findings += _open_redirect(executor, baseline, endpoint, field, base_headers)
-            findings += _traversal(executor, baseline, endpoint, field, base_headers)
-            findings += _nosql(executor, baseline, endpoint, field, base_headers)
-            findings += _ldap_error(executor, baseline, endpoint, field, base_headers)
-            findings += _sql_boolean(executor, baseline, endpoint, field, base_headers, documented_query)
-            findings += _ssrf(executor, baseline, endpoint, field, base_headers)
-            findings += _crlf(executor, baseline, endpoint, field, base_headers)
-            findings += _parameter_pollution(executor, baseline, endpoint, field, base_headers, documented_query)
+        for group in executor.fan_out(fields, one):
+            findings += group or []
         findings += header_reflection(executor, baseline=baseline, endpoint=endpoint,
                                       base_headers=base_headers)
-        findings += _header_parameters(executor, baseline, endpoint, base_headers, documented_header)
     except BudgetExhausted:
         pass
     return findings
 
 
 def _send(executor, baseline, field, value, label, base_headers) -> Exchange:
-    url = field.apply(baseline.url, value) if isinstance(field, Point) else _replace_query(baseline.url, field, value)
-    return executor.send(baseline.method, url, label=label, headers=base_headers, identity="identity A")
+    """One probe request with ``value`` placed wherever this point lives."""
+    if isinstance(field, Point):
+        plan = field.place(baseline, value, base_headers)
+    else:
+        plan = {"method": baseline.method,
+                "url": _replace_query(baseline.url, field, value),
+                "headers": dict(base_headers or {})}
+    return executor.send(plan.pop("method"), plan.pop("url"), label=label,
+                         identity="identity A", **plan)
 
 
 def _sql_error(executor, baseline, endpoint, field, base_headers) -> list:
@@ -531,6 +794,42 @@ def mass_assignment(executor: Executor, *, built: dict, endpoint: str, base_head
     )]
 
 
+def body_injection(executor: Executor, *, baseline: Exchange, endpoint: str,
+                   base_headers: dict, max_fields: int = 3) -> tuple:
+    """Run the injection battery against the fields of a JSON request body.
+
+    A payload that only ever travels in a query string misses every sink
+    reachable only through a body, which on a modern API is most of the write
+    path. The probes and their controls are the same ones the query parameters
+    get; what differs is that each request here creates or modifies an object
+    on the target, so this runs only under the write profile and every finding
+    is marked mutating.
+
+    Returns ``(findings, fields_probed)`` so the caller can report how much
+    state it changed.
+    """
+    content_type = _header_value(baseline.request_headers, "content-type")
+    if baseline.method not in ("POST", "PUT", "PATCH") or not baseline.ok:
+        return [], []
+    if "json" not in (content_type or "application/json"):
+        return [], []
+    fields = _body_points(baseline, max_fields)
+    findings: list = []
+    probed: list = []
+    for field in fields:
+        if not executor.affordable(4):
+            break
+        probed.append(str(field))
+        try:
+            findings += battery(executor, baseline=baseline, endpoint=endpoint, field=field,
+                                base_headers=base_headers)
+        except BudgetExhausted:
+            break
+    for item in findings:
+        item.mutating = True
+    return findings, probed
+
+
 def write_authorization(executor: Executor, *, built: dict, endpoint: str, base_headers: dict,
                         identity_b: dict) -> list:
     """Does the second identity get to perform a write it should not own?"""
@@ -717,6 +1016,11 @@ def _ssrf(executor, baseline, endpoint, field, base_headers) -> list:
 
 def _crlf(executor, baseline, endpoint, field, base_headers) -> list:
     """A header the response only has if our newline was written into it."""
+    if isinstance(field, Point) and not field.in_url:
+        # A line terminator cannot be carried in a request header or cookie
+        # without malforming the request itself, which is request smuggling: a
+        # different class, and an invasive one. The transport refuses it.
+        return []
     if not executor.affordable(2):
         return []
     nonce = _nonce()
@@ -751,8 +1055,10 @@ def _crlf(executor, baseline, endpoint, field, base_headers) -> list:
 
 def _parameter_pollution(executor, baseline, endpoint, field, base_headers, documented=None) -> list:
     """Two values for one parameter: does a filter see one and the handler the other?"""
-    if isinstance(field, Point) and field.in_path:
-        return []  # repeating a path segment changes the route, not a parameter value
+    if isinstance(field, Point) and field.location != "query":
+        # Repeating a path segment changes the route, and a header or cookie
+        # supplied twice is a different question from a duplicated query key.
+        return []
     seed = _seed_value(baseline, field, documented)
     if not seed or not executor.affordable(2):
         return []
@@ -830,67 +1136,3 @@ def header_reflection(executor: Executor, *, baseline: Exchange, endpoint: str,
                   "location": location or None},
         exchanges=[baseline, probe],
     )]
-
-
-def _header_parameters(executor, baseline, endpoint, base_headers, documented) -> list:
-    """Documented header parameters reach the same sinks as query parameters.
-
-    They are easy to overlook because they never appear in a URL, so a value
-    that is reflected or concatenated there often survives longer than the
-    equivalent in a query string.
-    """
-    out: list = []
-    for entry in (documented or [])[:2]:
-        name = entry.get("name") if isinstance(entry, dict) else None
-        if not name or not executor.affordable(2):
-            continue
-        nonce = _nonce()
-        canary = nonce + '"><svg/onload=1>'
-        probe_exchange = executor.send(
-            baseline.method, baseline.url, label=f"header {name}: HTML canary",
-            headers={**base_headers, name: canary}, identity="identity A",
-        )
-        if (probe_exchange.ok and "html" in probe_exchange.content_type
-                and canary in (probe_exchange.body or "")):
-            out.append(finding(
-                "input.html-reflection", "Header parameter is reflected into HTML without encoding",
-                "medium", "probable", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
-                parameter=name,
-                method=(f"Sent the documented header parameter {name} carrying a random canary wrapped "
-                        "in markup, and found it echoed into an HTML response with its angle brackets "
-                        "and quote intact."),
-                detail=(f"The {name} request header was echoed into a {probe_exchange.content_type} "
-                        f"response unencoded (canary {nonce})."),
-                impact="A browser rendering this response would execute attacker-supplied markup.",
-                remediation=("Context-encode anything written into a response body, and return "
-                             "application/json with nosniff for API responses."),
-                highlights=[mark(nonce, "attacker", "The random canary Namazu sent in this header.")],
-                evidence={"header": name, "canary": nonce,
-                          "content_type": probe_exchange.content_type},
-                exchanges=[baseline, probe_exchange],
-            ))
-            continue
-        if SQL_ERRORS.search(baseline.body or ""):
-            continue
-        error_probe = executor.send(
-            baseline.method, baseline.url, label=f"header {name}: unbalanced quote",
-            headers={**base_headers, name: "'"}, identity="identity A",
-        )
-        if error_probe.ok and SQL_ERRORS.search(error_probe.body or ""):
-            match = SQL_ERRORS.search(error_probe.body)
-            out.append(finding(
-                "input.sql-error", "Header parameter produces a database error",
-                "high", "probable", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
-                parameter=name,
-                method=(f"Sent a single quote as the value of the documented header parameter {name} "
-                        "and matched the response against database engine error signatures. The "
-                        "baseline response carried no such error."),
-                detail=(f"The {name} header carrying a single quote returned a database error that the "
-                        "baseline did not."),
-                impact="Indicates the header value is concatenated into a query rather than parameterised.",
-                remediation="Use parameterised queries for values taken from headers as well as the URL.",
-                evidence={"header": name, "payload": "'",
-                          "error_excerpt": error_probe.body[max(0, match.start() - 60):match.end() + 120]},
-                exchanges=[baseline, error_probe],
-            ))
-    return out

@@ -101,6 +101,8 @@ class AuditInput(BaseModel):
     verify_tls: bool = True
     timeout: float = Field(default=15, ge=1, le=120)
     budget: int = Field(default=60, ge=1, le=200)
+    # None lets the profile choose. The engine caps the top end.
+    concurrency: int | None = Field(default=None, ge=1, le=16)
 
 
 @app.exception_handler(ValueError)
@@ -150,13 +152,14 @@ def audit(body: AuditInput):
     return audit_operation(body.spec, body.operation_id, base_url=body.base_url,
                            identities=body.identities, profile=body.profile,
                            allow_mutating=body.allow_mutating, verify_tls=body.verify_tls,
-                           timeout=body.timeout)
+                           timeout=body.timeout, concurrency=body.concurrency)
 
 
 @app.post("/api/audit/inventory")
 def audit_surface(body: AuditInput):
     return audit_inventory(body.spec, base_url=body.base_url, identities=body.identities,
-                           verify_tls=body.verify_tls, timeout=body.timeout, budget=body.budget)
+                           verify_tls=body.verify_tls, timeout=body.timeout, budget=body.budget,
+                           concurrency=body.concurrency)
 
 
 class OAuthInput(BaseModel):

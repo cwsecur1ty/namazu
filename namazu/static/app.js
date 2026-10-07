@@ -55,6 +55,9 @@
 
   const SEVERITIES = ["critical", "high", "medium", "low", "info"];
 
+  // What the server uses when Requests in flight is left on the default.
+  const PROFILE_CONCURRENCY = { passive: 1, readonly: 4, thorough: 6, writes: 4 };
+
   const PROFILE_NOTES = {
 
     passive: "One request per endpoint. Everything else is read from the contract and that single response.",
@@ -63,7 +66,7 @@
 
     thorough: "Everything read-only, with more parameters probed per endpoint and a short rate-limit burst. More requests per endpoint.",
 
-    writes: "Adds mass-assignment and write-authorization probes. These create or modify data on the target.",
+    writes: "Adds mass-assignment, write-authorization and request-body injection probes. Every one of these creates or modifies data on the target, and the report says how many.",
 
   };
 
@@ -3428,6 +3431,20 @@
 
   function auditProfile() { return $("audit-profile").value; }
 
+  /** Null means "let the profile decide", which is what the server does with it. */
+  function auditConcurrency() {
+    const chosen = parseInt($("audit-concurrency").value, 10);
+    return Number.isFinite(chosen) ? chosen : null;
+  }
+
+  function describeConcurrency() {
+    const chosen = auditConcurrency();
+    const workers = chosen === null ? PROFILE_CONCURRENCY[auditProfile()] || 1 : chosen;
+    $("concurrency-note").textContent = workers === 1
+      ? "One request at a time. The slowest setting, and the gentlest on the target."
+      : `Up to ${workers} probes in flight at once. The same requests go out either way; only the wall clock changes.`;
+  }
+
   function updateProfileNote() {
 
     const profile = auditProfile();
@@ -4092,7 +4109,7 @@
       verify_tls: connection.verify_tls,
 
       timeout: connection.timeout,
-
+      concurrency: auditConcurrency(),
     };
 
 
@@ -4288,7 +4305,12 @@
 
   function wireAudit() {
 
+    $("audit-concurrency").addEventListener("change", () => {
+      describeConcurrency();
+      prefs.write("audit-concurrency", $("audit-concurrency").value);
+    });
     $("audit-profile").addEventListener("change", () => {
+      describeConcurrency();
 
       prefs.write("audit-profile", auditProfile());
 
@@ -5427,6 +5449,8 @@
     $("group-mode").value = prefs.read("group-mode", "tag");
 
     $("audit-profile").value = prefs.read("audit-profile", "readonly");
+    $("audit-concurrency").value = prefs.read("audit-concurrency", "");
+    describeConcurrency();
 
     identityKv.setAll({});
 

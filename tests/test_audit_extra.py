@@ -939,7 +939,9 @@ def test_documented_header_parameter_is_probed():
     }, BASE)
 
     def handler(request):
-        if "'" in (request.headers.get("x-tenant") or ""):
+        # Unbalanced quotes break the query; a balanced pair does not. The
+        # probe's control relies on that, so the fixture has to honour it.
+        if (request.headers.get("x-tenant") or "").count("'") % 2:
             return httpx.Response(500, text="SQLSTATE[42000]: You have an error in your SQL syntax")
         return _json({"hits": 1})
 
@@ -947,7 +949,11 @@ def test_documented_header_parameter_is_probed():
         result = audit_operation(spec, "GET /search", base_url=BASE, client=client)
     hit = next(f for f in result["findings"]
                if f["id"] == "input.sql-error" and f["parameter"] == "X-Tenant")
-    assert hit["evidence"]["header"] == "X-Tenant"
+    assert hit["evidence"]["location"] == "header"
+    # A header parameter gets the same paired control a query parameter does,
+    # so the advisory has to say where the point actually lives.
+    assert "documented header parameter" in hit["detail"]
+    assert hit["evidence"]["control"] == "''"
 
 
 # ── source file exposure ────────────────────────────────────────────────────

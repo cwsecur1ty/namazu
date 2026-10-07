@@ -21,23 +21,55 @@ from ..runner import normalize_spec
 from ..spec import build_request
 from . import authz, bypass, catalogue, contract, identity as identity_resolver, inputs, inventory, jwtlab, passive, posture, specscan
 from .model import Finding, finding
-from .transport import Budget, BudgetExhausted, Executor, MutationRefused, build_client
+from .transport import (MAX_CONCURRENCY, Budget, BudgetExhausted, Executor, MutationRefused,
+                        build_client)
 
 PROFILES = {
     "passive": {"requests_per_operation": 1, "authz": False, "inputs": False,
-                "posture": False, "writes": False, "rate_limit": False},
-    "readonly": {"requests_per_operation": 60, "authz": True, "inputs": True, "max_fields": 4,
-                 "posture": True, "writes": False, "rate_limit": False},
-    "thorough": {"requests_per_operation": 120, "authz": True, "inputs": True, "max_fields": 6,
-                 "posture": True, "writes": False, "rate_limit": True},
-    "writes": {"requests_per_operation": 140, "authz": True, "inputs": True, "max_fields": 6,
-               "posture": True, "writes": True, "rate_limit": True},
+                "posture": False, "writes": False, "rate_limit": False, "concurrency": 1},
+    "readonly": {"requests_per_operation": 90, "authz": True, "inputs": True, "max_fields": 4,
+                 "posture": True, "writes": False, "rate_limit": False, "concurrency": 4},
+    "thorough": {"requests_per_operation": 160, "authz": True, "inputs": True, "max_fields": 6,
+                 "posture": True, "writes": False, "rate_limit": True, "concurrency": 6},
+    "writes": {"requests_per_operation": 220, "authz": True, "inputs": True, "max_fields": 6,
+               "posture": True, "writes": True, "rate_limit": True, "concurrency": 4,
+               "body_fields": 3},
 }
 DEFAULT_PROFILE = "readonly"
 
 
 def _profile(name: str) -> dict:
     return PROFILES.get(name or DEFAULT_PROFILE, PROFILES[DEFAULT_PROFILE])
+
+
+def _workers(settings: dict, override) -> int:
+    """How many probes may be in flight at once.
+
+    The profile picks a default; an operator who needs the target left alone
+    can force it down to one, and the transport caps the top end.
+    """
+    if override is None:
+        return int(settings.get("concurrency", 1))
+    return max(1, min(int(override), MAX_CONCURRENCY))
+
+
+def _declared(operation: dict, location: str) -> list:
+    """The parameters an operation documents in one place, with their examples.
+
+    Cookie parameters are included for the same reason header ones are: the
+    contract names them as inputs, so they are inputs, whether or not the
+    generated request happened to carry them.
+    """
+    out = []
+    for item in (operation.get("parameters") or []):
+        if item.get("in") != location or not item.get("name"):
+            continue
+        schema = item.get("schema") or {}
+        out.append({"name": item["name"],
+                    "example": item.get("example", schema.get("example")),
+                    "default": schema.get("default"),
+                    "type": schema.get("type")})
+    return out
 
 
 def _identity_headers(identities: dict, key: str) -> dict:
@@ -83,7 +115,8 @@ def summarize(findings: list) -> dict:
 def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = None,
                     identities: dict | None = None, profile: str = DEFAULT_PROFILE,
                     allow_mutating: bool = False, verify_tls: bool = True,
-                    timeout: float = 15.0, client=None) -> dict:
+                    timeout: float = 15.0, concurrency: int | None = None,
+                    client=None) -> dict:
     """Run the audit battery against one documented operation."""
     parsed = normalize_spec(spec)
     operation = next((op for op in parsed["operations"] if op["id"] == operation_id), None)
@@ -107,7 +140,9 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
     budget = Budget(settings["requests_per_operation"])
     owns_client = client is None
     http = client or build_client(verify_tls)
-    executor = Executor(http, budget, timeout=timeout, allow_mutating=allow_mutating)
+    workers = _workers(settings, concurrency)
+    executor = Executor(http, budget, timeout=timeout, allow_mutating=allow_mutating,
+                        concurrency=workers)
     notes: list[str] = list(credential_notes)
 
     try:
@@ -186,23 +221,15 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
             findings += inputs.probe(executor, baseline=baseline, endpoint=endpoint,
                                      base_headers=built["headers"],
                                      documented_query=documented_query,
-                                     documented_header=[
-                                         {"name": item.get("name")}
-                                         for item in (operation.get("parameters") or [])
-                                         if item.get("in") == "header" and item.get("name")
-                                     ],
-                                     documented_path=[
-                                         {"name": item.get("name"),
-                                          "example": item.get("example", (item.get("schema") or {}).get("example")),
-                                          "type": (item.get("schema") or {}).get("type")}
-                                         for item in (operation.get("parameters") or [])
-                                         if item.get("in") == "path" and item.get("name")
-                                     ],
+                                     documented_header=_declared(operation, "header"),
+                                     documented_cookie=_declared(operation, "cookie"),
+                                     documented_path=_declared(operation, "path"),
                                      path_template=operation["path"],
                                      max_fields=settings.get("max_fields", 3))
         if settings["writes"]:
             findings += _write_probes(executor, parsed, operation, built, endpoint,
-                                      built["headers"], identity_b, notes)
+                                      built["headers"], identity_b, notes, baseline,
+                                      settings.get("body_fields", 3))
     except BudgetExhausted:
         notes.append(f"Request budget of {budget.limit} reached; some probes did not run.")
     except MutationRefused as exc:
@@ -265,7 +292,15 @@ def _supplied_token_findings(identity_a: dict, endpoint: str) -> list:
     return out
 
 
-def _write_probes(executor, parsed, operation, built, endpoint, headers, identity_b, notes) -> list:
+def _write_probes(executor, parsed, operation, built, endpoint, headers, identity_b, notes,
+                  baseline=None, body_fields: int = 3) -> list:
+    """The probes that change state, cheapest and most conclusive first.
+
+    Mass assignment and write authorization go first because each is a couple
+    of requests and either can be confirmed outright. The body injection
+    battery runs last: it is the one that costs tens of requests, so if the
+    budget runs out it should be the probe that gets cut.
+    """
     out: list = []
     method = operation["method"]
     if method not in ("POST", "PUT", "PATCH"):
@@ -284,7 +319,29 @@ def _write_probes(executor, parsed, operation, built, endpoint, headers, identit
     if identity_b:
         out += inputs.write_authorization(executor, built=built, endpoint=endpoint,
                                           base_headers=headers, identity_b=identity_b)
+    if baseline is not None:
+        out += _body_probes(executor, baseline, endpoint, headers, method, body_fields, notes)
     return out
+
+
+def _body_probes(executor, baseline, endpoint, headers, method, body_fields, notes) -> list:
+    """The injection battery over request body fields, with its cost disclosed."""
+    before = len([item for item in executor.exchanges if item.mutating])
+    findings, probed = inputs.body_injection(
+        executor, baseline=baseline, endpoint=endpoint, base_headers=headers,
+        max_fields=body_fields)
+    sent = len([item for item in executor.exchanges if item.mutating]) - before
+    if not probed:
+        notes.append("The request body has no scalar fields to probe, so no body injection "
+                     "probe ran.")
+    elif sent:
+        # Each of these wrote to the target. Saying so is the difference between
+        # a disclosed side effect and a surprise in someone else's data.
+        notes.append(
+            f"The body injection battery probed {', '.join(probed)} and sent {sent} "
+            f"state-changing {method} requests, each carrying a probe value. Review the "
+            "objects this created or modified on the target and remove them.")
+    return findings
 
 
 def _skipped(endpoint, operation, findings, budget, profile, *, reason: str,
@@ -320,6 +377,7 @@ def _result(endpoint, operation, findings, budget, profile, *, notes=None, basel
         "profile": profile,
         "requests_sent": budget.spent,
         "request_budget": budget.limit,
+        "concurrency": executor.concurrency if executor is not None else 1,
         "baseline_status": baseline.status if baseline is not None else None,
         "notes": [note for note in (notes or []) if note],
         "baseline": baseline.to_dict() if baseline is not None else None,
@@ -331,7 +389,7 @@ def _result(endpoint, operation, findings, budget, profile, *, notes=None, basel
 
 def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict | None = None,
                     verify_tls: bool = True, timeout: float = 15.0, budget: int = 60,
-                    client=None) -> dict:
+                    concurrency: int | None = None, client=None) -> dict:
     """Sweep the host around the documented surface. Read-only."""
     parsed = normalize_spec(spec)
     target = base_url or parsed.get("base_url") or ""
@@ -348,7 +406,8 @@ def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict
     tracker = Budget(budget)
     owns_client = client is None
     http = client or build_client(verify_tls)
-    executor = Executor(http, tracker, timeout=timeout, allow_mutating=False)
+    executor = Executor(http, tracker, timeout=timeout, allow_mutating=False,
+                        concurrency=_workers(PROFILES["readonly"], concurrency))
     try:
         probe_findings, summary = inventory.run(
             executor, spec=parsed, base_url=target, headers=identity_a,
@@ -366,6 +425,7 @@ def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict
         "profile": "readonly",
         "requests_sent": tracker.spent,
         "request_budget": tracker.limit,
+        "concurrency": executor.concurrency,
         "discovery": summary,
         "log": _log(executor, "surface sweep"),
         "notes": ([credential_note] if credential_note else [])
