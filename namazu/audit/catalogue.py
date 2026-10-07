@@ -214,6 +214,7 @@ CATALOGUE: dict[str, dict] = {
     "jwt.no-expiry": {"cwe": 613, "refs": [RFC["jwt-bcp"]], "method": None},
     "jwt.long-lifetime": {"cwe": 613, "refs": [RFC["jwt-bcp"]], "method": None},
     "jwt.kid-injectable": {"cwe": 94, "refs": [RFC["jwt-bcp"]], "method": None},
+    "jwt.alg-confusion": {"cwe": 347, "refs": [RFC["jwt-bcp"]], "method": None},
     "jwt.remote-key-url": {"cwe": 345, "refs": [RFC["jwt-bcp"]], "method": None},
     "jwt.sensitive-claim": {"cwe": 200, "refs": [RFC["jwt-bcp"]], "method": None},
 

