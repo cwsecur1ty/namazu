@@ -98,7 +98,7 @@ traffic you are willing to send.
 |---|---|---|---|
 | `passive` | 1 request per operation | 1 | Contract analysis plus the single baseline response. |
 | `readonly` | ≤90 per operation | 4 | Authorization, CORS, TLS, bypass and input probes. GET, HEAD and OPTIONS only. |
-| `thorough` | ≤160 per operation | 6 | More parameters per endpoint, plus a bounded rate-limit burst. |
+| `thorough` | ≤160 per operation | 6 | More parameters per endpoint, a bounded rate-limit burst, and time-based blind SQL injection. **Holds a database thread for a few seconds per confirmed parameter.** |
 | `writes` | ≤220 per operation | 4 | Mass assignment, write authorization and body-field injection. **Creates and modifies data.** |
 
 Write probes need `allow_mutating` *and* the Allow-writes switch. The transport
@@ -130,8 +130,9 @@ the rate-limit burst are still serial.
 - **API1 Broken Object Level Authorization**: cross-identity object replay,
   anonymous replay, identifier swapping on path segments and id parameters.
 - **API2 Broken Authentication**: credentials in URLs, JWT decoding, weak HMAC
-  secret recovery, `alg:none` and re-signed token replay, missing expiry,
-  remote key URLs, forgeable tokens in response bodies.
+  secret recovery, `alg:none` and re-signed token replay, algorithm confusion
+  against the issuer's own published key, missing expiry, remote key URLs,
+  forgeable tokens in response bodies.
 - **API3 Broken Object Property Level Authorization**: secret-bearing response
   fields, fields the contract never documents, privileged properties a client
   may write, mass assignment verified by reading the object back.
@@ -149,7 +150,8 @@ the rate-limit burst are still serial.
   transport, reflected and wildcard CORS, cookie flags, cache directives,
   version banners, stack traces, TRACE, framing controls, HTTPS-to-HTTP
   redirects, forwarding-header reflection, CRLF response-header injection,
-  duplicate-parameter handling, and web cache deception.
+  duplicate-parameter handling, web cache deception, and XML external entity
+  processing on operations that accept XML.
 - **API9 Improper Inventory Management**: zombie operations, undocumented
   version siblings, operational and debug paths, exposed specifications and
   documentation, GraphQL introspection, undocumented methods, and source or
@@ -165,6 +167,13 @@ server-side template injection across four engine families (`{{ }}`, `${ }`,
 `#{ }`, `<%= %>`), path traversal, open redirect, CRLF response-header
 injection, duplicate parameters and unencoded HTML reflection.
 
+On `thorough` only, time-based blind SQL injection, for the parameters where no
+other oracle exists because the response never changes. A delay alone is never
+the finding: the same payload is sent asking for zero seconds, which has to
+return promptly, and then at double the sleep, which has to take proportionally
+longer. That pair is what separates an injectable parameter from an endpoint
+that is merely slow, or intermittently so.
+
 The same battery runs wherever the contract declares an input, because the sinks
 do not care how the value arrived:
 
@@ -178,8 +187,15 @@ do not care how the value arrived:
 
 A line terminator is never placed in a header or a cookie: malforming the
 request itself is request smuggling, which is a different class and an invasive
-one. Every payload is a detection canary. Nothing sleeps, writes a file, runs a
-command, or reads real data beyond the marker that proves the sink exists.
+one. Every payload is a detection canary: nothing writes a file, runs a command,
+or reads real data beyond the marker that proves the sink exists.
+
+One probe is not free, and says so. The time-based SQL check on `thorough` holds
+a database thread for about six seconds on each parameter it confirms, capped at
+two parameters per operation. The XML external entity probe points at a path
+that cannot exist, so it demonstrates that the parser resolves external entities
+without reading anything real; pointed at a file instead, the same request would
+return its contents, and Namazu does not do that.
 
 </details>
 
@@ -271,7 +287,12 @@ finding is disputed or when something on the target breaks mid-test.
   state-changing request sent from inside a fan-out.
 - Body injection writes. The report names the fields probed and counts the
   state-changing requests sent, so the objects it created can be removed.
-- Detection-only payloads. No sleeps, no file writes, no command execution.
+- Detection-only payloads. No file writes, no command execution, and no file
+  read: the XML external entity probe names a path that cannot exist, so a
+  parser's own error is the only thing it learns from.
+- One timed probe, on `thorough` only. A sleep payload holds a database thread,
+  so it is off on `passive` and `readonly`, capped at two parameters per
+  operation, and costs about six seconds per parameter it confirms.
 - No outbound callback service: nuclei runs with `-no-interactsh`.
 - Redirects are read, never followed. Requests are never retried.
 - No database. Tokens, headers and responses live in the browser tab and the
@@ -281,6 +302,17 @@ finding is disputed or when something on the target breaks mid-test.
 - Namazu identifies itself by name on every request. Set a different **User
   agent** under Settings when a WAF in front of the target refuses an
   unfamiliar client.
+- Every request can go through your proxy, so the engagement record is the one
+  you already keep. Set **Upstream proxy** under Settings to
+  `http://127.0.0.1:8080` and each probe lands in Burp or ZAP, replayable from
+  Repeater. An intercepting proxy presents its own certificate, so give it its
+  **CA bundle** too, or every HTTPS request fails verification instead of
+  reaching the target. The certificate inspection is the one thing that still
+  connects directly, deliberately, since through an intercepting proxy it would
+  be reading the proxy's certificate; the report says when that happened.
+  **Client certificate** and **Client key** cover an API that requires mutual
+  TLS; both are paths read by the Namazu server, which keeps the private key
+  off the wire.
 - Loopback by default. With `--host 0.0.0.0` you supply your own access control.
 
 ## Limits
@@ -294,6 +326,12 @@ External `$ref` documents, custom schema dialects and dynamic references produce
 **Not validated** rather than a pass. OpenAPI 3.2 is not supported in this
 version.
 
+Blind findings need a callback the target can reach, and Namazu runs no such
+service. Blind SSRF, blind XXE and stored injection are therefore out of reach:
+the XML probe confirms that external entities resolve but cannot see a parser
+that resolves them silently, and the SQL timing probe covers only parameters
+interpolated into a quoted string on an engine that has a sleep function.
+
 **Only run this against systems you are authorised to test.**
 
 ## Development
@@ -306,8 +344,11 @@ version.
 node --check namazu/static/app.js
 ```
 
-269 tests across 89 checks. Detections are asserted in both directions: a check fires on the
-broken handler, and stays silent on the correct one.
+364 tests across 93 checks, about 90 seconds to run, most of which is the
+time-based SQL tests waiting for real delays. Detections are asserted in both
+directions: a check fires on the broken handler, and stays silent on the correct
+one. Where a check rests on a control, the test asserts the control is what
+suppressed it, rather than only that nothing was reported.
 
 The HTTP API is `POST /api/import`, `/api/prepare`, `/api/run`, `/api/audit`,
 `/api/audit/inventory`, the `/api/oauth/*` family, `/api/tools`, and
