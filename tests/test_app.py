@@ -1,12 +1,12 @@
 """Standalone API and loopback end-to-end tests; no K9 database or external target."""
 
+import json
 from copy import deepcopy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import json
 from threading import Thread
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 from namazu.app import app
 

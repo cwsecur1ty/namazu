@@ -7,6 +7,7 @@ a specification never fetches a URL.
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import json
 import math
@@ -19,7 +20,6 @@ from jsonschema import Draft4Validator, Draft202012Validator, FormatChecker
 from jsonschema.validators import validator_for
 from referencing import Registry
 from referencing.exceptions import NoSuchResource
-
 
 METHODS = {"get", "post", "put", "patch", "delete", "head", "options", "trace"}
 MAX_DOCUMENT_BYTES = 8 * 1024 * 1024
@@ -335,7 +335,7 @@ def _schema_dependencies(schema: Any, document: dict, references: dict[str, Any]
                 warnings.append("Dynamic or recursive-reference keywords are not supported")
             if "$schema" in value and value["$schema"] not in ("https://json-schema.org/draft/2020-12/schema", "https://json-schema.org/draft/2020-12/schema#", "http://json-schema.org/draft-04/schema#", "https://spec.openapis.org/oas/3.1/dialect/base"):
                 warnings.append(f"Unsupported schema dialect: {value['$schema']}")
-            if "$id" in value or "id" in value and isinstance(value["id"], str):
+            if "$id" in value or ("id" in value and isinstance(value["id"], str)):
                 warnings.append("Schemas with scoped identifiers cannot currently be validated")
             if "$ref" in value:
                 ref = value["$ref"]
@@ -504,10 +504,8 @@ def _sample_unchecked(schema: Any, document: dict, warnings: list[str], *, depth
         for name, prop in list(properties.items())[:40]:
             resolved = prop
             if isinstance(prop, dict) and "$ref" in prop:
-                try:
+                with contextlib.suppress(ValueError):
                     resolved = _pointer(document, prop["$ref"])
-                except ValueError:
-                    pass
             if isinstance(resolved, dict) and resolved.get("readOnly"):
                 continue
             if isinstance(prop, dict) and prop.get("$ref") in seen and name not in required:

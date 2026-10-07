@@ -110,7 +110,7 @@ def _sweep(executor: Executor, paths, origin: str, headers: dict):
         return branch.send("GET", _join(origin, path), label=f"inventory {path}", headers=headers)
 
     paths = list(paths)
-    return list(zip(paths, executor.fan_out(paths, one)))
+    return list(zip(paths, executor.fan_out(paths, one), strict=True))
 
 
 def run(executor: Executor, *, spec: dict, base_url: str, headers: dict,
@@ -209,7 +209,8 @@ def _graphql(executor, origin, headers, calibration, summary) -> list:
         )
 
     out = []
-    for path, exchange in zip(GRAPHQL_PATHS, executor.fan_out(GRAPHQL_PATHS, one)):
+    for path, exchange in zip(GRAPHQL_PATHS, executor.fan_out(GRAPHQL_PATHS, one),
+                              strict=True):
         if exchange is None or not exchange.ok or exchange.status >= 400:
             continue
         if '"__schema"' not in (exchange.body or "") and '"types"' not in (exchange.body or ""):
@@ -262,7 +263,8 @@ def _versions(executor, base_url, headers, calibration, documented_paths, summar
         return branch.send("GET", sibling_url(version),
                            label=f"inventory version sibling v{version}", headers=headers)
 
-    for version, exchange in zip(candidates, executor.fan_out(candidates, one)):
+    for version, exchange in zip(candidates, executor.fan_out(candidates, one),
+                                 strict=True):
         url = sibling_url(version)
         if exchange is None or not _is_real_hit(exchange, calibration) or exchange.status >= 400:
             continue
@@ -399,7 +401,8 @@ def _graphql_suggestions(executor, origin, headers, calibration, summary) -> lis
             headers=headers, body=query, content_type="application/json", mutating=False,
         )
 
-    for path, exchange in zip(GRAPHQL_PATHS, executor.fan_out(GRAPHQL_PATHS, one)):
+    for path, exchange in zip(GRAPHQL_PATHS, executor.fan_out(GRAPHQL_PATHS, one),
+                              strict=True):
         if exchange is None or not exchange.ok or exchange.status >= 500:
             continue
         body = exchange.body or ""

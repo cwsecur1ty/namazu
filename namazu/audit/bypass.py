@@ -99,7 +99,8 @@ def _path_variants(executor, baseline, endpoint, headers, path) -> list:
         )
 
     for (label, build), probe_exchange in zip(PATH_VARIANTS,
-                                              executor.fan_out(PATH_VARIANTS, one)):
+                                              executor.fan_out(PATH_VARIANTS, one),
+                                              strict=True):
         if probe_exchange is None or not _is_data(probe_exchange):
             continue
         variant = _rewrite(build, path)
@@ -148,7 +149,8 @@ def _header_variants(executor, baseline, endpoint, headers, path) -> list:
         )
 
     for (name, build), probe_exchange in zip(HEADER_VARIANTS,
-                                             executor.fan_out(HEADER_VARIANTS, one)):
+                                             executor.fan_out(HEADER_VARIANTS, one),
+                                             strict=True):
         if probe_exchange is None or not _is_data(probe_exchange):
             continue
         return [finding(

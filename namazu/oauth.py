@@ -134,7 +134,7 @@ def from_spec(spec: dict) -> list[dict]:
 def _auth_headers(client_id: str, client_secret: str, style: str) -> tuple[dict, dict]:
     """Returns (extra headers, extra form fields) for the chosen client auth style."""
     if client_secret and style == "basic":
-        raw = f"{client_id}:{client_secret}".encode("utf-8")
+        raw = f"{client_id}:{client_secret}".encode()
         return {"Authorization": "Basic " + base64.b64encode(raw).decode("ascii")}, {}
     fields = {"client_id": client_id} if client_id else {}
     if client_secret:
@@ -166,7 +166,9 @@ def request_token(token_url: str, form: dict, *, client_id: str = "", client_sec
     try:
         body = response.json()
     except ValueError:
-        raise ValueError(f"The token endpoint returned a non-JSON response (HTTP {response.status_code}).")
+        raise ValueError(
+            f"The token endpoint returned a non-JSON response (HTTP {response.status_code})."
+        ) from None
     if response.status_code >= 400 or not isinstance(body, dict) or "access_token" not in body:
         detail = ""
         if isinstance(body, dict):

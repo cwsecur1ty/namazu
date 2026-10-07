@@ -41,7 +41,7 @@ Repository = "https://github.com/cwsecur1ty/namazu"
 Issues = "https://github.com/cwsecur1ty/namazu/issues"
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10"]
+dev = ["pytest>=8,<10", "pytest-cov>=5,<8", "ruff>=0.6,<1"]
 # Optional second-opinion tooling. nuclei is a Go binary and is installed separately.
 external = ["schemathesis>=4,<5"]
 
@@ -57,3 +57,42 @@ namazu = ["static/*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = ["ignore::DeprecationWarning:starlette.*"]
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+# Correctness and modernisation, not formatting. Line length is deliberately
+# unenforced: the advisory prose in the catalogue reads better as long lines
+# than as something wrapped to please a linter.
+select = ["F", "E4", "E7", "E9", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    # The advisories use typographic quotes and dashes on purpose. A finding is
+    # read by a person, so the prose is punctuated for a person.
+    "RUF001", "RUF002", "RUF003",
+    # Guard-clause chains stay as chains. Several of them carry a comment
+    # explaining one specific condition, and merging the conditions moves the
+    # comment away from the thing it explains.
+    "SIM102", "SIM103",
+    # A nested with, where the inner context manager is built from the outer
+    # one, says that dependency out loud. A combined with hides it.
+    "SIM117",
+    # Concatenation and unpacking are equally clear here, so this one is taste
+    # rather than correctness.
+    "RUF005",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Unpacking a tuple and asserting on part of it is ordinary test style.
+"tests/*" = ["RUF059"]
+
+[tool.coverage.run]
+source = ["namazu"]
+branch = true
+
+[tool.coverage.report]
+# No threshold yet. The number is here to show which checks have no test
+# behind them, not to fail a build on a round figure.
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]

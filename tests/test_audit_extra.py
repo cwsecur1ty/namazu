@@ -5,11 +5,10 @@ import time
 import httpx
 import pytest
 
+from namazu import oauth
 from namazu.audit import audit_inventory, audit_operation
 from namazu.audit.model import Exchange
-from namazu.audit.transport import Budget, Executor
 from namazu.spec import parse_spec
-from namazu import oauth
 
 BASE = "https://api.example.test"
 ALICE = {"Authorization": "Bearer alice-token"}
@@ -286,6 +285,7 @@ def test_catalogue_covers_every_emitted_check():
     """A finding id with no catalogue entry would ship with no CWE or reading."""
     import re
     from pathlib import Path
+
     from namazu.audit.catalogue import CATALOGUE
 
     emitted = set()
@@ -657,7 +657,6 @@ def test_every_explicit_highlight_matches_text_the_ui_renders():
     The UI marks the observation, the impact, evidence values and response
     excerpts, so a highlight has to occur in one of those.
     """
-    import httpx as _httpx
     from namazu.audit import audit_inventory
 
     def handler(request):
@@ -1137,7 +1136,7 @@ def _reachable_check_ids():
     """Every check id the engine can emit, including the ones built at runtime."""
     import re
     from pathlib import Path
-    from namazu.audit import jwtlab
+
 
     ids = set()
     sources = list(Path("namazu/audit").glob("*.py")) + [Path("namazu/oauth.py")]
@@ -1173,10 +1172,10 @@ def test_catalogue_claims_no_check_that_does_not_exist():
 
 def test_dynamic_jwt_findings_carry_classification():
     """Regression: jwt.alg-none once shipped with cwe=None and no references."""
-    from namazu.audit.model import finding
-    from namazu.audit import jwtlab
     import re
     from pathlib import Path
+
+    from namazu.audit.model import finding
 
     weaknesses = set(re.findall(r'"id": "([a-z-]+)"',
                                 Path("namazu/audit/jwtlab.py").read_text(encoding="utf-8")))

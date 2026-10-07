@@ -1,0 +1,22 @@
+# A security tool with stale dependencies is a poor advertisement. Weekly is
+# often enough for a project this size, and grouping keeps the noise to one
+# pull request per ecosystem.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      python:
+        patterns: ["*"]
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    open-pull-requests-limit: 3

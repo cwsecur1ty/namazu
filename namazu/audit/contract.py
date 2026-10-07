@@ -12,11 +12,9 @@ from the baseline response the audit already captured.
 """
 from __future__ import annotations
 
-import re
-
 from ..runner import review_response
 from .model import Exchange, finding, mark, similarity
-from .transport import BudgetExhausted, Executor
+from .transport import Executor
 
 # Tokens that make a bearer credential structurally wrong rather than merely
 # unknown, so a server that parses before it verifies will reject them.

@@ -1,9 +1,9 @@
 """Namazu's independent local web application. No K9 database or scanner required."""
-from pathlib import Path
-from typing import Any
 import html
 import ipaddress
 import os
+from pathlib import Path
+from typing import Any
 
 import httpx
 from fastapi import FastAPI, Request
@@ -12,8 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import oauth
-from .audit import audit_inventory, audit_operation
-from .audit import external
+from .audit import audit_inventory, audit_operation, external
 from .discovery import fetch_document
 from .runner import execute_request, prepare_request
 from .spec import parse_spec

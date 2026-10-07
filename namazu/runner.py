@@ -1,10 +1,10 @@
 """One explicit API exchange and response contract validation."""
 from __future__ import annotations
 
-from contextlib import nullcontext
 import json
 import secrets
 import time
+from contextlib import nullcontext
 from urllib.parse import urlencode
 
 import httpx

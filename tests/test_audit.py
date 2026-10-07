@@ -8,8 +8,7 @@ import json
 import httpx
 import pytest
 
-from namazu.audit import audit_inventory, audit_operation
-from namazu.audit import jwtlab
+from namazu.audit import audit_inventory, audit_operation, jwtlab
 from namazu.audit.model import Exchange, body_signature, similarity
 from namazu.audit.transport import Budget, Executor, MutationRefused
 

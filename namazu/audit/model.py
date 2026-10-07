@@ -6,12 +6,11 @@ can render a replayable proof of concept without the engine formatting text.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from difflib import SequenceMatcher
 import hashlib
 import json
 import re
-import shlex
+from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 
 SEVERITIES = ("critical", "high", "medium", "low", "info")
 CONFIDENCES = ("confirmed", "probable", "possible")
@@ -323,7 +322,7 @@ def _merge_highlights(explicit: list, derived: list) -> list:
 
 def json_body(exchange: Exchange):
     """Parsed JSON for a response, or None when it is not JSON."""
-    if "json" not in exchange.content_type and not (exchange.body or "").lstrip()[:1] in ("{", "["):
+    if "json" not in exchange.content_type and (exchange.body or "").lstrip()[:1] not in ("{", "["):
         return None
     try:
         return json.loads(exchange.body)

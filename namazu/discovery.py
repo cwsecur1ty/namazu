@@ -4,11 +4,11 @@ Discovery patterns derive from K9's Swagger importer; this module has no K9 depe
 """
 from __future__ import annotations
 
-from contextlib import nullcontext
 import html
 import json
 import re
 import time
+from contextlib import nullcontext
 from urllib.parse import parse_qs, urljoin, urlsplit
 
 import httpx
@@ -21,7 +21,9 @@ MAX_FETCHES = 24
 def check_url(url: str) -> str:
     try:
         parts = urlsplit(url)
-        port = parts.port
+        # Reading the port is the check: urlsplit defers parsing it, so this is
+        # what makes a malformed port raise. Do not remove it as unused.
+        port = parts.port  # noqa: F841
     except ValueError as exc:
         raise ValueError("Enter a valid HTTP or HTTPS URL") from exc
     if parts.scheme not in ("http", "https") or not parts.hostname:

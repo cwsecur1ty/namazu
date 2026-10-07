@@ -146,7 +146,7 @@ class Executor:
                     results[index] = future.result()
                 except BudgetExhausted:
                     results[index] = None
-                except BaseException as exc:  # noqa: BLE001 - re-raised after the merge
+                except BaseException as exc:
                     failure = failure or exc
         # Merge after every worker has finished, in item order.
         for branch in branches:

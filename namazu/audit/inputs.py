@@ -111,7 +111,7 @@ class Point(str):
     same battery rather than a reduced one.
     """
 
-    __slots__ = ("index", "location", "example")
+    __slots__ = ("example", "index", "location")
 
     def __new__(cls, name: str, index: int | None = None, location: str | None = None,
                 example=None):

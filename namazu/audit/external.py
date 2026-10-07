@@ -58,7 +58,7 @@ def _schemathesis_bin() -> str | None:
 def _schemathesis_version() -> str | None:
     """Read it from package metadata; the CLI has no --version that prints one."""
     try:
-        from importlib.metadata import PackageNotFoundError, version
+        from importlib.metadata import version
         return version("schemathesis")
     except Exception:
         return None
@@ -369,7 +369,7 @@ def _failed(tool: str, reason: str, command: list) -> dict:
 def _redact(command: list, headers: dict | None) -> list:
     """The command as run, with any header value replaced."""
     out, skip = [], False
-    for index, part in enumerate(command):
+    for part in command:
         if skip:
             skip = False
             name = str(part).split(":", 1)[0]

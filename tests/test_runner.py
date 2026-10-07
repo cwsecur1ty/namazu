@@ -52,7 +52,7 @@ def test_post_requires_mutating_opt_in_before_sending(api_document, widget_body)
         return httpx.Response(201, json={})
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        with pytest.raises(ValueError, match="(?i)mutating|allow_mutating|confirm"):
+        with pytest.raises(ValueError, match=r"(?i)mutating|allow_mutating|confirm"):
             execute_request(api_document, "POST /widgets", body=widget_body, client=client)
 
     assert seen == []

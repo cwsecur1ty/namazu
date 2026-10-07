@@ -1,5 +1,7 @@
 """Swagger documentation discovery through injected HTTP transports."""
 
+import contextlib
+
 import httpx
 import pytest
 
@@ -68,12 +70,10 @@ def test_discovery_never_forwards_credentials_to_another_origin(api_document, vi
         return httpx.Response(404)
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        try:
+        with contextlib.suppress(ValueError):
             fetch_document("https://api.example.test/docs", client=client,
                            headers={"Authorization": "Bearer secret", "Cookie": "session=secret",
-                                    "X-API-Key": "secret"})
-        except ValueError:
-            pass  # Rejecting cross-origin discovery is also safe.
+                                    "X-API-Key": "secret"})  # Rejecting cross-origin discovery is also safe.
 
     for request in foreign_requests:
         assert "authorization" not in request.headers

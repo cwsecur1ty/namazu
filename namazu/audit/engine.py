@@ -19,10 +19,28 @@ from urllib.parse import urlsplit
 
 from ..runner import normalize_spec
 from ..spec import build_request
-from . import authz, bypass, catalogue, contract, identity as identity_resolver, inputs, inventory, jwtlab, passive, posture, specscan
+from . import (
+    authz,
+    bypass,
+    catalogue,
+    contract,
+    inputs,
+    inventory,
+    jwtlab,
+    passive,
+    posture,
+    specscan,
+)
+from . import identity as identity_resolver
 from .model import Finding, finding
-from .transport import (MAX_CONCURRENCY, Budget, BudgetExhausted, Executor, MutationRefused,
-                        build_client)
+from .transport import (
+    MAX_CONCURRENCY,
+    Budget,
+    BudgetExhausted,
+    Executor,
+    MutationRefused,
+    build_client,
+)
 
 PROFILES = {
     "passive": {"requests_per_operation": 1, "authz": False, "inputs": False,
@@ -127,9 +145,11 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
     if settings["writes"] and not allow_mutating:
         raise ValueError("Write probes need allow_mutating; enable write requests first.")
 
-    identity_a, token_a, note_a = identity_resolver.resolve(
+    # The token summaries are deliberately dropped: an access token must not
+    # travel into a report, and the summary is only useful to the Auth panel.
+    identity_a, _token_a, note_a = identity_resolver.resolve(
         identities, "primary", verify_tls=verify_tls, timeout=timeout)
-    identity_b, token_b, note_b = identity_resolver.resolve(
+    identity_b, _token_b, note_b = identity_resolver.resolve(
         identities, "secondary", verify_tls=verify_tls, timeout=timeout)
     credential_notes = [note for note in (note_a, note_b) if note]
     endpoint = f"{operation['method']} {operation['path']}"

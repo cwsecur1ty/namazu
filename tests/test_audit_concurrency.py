@@ -13,8 +13,7 @@ import time
 import httpx
 import pytest
 
-from namazu.audit import audit_operation
-from namazu.audit import inputs
+from namazu.audit import audit_operation, inputs
 from namazu.audit.model import Exchange
 from namazu.audit.transport import Budget, Executor, MutationRefused
 from namazu.spec import parse_spec
