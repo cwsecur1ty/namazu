@@ -49,7 +49,10 @@ PROFILES = {
                 "posture": False, "writes": False, "rate_limit": False, "concurrency": 1},
     "readonly": {"requests_per_operation": 90, "authz": True, "inputs": True, "max_fields": 4,
                  "posture": True, "writes": False, "rate_limit": False, "concurrency": 4},
-    "thorough": {"requests_per_operation": 160, "authz": True, "inputs": True, "max_fields": 6,
+    # Timing is thorough only. A sleep payload holds a database thread, which
+    # is the one probe in the read-only battery that costs the target
+    # something, so it stays out of passive and readonly entirely.
+    "thorough": {"time_based": True, "requests_per_operation": 160, "authz": True, "inputs": True, "max_fields": 6,
                  "posture": True, "writes": False, "rate_limit": True, "concurrency": 6},
     "writes": {"requests_per_operation": 220, "authz": True, "inputs": True, "max_fields": 6,
                "posture": True, "writes": True, "rate_limit": True, "concurrency": 4,
@@ -252,7 +255,8 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
                                      documented_cookie=_declared(operation, "cookie"),
                                      documented_path=_declared(operation, "path"),
                                      path_template=operation["path"],
-                                     max_fields=settings.get("max_fields", 3))
+                                     max_fields=settings.get("max_fields", 3),
+                                     time_based=settings.get("time_based", False))
         if settings["writes"]:
             findings += _write_probes(executor, parsed, operation, built, endpoint,
                                       built["headers"], identity_b, notes, baseline,

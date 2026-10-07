@@ -229,6 +229,7 @@ CATALOGUE: dict[str, dict] = {
     # ── input handling ───────────────────────────────────────────────────
     "input.sql-error": {"cwe": 89, "refs": [CHEAT["sqli"]], "method": None},
     "input.sql-boolean": {"cwe": 89, "refs": [CHEAT["sqli"]], "method": None},
+    "input.sql-time-based": {"cwe": 89, "refs": [CHEAT["sqli"]], "method": None},
     "input.nosql-operator": {"cwe": 943, "refs": [CHEAT["nosql"]], "method": None},
     "input.ldap-error": {"cwe": 90, "refs": [CHEAT["sqli"]], "method": None},
     "input.template-injection": {"cwe": 94, "refs": [CHEAT["ssti"]], "method": None},
@@ -563,6 +564,28 @@ BACKGROUND: dict[str, dict] = {
             "Parameterised queries remove the weakness by construction: the value never becomes part of "
             "the statement. Escaping and allow-lists are weaker because they depend on the escaping "
             "matching every context the value can reach."
+        ),
+    },
+    "input.sql-time-based": {
+        "background": (
+            "Time-based blind SQL injection is the signal left when there is no other one. The page "
+            "looks identical whatever an injected condition says, so instead of asking the database a "
+            "question and reading the answer, the payload asks it to wait.\n\n"
+            "    ?id=5' AND SLEEP(0)--    \u2192  returns immediately\n"
+            "    ?id=5' AND SLEEP(2)--    \u2192  returns about two seconds later\n"
+            "    ?id=5' AND SLEEP(4)--    \u2192  returns about four seconds later\n\n"
+            "The delay is the answer. One request still carries one bit, so data is read a character "
+            "at a time, which is slow for an attacker but not difficult.\n\n"
+            "The zero-second payload is why a single slow response is not enough to report. Endpoints "
+            "are slow for their own reasons, and a malformed payload can make a query expensive "
+            "without the database ever executing a sleep. A delay that appears only when the payload "
+            "asks for one, and that grows when the payload asks for more, is the database doing what "
+            "it was told."
+        ),
+        "remediation_background": (
+            "Parameterised queries remove the weakness by construction: the value never becomes part "
+            "of the statement, so there is nothing to wait for. Query timeouts and rate limits make "
+            "extraction slower without making it impossible."
         ),
     },
     "input.sql-error": {

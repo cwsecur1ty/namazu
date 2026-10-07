@@ -51,6 +51,27 @@ NOSQL_ERRORS = re.compile(
 TRAVERSAL_HITS = re.compile(r"root:[x*!]?:0:0:|\[(?:boot loader|fonts)\]|; for 16-bit app support")
 
 
+# A sleep payload holds a database thread for as long as it sleeps. That is
+# the one thing in the read-only battery that costs the target something, so
+# the numbers stay small and the whole pass is off unless a profile asks.
+SLEEP_SECONDS = 2
+SCALE_SECONDS = 4
+# What counts as a delay. A 2s sleep has to stand clear of jitter, and asking
+# for the whole 2s would lose a hit behind one slow hop, so the bar is most of
+# it. The scaling re-test is what removes the remaining doubt.
+DELAY_MARGIN_MS = 1300
+# Points probed by timing, per operation. Each costs seconds of held thread,
+# so this is much lower than the battery's own cap.
+TIME_BASED_POINTS = 2
+# Breaking out of a quoted string and commenting out the rest. The comment
+# needs its trailing space for MySQL.
+SLEEP_PAYLOADS = (
+    ("MySQL or MariaDB", "{seed}' AND SLEEP({seconds})-- "),
+    ("PostgreSQL", "{seed}' AND 1=(SELECT 1 FROM PG_SLEEP({seconds}))-- "),
+    ("Microsoft SQL Server", "{seed}'; WAITFOR DELAY '0:0:{seconds:02d}'-- "),
+)
+
+
 def _nonce() -> str:
     return "k" + secrets.token_hex(4)
 
@@ -451,7 +472,8 @@ def points(baseline: Exchange, *, documented_query: list | None = None,
 def probe(executor: Executor, *, baseline: Exchange, endpoint: str, base_headers: dict,
           documented_query: list | None = None, documented_header: list | None = None,
           documented_path: list | None = None, documented_cookie: list | None = None,
-          path_template: str = "", max_fields: int = MAX_FIELDS) -> list:
+          path_template: str = "", max_fields: int = MAX_FIELDS,
+          time_based: bool = False) -> list:
     """Run the read-only input probes over every documented point."""
     findings: list = []
     if baseline.method not in ("GET", "HEAD") or not baseline.ok:
@@ -476,8 +498,38 @@ def probe(executor: Executor, *, baseline: Exchange, endpoint: str, base_headers
             findings += group or []
         findings += header_reflection(executor, baseline=baseline, endpoint=endpoint,
                                       base_headers=base_headers)
+        if time_based:
+            findings += time_based_pass(executor, baseline=baseline, endpoint=endpoint,
+                                        base_headers=base_headers, fields=fields,
+                                        documented_query=documented_query,
+                                        already=findings)
     except BudgetExhausted:
         pass
+    return findings
+
+
+def time_based_pass(executor: Executor, *, baseline: Exchange, endpoint: str,
+                    base_headers: dict, fields: list, documented_query: list | None = None,
+                    already: list | None = None) -> list:
+    """The timing probes, serially, over at most a couple of points.
+
+    Serially on purpose. A wall-clock measurement taken while five other
+    probes share the connection pool is not a measurement, so this runs after
+    the parallel battery has finished rather than inside it.
+    """
+    confirmed = {item.id if hasattr(item, "id") else item.get("id")
+                 for item in (already or [])}
+    findings: list = []
+    for field in fields[:TIME_BASED_POINTS]:
+        # A point already confirmed as reaching SQL needs no second proof, and
+        # the sleep is the expensive way to get one.
+        if {"input.sql-error", "input.sql-boolean"} & confirmed:
+            break
+        if not executor.affordable(len(SLEEP_PAYLOADS) + 2):
+            break
+        found = _sql_time_based(executor, baseline, endpoint, field, base_headers,
+                                documented_query)
+        findings += _locate(found, field)
     return findings
 
 
@@ -966,6 +1018,89 @@ def _sql_boolean(executor, baseline, endpoint, field, base_headers, documented=N
                   "confirm_vs_true": similarity(confirm.body, true_probe.body)},
         exchanges=[local, true_probe, false_probe, confirm],
     )]
+
+
+def _sql_time_based(executor, baseline, endpoint, field, base_headers,
+                    documented=None) -> list:
+    """Three measurements: does it sleep, does it sleep only when asked, does it scale."""
+    # A sleep longer than the request timeout cannot be measured, only timed
+    # out, and a timeout proves nothing either way.
+    if executor.timeout < SCALE_SECONDS + 2 or not executor.affordable(len(SLEEP_PAYLOADS) + 2):
+        return []
+    seed = _seed_value(baseline, field, documented)
+    seed = "" if seed is None else str(seed)
+
+    def attempt(engine, template, seconds, label):
+        payload = template.format(seed=seed, seconds=seconds)
+        return _send(executor, baseline, field, payload,
+                     f"{field}: {label} ({engine})", base_headers)
+
+    for engine, template in SLEEP_PAYLOADS:
+        slept = attempt(engine, template, SLEEP_SECONDS,
+                        f"sleep {SLEEP_SECONDS}s if the value reaches SQL")
+        if not slept.ok or slept.elapsed_ms < DELAY_MARGIN_MS:
+            continue
+        if slept.elapsed_ms - baseline.elapsed_ms < DELAY_MARGIN_MS:
+            continue  # The endpoint was already this slow.
+        if not executor.affordable(2):
+            return []
+
+        # The zero-sleep control: the same payload, nothing to wait for. A
+        # payload can make a query slow by making it bad, and this is what
+        # tells that apart from a sleep that was executed.
+        control = attempt(engine, template, 0, "the same payload with a zero-second sleep")
+        if not control.ok or control.elapsed_ms >= DELAY_MARGIN_MS:
+            continue
+
+        # And the scaling re-test, against an endpoint that is simply erratic.
+        scaled = attempt(engine, template, SCALE_SECONDS,
+                         f"sleep {SCALE_SECONDS}s, to see the delay scale")
+        if not scaled.ok or scaled.elapsed_ms < slept.elapsed_ms + DELAY_MARGIN_MS:
+            continue
+
+        return [finding(
+            "input.sql-time-based", "Parameter reaches SQL, confirmed by a timed delay",
+            "high", "confirmed", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
+            method=(f"Sent a {engine} sleep payload and measured the response time, then sent "
+                    "the identical payload with a zero-second sleep, which returned promptly, "
+                    f"then the same payload again at {SCALE_SECONDS}s, which took "
+                    "proportionally longer. A slow response alone proves nothing; the zero-"
+                    "second control rules out a payload that is simply expensive, and the "
+                    "scaling rules out an endpoint that is intermittently slow. Nothing was "
+                    "read or written."),
+            highlights=[
+                mark("confirmed by a timed delay", "proof",
+                     "The response time followed the sleep the payload asked for, and did not "
+                     "when the same payload asked for none."),
+                mark("reaches SQL", "weak",
+                     "The value is concatenated into a statement the database executes."),
+            ],
+            detail=(f"A {engine} sleep payload in {field} returned after "
+                    f"{int(slept.elapsed_ms)} ms against a baseline of "
+                    f"{int(baseline.elapsed_ms)} ms. The same payload asking for a zero-second "
+                    f"sleep returned in {int(control.elapsed_ms)} ms, and asking for "
+                    f"{SCALE_SECONDS} seconds it took {int(scaled.elapsed_ms)} ms. The delay "
+                    "tracks what the payload asked for, so the value is being executed as part "
+                    "of a SQL statement."),
+            impact=("The database executes attacker-supplied SQL. Data can be read a character "
+                    "at a time through the same timing channel, with no need for the response "
+                    "to differ in any other way."),
+            remediation=("Use parameterised queries so the value is bound rather than "
+                         "concatenated. An allow-list or escaping routine around a "
+                         "concatenated statement is not equivalent."),
+            limitations=(f"The payloads break out of a quoted string, so a parameter "
+                         "interpolated into a numeric context may be injectable without being "
+                         f"detected here. Engines without a sleep function, SQLite among them, "
+                         "cannot be confirmed this way at all. Confirmation cost the target "
+                         f"roughly {SLEEP_SECONDS + SCALE_SECONDS} seconds of held database "
+                         "thread on this parameter."),
+            evidence={"engine": engine, "baseline_ms": int(baseline.elapsed_ms),
+                      "sleep_seconds": SLEEP_SECONDS, "sleep_ms": int(slept.elapsed_ms),
+                      "zero_sleep_ms": int(control.elapsed_ms),
+                      "scaled_seconds": SCALE_SECONDS, "scaled_ms": int(scaled.elapsed_ms)},
+            exchanges=[slept, control, scaled],
+        )]
+    return []
 
 
 def _ssrf(executor, baseline, endpoint, field, base_headers) -> list:
