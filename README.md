@@ -278,6 +278,9 @@ finding is disputed or when something on the target breaks mid-test.
   server process only. Theme and layout are the only things stored locally.
 - Exports mask recognised credential headers and query values. Response bodies
   are **not** masked; review before sharing.
+- Namazu identifies itself by name on every request. Set a different **User
+  agent** under Settings when a WAF in front of the target refuses an
+  unfamiliar client.
 - Loopback by default. With `--host 0.0.0.0` you supply your own access control.
 
 ## Limits
@@ -298,10 +301,12 @@ version.
 ```sh
 .venv/bin/python -m pip install -e ".[dev]"
 .venv/bin/python -m pytest
+.venv/bin/python -m ruff check .
+.venv/bin/python -m pytest --cov            # 77% of lines, reported not gated
 node --check namazu/static/app.js
 ```
 
-248 tests across 89 checks. Detections are asserted in both directions: a check fires on the
+269 tests across 89 checks. Detections are asserted in both directions: a check fires on the
 broken handler, and stays silent on the correct one.
 
 The HTTP API is `POST /api/import`, `/api/prepare`, `/api/run`, `/api/audit`,
