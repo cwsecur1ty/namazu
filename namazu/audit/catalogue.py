@@ -203,7 +203,8 @@ CATALOGUE: dict[str, dict] = {
     "jwt.forgeable-in-response": {"cwe": 347, "refs": [RFC["jwt-bcp"]], "method": BASELINE},
     "jwt.signature-not-verified": {"cwe": 347, "refs": [RFC["jwt-bcp"]], "method": None},
     "jwt.forged-token-accepted": {"cwe": 347, "refs": [RFC["jwt-bcp"]], "method": None},
-    "jwt.algorithm-confusion": {"cwe": 347, "refs": [RFC["jwt-bcp"]], "method": None},
+    "jwt.alg-none": {"cwe": 347, "refs": [RFC["jwt-bcp"]], "method": None},
+    "jwt.expired": {"cwe": 613, "refs": [RFC["jwt-bcp"]], "method": None},
     "jwt.weak-secret": {"cwe": 798, "refs": [RFC["jwt-bcp"]], "method": None},
     "jwt.no-expiry": {"cwe": 613, "refs": [RFC["jwt-bcp"]], "method": None},
     "jwt.long-lifetime": {"cwe": 613, "refs": [RFC["jwt-bcp"]], "method": None},
@@ -215,7 +216,6 @@ CATALOGUE: dict[str, dict] = {
     "oauth.redirect-not-validated": {"cwe": 601, "refs": [RFC["oauth-bcp"], CHEAT["redirect"]], "method": None},
     "oauth.pkce-not-enforced": {"cwe": 287, "refs": [RFC["pkce"], RFC["oauth-bcp"]], "method": None},
     "oauth.implicit-enabled": {"cwe": 598, "refs": [RFC["oauth-bcp"], RFC["oauth21"]], "method": None},
-    "oauth.discovery-exposed": {"cwe": 200, "refs": [RFC["oauth-bcp"]], "method": None},
 
     # ── input handling ───────────────────────────────────────────────────
     "input.sql-error": {"cwe": 89, "refs": [CHEAT["sqli"]], "method": None},

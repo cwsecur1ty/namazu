@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "namazu-api"
 version = "0.1.0"
-description = "An API security workbench that shows its working: OpenAPI contract testing and an OWASP API Top 10 audit with reproducible evidence"
+description = "An API security workbench for OpenAPI contracts: contract testing and an OWASP API Top 10 audit with reproducible evidence"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

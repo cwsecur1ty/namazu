@@ -1131,3 +1131,84 @@ def test_schemathesis_excludes_write_methods_unless_allowed():
     assert "--exclude-method-regex" in read_only
     assert "POST|PUT|PATCH|DELETE" in read_only[read_only.index("--exclude-method-regex") + 1]
     assert "--exclude-method-regex" not in with_writes
+
+
+# ── catalogue integrity ─────────────────────────────────────────────────────
+
+def _reachable_check_ids():
+    """Every check id the engine can emit, including the ones built at runtime."""
+    import re
+    from pathlib import Path
+    from namazu.audit import jwtlab
+
+    ids = set()
+    sources = list(Path("namazu/audit").glob("*.py")) + [Path("namazu/oauth.py")]
+    for path in sources:
+        text = path.read_text(encoding="utf-8")
+        ids |= set(re.findall(r"finding\(\s*\n?\s*[\"']([a-z0-9._-]+)[\"']", text))
+    # jwt.* ids are composed from the weakness ids jwtlab produces, so a literal
+    # scan cannot see them. This is exactly how jwt.alg-none shipped with no CWE.
+    weaknesses = set(re.findall(r'"id": "([a-z-]+)"',
+                                Path("namazu/audit/jwtlab.py").read_text(encoding="utf-8")))
+    ids |= {f"jwt.{name}" for name in weaknesses}
+    return ids
+
+
+def test_every_reachable_check_has_a_catalogue_entry():
+    """A finding with no entry ships with no CWE and no references."""
+    from namazu.audit.catalogue import CATALOGUE
+    missing = sorted(_reachable_check_ids() - set(CATALOGUE))
+    assert not missing, f"checks with no catalogue entry: {missing}"
+
+
+def test_catalogue_claims_no_check_that_does_not_exist():
+    """An entry for an unimplemented check is a false claim of coverage."""
+    from namazu.audit.catalogue import CATALOGUE
+    # schemathesis.* and nuclei.* ids are derived from the external tool's own
+    # output, so they are not enumerable from this source tree.
+    dead = sorted(
+        check for check in set(CATALOGUE) - _reachable_check_ids()
+        if not check.startswith(("schemathesis.", "nuclei."))
+    )
+    assert not dead, f"catalogue entries with no check behind them: {dead}"
+
+
+def test_dynamic_jwt_findings_carry_classification():
+    """Regression: jwt.alg-none once shipped with cwe=None and no references."""
+    from namazu.audit.model import finding
+    from namazu.audit import jwtlab
+    import re
+    from pathlib import Path
+
+    weaknesses = set(re.findall(r'"id": "([a-z-]+)"',
+                                Path("namazu/audit/jwtlab.py").read_text(encoding="utf-8")))
+    for name in sorted(weaknesses):
+        item = finding(f"jwt.{name}", "t", "medium", "confirmed")
+        assert item.cwe, f"jwt.{name} has no CWE"
+        assert item.references, f"jwt.{name} has no references"
+
+
+def test_graphql_field_suggestions_are_detected():
+    def handler(request):
+        if request.url.path == "/graphql":
+            return _json({"errors": [{"message":
+                "Cannot query field \"namazuProbeFieldZz\" on type \"Query\". "
+                "Did you mean \"currentUser\"?"}]}, 400)
+        return _json({"detail": "not found"}, 404)
+
+    with _client(handler) as client:
+        result = audit_inventory(_spec_for_log(), base_url=BASE, client=client)
+    hit = next(f for f in result["findings"] if f["id"] == "inventory.graphql-suggestions")
+    assert "currentUser" in hit["evidence"]["suggestion"]
+    assert hit["confidence"] == "confirmed"
+
+
+def test_graphql_without_suggestions_is_clean():
+    def handler(request):
+        if request.url.path == "/graphql":
+            return _json({"errors": [{"message": "Cannot query field."}]}, 400)
+        return _json({"detail": "not found"}, 404)
+
+    with _client(handler) as client:
+        result = audit_inventory(_spec_for_log(), base_url=BASE, client=client)
+    assert "inventory.graphql-suggestions" not in _ids(result)

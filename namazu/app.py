@@ -100,7 +100,7 @@ class AuditInput(BaseModel):
     allow_mutating: bool = False
     verify_tls: bool = True
     timeout: float = Field(default=15, ge=1, le=120)
-    budget: int = Field(default=36, ge=1, le=200)
+    budget: int = Field(default=60, ge=1, le=200)
 
 
 @app.exception_handler(ValueError)

@@ -2,7 +2,7 @@
 
 # 鯰 &nbsp;Namazu
 
-**An API security workbench that shows its working.**
+**An API security workbench for OpenAPI contracts.**
 
 Import an OpenAPI contract, build and send requests, and audit the API against
 the OWASP API Security Top 10, with every finding carrying the requests that
@@ -17,20 +17,11 @@ produced it and the command to reproduce them.
 
 ---
 
-> In Japanese folklore, Namazu is a giant catfish that lies beneath the islands.
-> When it thrashes, the ground shakes. A deity holds it in place with a keystone.
->
-> The tool is named for the arrangement, not the catfish: something that can
-> shake foundations, deliberately kept in check. Every probe here runs inside a
-> request budget, refuses to change server state unless you say so, and reports
-> what it did not run rather than quietly skipping it.
-
----
-
 ## Why this exists
 
-Most scanners hand you a severity and a sentence. Namazu is built so a finding
-survives review:
+A finding is only worth having if it holds up when someone pushes back on it.
+That means showing the requests behind it, saying how confident you actually
+are, and admitting what it does not prove.
 
 | | |
 |---|---|
@@ -43,8 +34,7 @@ survives review:
 <br>
 
 <div align="center">
-<em>The advisory for a single finding: what was observed here, how this class of weakness works,<br>
-how it was found, the impact, and what the finding does not prove.</em>
+<em>How a single finding is laid out.</em>
 </div>
 
 ```
@@ -268,7 +258,7 @@ version.
 node --check namazu/static/app.js
 ```
 
-202 tests across 84 checks. Detections are asserted in both directions: a check fires on the
+207 tests across 84 checks. Detections are asserted in both directions: a check fires on the
 broken handler, and stays silent on the correct one.
 
 The HTTP API is `POST /api/import`, `/api/prepare`, `/api/run`, `/api/audit`,

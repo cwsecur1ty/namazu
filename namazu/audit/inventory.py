@@ -59,6 +59,7 @@ INTROSPECTION = json.dumps({"query": "{__schema{queryType{name} types{name}}}"})
 
 SENSITIVE_OPS = re.compile(r"(?i)/(actuator/env|\.env|debug|trace|console|server-status|config\.json|admin|internal)")
 DOC_MARKERS = re.compile(r"(?i)(\"openapi\"\s*:|\"swagger\"\s*:|swagger-ui|redoc|<title>[^<]*api[^<]*docs)")
+SUGGESTION = re.compile('(?i)did you mean[^\n}]{0,120}')
 SOFT_404 = re.compile(r"(?i)(not found|does not exist|no such|404|unknown (route|endpoint|path))")
 
 
@@ -111,6 +112,7 @@ def run(executor: Executor, *, spec: dict, base_url: str, headers: dict,
         findings += _operations(executor, origin, headers, calibration, summary)
         findings += _source_files(executor, origin, headers, calibration, summary)
         findings += _graphql(executor, origin, headers, calibration, summary)
+        findings += _graphql_suggestions(executor, origin, headers, calibration, summary)
         findings += _versions(executor, base_url, headers, calibration, documented_paths, summary)
     except BudgetExhausted:
         summary["budget_exhausted"] = True
@@ -355,4 +357,58 @@ def _source_files(executor, origin, headers, calibration, summary) -> list:
                       "excerpt": (exchange.body or "")[:200]},
             exchanges=[exchange],
         ))
+    return out
+
+
+def _graphql_suggestions(executor, origin, headers, calibration, summary) -> list:
+    """Introspection off is not the whole story: field suggestions leak the schema too.
+
+    Asking for a field that does not exist makes several GraphQL servers reply
+    with "Did you mean ...", which walks the schema one guess at a time. The
+    probe sends one deliberately wrong field name and looks for that response.
+    """
+    out = []
+    probe_field = "namazuProbeFieldZz"
+    query = json.dumps({"query": "{ " + probe_field + " }"})
+    for path in GRAPHQL_PATHS:
+        if not executor.affordable(1):
+            break
+        exchange = executor.send(
+            "POST", _join(origin, path), label=f"inventory {path} field suggestion",
+            headers=headers, body=query, content_type="application/json", mutating=False,
+        )
+        if not exchange.ok or exchange.status >= 500:
+            continue
+        body = exchange.body or ""
+        if '"errors"' not in body:
+            continue
+        match = SUGGESTION.search(body)
+        if not match:
+            continue
+        summary["exposed"].append(f"{path} (suggestions)")
+        return [finding(
+            "inventory.graphql-suggestions", "GraphQL field suggestions are enabled",
+            "low", "confirmed", owasp="API9:2023 Improper Inventory Management",
+            endpoint=f"POST {path}",
+            method=(f"Sent a query for the non-existent field {probe_field} and looked for a "
+                    "suggestion phrase in the error response."),
+            detail=(f"Querying an unknown field returned a suggestion: \"{match.group(0)[:120]}\". "
+                    "The server is proposing real field names in its error messages."),
+            background=(
+                "Disabling introspection is the usual hardening step, but suggestions defeat it. A "
+                "server that answers an unknown field with \"Did you mean ...\" lets an attacker "
+                "recover the schema name by name, which is slower than introspection and just as "
+                "complete."),
+            impact=("The schema can be reconstructed despite introspection being off, revealing types, "
+                    "fields and mutations that no client uses."),
+            remediation=("Disable field suggestions in production. In graphql-js set "
+                         "`didYouMean: false` or strip suggestion text in a custom error formatter; "
+                         "most other server libraries expose an equivalent switch. Pair it with "
+                         "disabled introspection and a persisted-query allow-list."),
+            highlights=[mark(probe_field, "attacker", "The field name KAPI invented; it exists nowhere."),
+                        mark(match.group(0)[:80], "leak", "A real field name the server offered back.")],
+            evidence={"path": path, "probe_field": probe_field, "status": exchange.status,
+                      "suggestion": match.group(0)[:200]},
+            exchanges=[exchange],
+        )]
     return out

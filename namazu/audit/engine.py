@@ -314,7 +314,7 @@ def _result(endpoint, operation, findings, budget, profile, *, notes=None, basel
 
 
 def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict | None = None,
-                    verify_tls: bool = True, timeout: float = 15.0, budget: int = 36,
+                    verify_tls: bool = True, timeout: float = 15.0, budget: int = 60,
                     client=None) -> dict:
     """Sweep the host around the documented surface. Read-only."""
     parsed = normalize_spec(spec)
