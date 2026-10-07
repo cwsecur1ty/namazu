@@ -76,20 +76,57 @@ def _live(exchange: Exchange) -> bool:
     return exchange.ok and exchange.status not in (0, 404, 410, 501, 502, 503, 504)
 
 
+# A built single page application references its bundles by hashed filename, so
+# the asset set and the title are the same on every route while the body around
+# them is not. A canonical link or a route meta tag is excluded by requiring an
+# asset extension, because those are the parts meant to differ per route.
+SHELL_ASSET = re.compile(r"""(?:src|href)\s*=\s*["\']([^"\']+\.(?:js|mjs|css))["\']""",
+                         re.IGNORECASE)
+SHELL_TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
+# Bodies are kept only to fingerprint, and the shell is at the top of the
+# document, so there is nothing to gain from holding more.
+CALIBRATION_SAMPLE = 8000
+
+
 def _calibrate(executor: Executor, origin: str, headers: dict) -> dict:
     """Learn how the host answers a path that certainly does not exist."""
     probe = executor.send("GET", _join(origin, "/namazu-does-not-exist-9d2f41"),
                           label="404 calibration", headers=headers)
     return {"status": probe.status, "length": len(probe.body), "ok": probe.ok,
+            "body": (probe.body or "")[:CALIBRATION_SAMPLE],
+            "content_type": probe.content_type,
             "catch_all": probe.ok and probe.status < 400}
+
+
+def _shell_signature(body: str, content_type: str | None) -> tuple | None:
+    """What stays the same about an application shell across its routes.
+
+    Returns None when the response is not an HTML document, or carries nothing
+    identifying, so an absent fingerprint can never match another absent one.
+    """
+    if "html" not in (content_type or "").lower():
+        return None
+    title = SHELL_TITLE.search(body or "")
+    assets = tuple(sorted(set(SHELL_ASSET.findall(body or ""))))
+    if not assets:
+        return None  # Without a build to point at, this is not a shell we can name.
+    return ((title.group(1).strip()[:120] if title else ""), assets)
 
 
 def _is_real_hit(exchange: Exchange, calibration: dict) -> bool:
     if not _live(exchange):
         return False
-    if calibration.get("catch_all"):
-        # The host answers everything. Only a clearly different body counts.
-        if exchange.status == calibration["status"] and abs(len(exchange.body) - calibration["length"]) < 48:
+    if calibration.get("catch_all") and exchange.status == calibration["status"]:
+        # The host answers everything, so the question is whether this response
+        # is the same page as the calibration. Length alone is not enough: a
+        # shell that stamps in a nonce or a session blob moves by more than any
+        # sane tolerance, and every conventional path then reads as a shadow
+        # endpoint. Comparing the bodies is what distinguishes a shell served
+        # under a different route from a route that genuinely exists.
+        if abs(len(exchange.body) - calibration["length"]) < 48:
+            return False
+        shell = _shell_signature(calibration.get("body") or "", calibration.get("content_type"))
+        if shell is not None and _shell_signature(exchange.body, exchange.content_type) == shell:
             return False
     if exchange.status == 200 and SOFT_404.search(exchange.body[:400] or ""):
         return False
