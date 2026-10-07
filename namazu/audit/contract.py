@@ -13,6 +13,7 @@ from the baseline response the audit already captured.
 from __future__ import annotations
 
 from ..runner import review_response
+from .identity import CREDENTIAL_HEADERS
 from .model import Exchange, finding, mark, similarity
 from .transport import Executor
 
@@ -114,6 +115,20 @@ def review(spec: dict, operation: dict, baseline: Exchange, endpoint: str) -> li
     return findings
 
 
+def _corrupt_cookies(value: str) -> str:
+    """Every cookie value replaced, every cookie name kept.
+
+    Replacing the whole header would send a cookie with no name, which a
+    server discards: that is the anonymous replay again rather than a
+    credential that is present and invalid, which is the question here.
+    """
+    out = []
+    for item in (value or "").split(";"):
+        name, separator, _ = item.strip().partition("=")
+        out.append(f"{name}={INVALID_TOKEN}" if separator and name else item.strip())
+    return "; ".join(part for part in out if part)
+
+
 def invalid_credentials(executor: Executor, *, baseline: Exchange, endpoint: str,
                         operation: dict, identity: dict, headers: dict) -> list:
     """Does a structurally invalid credential still get in?
@@ -133,10 +148,13 @@ def invalid_credentials(executor: Executor, *, baseline: Exchange, endpoint: str
 
     corrupted = {}
     for name, value in headers.items():
-        if name.lower() == "authorization":
+        lowered = str(name).lower()
+        if lowered == "authorization":
             scheme = value.split(" ", 1)[0] if " " in value else "Bearer"
             corrupted[name] = f"{scheme} {INVALID_TOKEN}"
-        elif name.lower() in ("x-api-key", "api-key", "apikey", "x-auth-token", "x-access-token"):
+        elif lowered == "cookie":
+            corrupted[name] = _corrupt_cookies(value)
+        elif lowered in CREDENTIAL_HEADERS:
             corrupted[name] = INVALID_TOKEN
         else:
             corrupted[name] = value

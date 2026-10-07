@@ -17,6 +17,7 @@ import secrets
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from . import jwtlab
+from .identity import same_principal, strip_credentials, subject
 from .model import Exchange, body_signature, finding, mark, similarity
 from .transport import BudgetExhausted, Executor
 
@@ -89,14 +90,9 @@ def _looks_like_data(exchange: Exchange) -> bool:
     return exchange.ok and 200 <= exchange.status < 300 and len(exchange.body.strip()) > 2
 
 
-def _strip_credentials(headers: dict) -> dict:
-    drop = {"authorization", "cookie", "x-api-key", "api-key", "apikey", "x-auth-token",
-            "x-access-token", "x-session-token", "authentication"}
-    return {name: value for name, value in headers.items() if name.lower() not in drop}
-
-
 def probe(executor: Executor, *, baseline: Exchange, endpoint: str, operation: dict,
-          identity_a: dict, identity_b: dict | None, base_headers: dict) -> list:
+          identity_a: dict, identity_b: dict | None, base_headers: dict,
+          notes: list | None = None) -> list:
     """Run the authorization battery around an already-captured baseline."""
     findings: list = []
     method = baseline.method
@@ -111,7 +107,7 @@ def probe(executor: Executor, *, baseline: Exchange, endpoint: str, operation: d
         findings += anonymous_findings
         if identity_b:
             findings += _cross_identity(executor, baseline, endpoint, identity_b, base_headers,
-                                        declared_auth, anonymous)
+                                        declared_auth, anonymous, notes)
         findings += _identifier_swap(executor, baseline, endpoint, base_headers, authed)
         findings += _cors_reflection(executor, baseline, endpoint, base_headers)
         findings += _method_tampering(executor, baseline, endpoint, base_headers)
@@ -125,7 +121,7 @@ def probe(executor: Executor, *, baseline: Exchange, endpoint: str, operation: d
 
 def _anonymous_replay(executor, baseline, endpoint, declared_auth, authed, base_headers):
     """Does the route answer with no credentials at all? Returns (findings, exchange)."""
-    stripped = _strip_credentials(base_headers)
+    stripped = strip_credentials(base_headers)
     if authed and stripped == base_headers:
         return [], None
     if not authed and not declared_auth:
@@ -173,10 +169,12 @@ def _anonymous_replay(executor, baseline, endpoint, declared_auth, authed, base_
 
 
 def _cross_identity(executor, baseline, endpoint, identity_b, base_headers, declared_auth,
-                    anonymous=None) -> list:
+                    anonymous=None, notes=None) -> list:
     """The decisive test: does user B get user A's object back?
 
-    Two gates keep shared data out of this. The request has to address a
+    Three gates keep shared data out of this. The second identity has to be
+    a different caller, because one account presented twice would match for
+    the most ordinary reason there is. The request has to address a
     specific object (an identifier in the path or query), because two users seeing the
     same search results is normal. And the data must not already be readable
     anonymously, because then the problem is missing authentication, which is
@@ -188,7 +186,19 @@ def _cross_identity(executor, baseline, endpoint, identity_b, base_headers, decl
         return []
     if anonymous is not None and _looks_like_data(anonymous)             and similarity(baseline.body, anonymous.body) >= 0.95:
         return []
-    headers = {**_strip_credentials(base_headers), **identity_b}
+    reason = same_principal(base_headers, identity_b)
+    if reason:
+        if notes is not None:
+            notes.append(f"The cross-identity read did not run: {reason}. A boundary between two "
+                         "accounts can only be tested with two different accounts.")
+        return []
+
+    headers = {**strip_credentials(base_headers), **identity_b}
+    # Named in the evidence when the credentials are readable, so a reader can
+    # check for themselves that two different callers were compared.
+    principals = {key: value for key, value in
+                  (("identity_a_subject", subject(base_headers)),
+                   ("identity_b_subject", subject(headers))) if value}
     other = executor.send(baseline.method, baseline.url,
                           label="same object requested as the second identity",
                           headers=headers, identity="identity B")
@@ -224,7 +234,7 @@ def _cross_identity(executor, baseline, endpoint, identity_b, base_headers, decl
             evidence={"identity_a_status": baseline.status, "identity_b_status": other.status,
                       "body_similarity": match, "identical": same,
                       "signature_a": body_signature(baseline.body),
-                      "signature_b": body_signature(other.body)},
+                      "signature_b": body_signature(other.body), **principals},
             exchanges=[baseline, other],
         )]
     if admin_route:
@@ -238,7 +248,8 @@ def _cross_identity(executor, baseline, endpoint, identity_b, base_headers, decl
                     f"{other.status} with a {len(other.body)}-byte body rather than 401 or 403."),
             impact="A lower-privileged account can reach administrative functionality.",
             remediation="Enforce role checks on privileged routes server-side.",
-            evidence={"identity_b_status": other.status, "body_similarity": match},
+            evidence={"identity_b_status": other.status, "body_similarity": match,
+                      **principals},
             exchanges=[baseline, other],
         )]
     return []

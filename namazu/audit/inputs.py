@@ -27,6 +27,7 @@ import re
 import secrets
 from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit
 
+from .identity import same_principal, strip_credentials, subject
 from .model import Exchange, finding, mark, similarity
 from .transport import BudgetExhausted, Executor
 
@@ -883,12 +884,20 @@ def body_injection(executor: Executor, *, baseline: Exchange, endpoint: str,
 
 
 def write_authorization(executor: Executor, *, built: dict, endpoint: str, base_headers: dict,
-                        identity_b: dict) -> list:
+                        identity_b: dict, notes: list | None = None) -> list:
     """Does the second identity get to perform a write it should not own?"""
     if not identity_b or not executor.affordable(1):
         return []
-    headers = {name: value for name, value in base_headers.items()
-               if name.lower() not in ("authorization", "cookie", "x-api-key", "api-key")}
+    # This probe writes, so a misconfigured pair of identities costs more here
+    # than anywhere else: the write lands either way, and it would be reported
+    # as one account writing another account's resource.
+    reason = same_principal(base_headers, identity_b)
+    if reason:
+        if notes is not None:
+            notes.append(f"The write was not replayed as the second identity: {reason}. Testing a "
+                         "write boundary needs two different accounts.")
+        return []
+    headers = strip_credentials(base_headers)
     headers.update(identity_b)
     if built.get("content_type"):
         headers["Content-Type"] = built["content_type"]
@@ -908,7 +917,10 @@ def write_authorization(executor: Executor, *, built: dict, endpoint: str, base_
                 "identity's credentials against a resource addressed for the first identity."),
         impact="A user can modify or destroy data belonging to another account.",
         remediation="Check ownership and role on every write, scoping the target to the authenticated subject.",
-        evidence={"status": attempt.status, "method": built["method"]},
+        evidence={"status": attempt.status, "method": built["method"],
+                  **{key: value for key, value in
+                     (("identity_a_subject", subject(base_headers)),
+                      ("identity_b_subject", subject(headers))) if value}},
         exchanges=[attempt],
     )]
 

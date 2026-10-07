@@ -17,8 +17,12 @@ CONFIDENCES = ("confirmed", "probable", "possible")
 SEVERITY_RANK = {name: index for index, name in enumerate(SEVERITIES)}
 CONFIDENCE_RANK = {name: index for index, name in enumerate(CONFIDENCES)}
 
-# Header names whose values are replaced with a placeholder in proofs of concept.
-CREDENTIAL_HEADERS = {
+# Header names whose values are replaced with a placeholder in proofs of
+# concept. Deliberately wider than the credential list in identity.py, and
+# named differently so the two are not mistaken for each other: redacting a
+# header that turns out not to be a credential costs a reader nothing, while
+# missing one puts a live token in a report. A test pins the direction.
+REDACTED_HEADERS = {
     "authorization", "proxy-authorization", "cookie", "set-cookie",
     "x-api-key", "api-key", "apikey", "x-auth-token", "x-access-token",
     "x-session-token", "x-csrf-token", "x-xsrf-token", "authentication",
@@ -58,7 +62,7 @@ def similarity(left: str, right: str) -> float:
 
 def redact_headers(headers: dict) -> dict:
     return {
-        name: ("<credential>" if name.lower() in CREDENTIAL_HEADERS else value)
+        name: ("<credential>" if name.lower() in REDACTED_HEADERS else value)
         for name, value in (headers or {}).items()
     }
 

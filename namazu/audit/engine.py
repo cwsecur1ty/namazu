@@ -220,6 +220,7 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
             findings += authz.probe(
                 executor, baseline=baseline, endpoint=endpoint, operation=operation,
                 identity_a=identity_a, identity_b=identity_b, base_headers=built["headers"],
+                notes=notes,
             )
             findings += contract.invalid_credentials(
                 executor, baseline=baseline, endpoint=endpoint, operation=operation,
@@ -361,7 +362,8 @@ def _write_probes(executor, parsed, operation, built, endpoint, headers, identit
         notes.append("No privileged properties in the request schema, so no mass-assignment probe ran.")
     if identity_b:
         out += inputs.write_authorization(executor, built=built, endpoint=endpoint,
-                                          base_headers=headers, identity_b=identity_b)
+                                          base_headers=headers, identity_b=identity_b,
+                                          notes=notes)
     if baseline is not None:
         out += _body_probes(executor, baseline, endpoint, headers, method, body_fields, notes)
     return out

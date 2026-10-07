@@ -18,6 +18,7 @@ import time
 
 from .. import oauth
 from ..discovery import Connection
+from . import jwtlab
 
 # Mint a replacement this long before the server's own expiry, so a token does
 # not lapse between being handed out and being used.
@@ -30,6 +31,121 @@ _tokens: dict[str, dict] = {}
 
 class CredentialError(RuntimeError):
     """A configured identity could not be turned into a usable credential."""
+
+
+# ── what counts as a credential, and who is holding it ───────────────────────
+
+# Header names that carry a credential. One list, read by every probe that
+# takes credentials off a request or recognises the credential a second
+# identity carries, so the read battery and the write battery cannot disagree
+# about what a credential is.
+CREDENTIAL_HEADERS = frozenset({
+    "authorization", "cookie", "x-api-key", "api-key", "apikey", "x-auth-token",
+    "x-access-token", "x-session-token", "authentication",
+})
+
+# Claims that name the caller. "sub" is the subject proper; the rest name a
+# machine caller, which is what a client credentials grant produces.
+CLIENT_CLAIMS = ("client_id", "azp", "appid", "oid")
+
+
+def strip_credentials(headers: dict) -> dict:
+    """``headers`` with every credential this tool recognises removed."""
+    return {name: value for name, value in (headers or {}).items()
+            if str(name).lower() not in CREDENTIAL_HEADERS}
+
+
+def _credentials(headers: dict) -> tuple[set[str], set[str]]:
+    """Credential material these headers carry, as (token values, cookies).
+
+    The two are kept apart because they compare differently. A token header
+    holds one credential, so a shared value is a shared credential. A cookie
+    header holds a bag of unrelated values, any one of which two different
+    accounts may legitimately be sent.
+    """
+    tokens: set[str] = set()
+    cookies: set[str] = set()
+    for name, value in (headers or {}).items():
+        lowered = str(name).lower()
+        if not isinstance(value, str) or not value.strip():
+            continue
+        if lowered == "cookie":
+            cookies |= {item.strip() for item in value.split(";") if item.strip()}
+            continue
+        if lowered not in CREDENTIAL_HEADERS:
+            continue
+        text = value.strip()
+        tokens.add(text)
+        # "Bearer abc" and a bare "abc" under a different header name are one
+        # secret presented two ways.
+        if " " in text:
+            tokens.add(text.split(" ", 1)[1].strip())
+    return tokens, cookies
+
+
+def _claims(headers: dict) -> dict | None:
+    """The payload of a JWT carried anywhere in these headers, if there is one."""
+    token = jwtlab.bearer_token(headers)
+    decoded = jwtlab.decode(token) if token else None
+    return decoded["payload"] if decoded else None
+
+
+def subject(headers: dict) -> str | None:
+    """The principal these headers name, when the credential is a readable JWT."""
+    claims = _claims(headers) or {}
+    for claim in ("sub", *CLIENT_CLAIMS):
+        if claims.get(claim):
+            return str(claims[claim])
+    return None
+
+
+def same_principal(sent: dict, other: dict) -> str | None:
+    """Why ``other`` is the same caller as ``sent``, or None when it is not.
+
+    Only positive evidence counts. Absence of evidence returns None and the
+    probe goes ahead, because the header list above is a guess: a credential
+    under a name this tool does not know would otherwise read as "no
+    credential at all", and suppressing a real authorization finding is a far
+    worse outcome than spending one request to check.
+
+    One case stays open by that rule: a second identity that reuses the first
+    one's session cookie and adds an unrelated cookie of its own is not
+    recognised, because telling a session cookie from a preference cookie by
+    its name is guesswork. The probe runs, and two opaque cookie jars that
+    differ are taken at face value.
+    """
+    if not sent or not other:
+        return None
+    held_tokens, held_cookies = _credentials(sent)
+    offered_tokens, offered_cookies = _credentials(other)
+    if offered_tokens & held_tokens:
+        return "both identities send the same credential"
+    # Nothing of its own: whatever this request is, it is not a second account
+    # asking. A cookie counts only as part of the whole bag here, so two
+    # accounts that share a theme cookie and differ in their session cookie
+    # still reach the probe.
+    offered, held = offered_tokens | offered_cookies, held_tokens | held_cookies
+    if offered and offered <= held:
+        return "the second identity sends no credential the first one did not"
+
+    first, second = _claims(sent), _claims(other)
+    if first is None or second is None:
+        # At least one credential is opaque to us. Two opaque strings that
+        # differ could be two accounts, or one account issued two tokens;
+        # nothing readable here can tell those apart.
+        return None
+    left, right = str(first.get("sub") or ""), str(second.get("sub") or "")
+    if left and right:
+        return f"both tokens carry the subject “{left}”" if left == right else None
+    if left or right:
+        # One token names a subject and the other does not, so the claim that
+        # would settle it is missing from one side.
+        return None
+    for claim in CLIENT_CLAIMS:
+        left, right = str(first.get(claim) or ""), str(second.get(claim) or "")
+        if left and right and left == right:
+            return f"both tokens are issued to the same client “{left}”"
+    return None
 
 
 def _fingerprint(config: dict, connection: Connection | None = None) -> str:

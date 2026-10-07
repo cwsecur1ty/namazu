@@ -128,7 +128,9 @@ the rate-limit burst are still serial.
 <summary><b>OWASP API Security Top 10 (2023)</b></summary>
 
 - **API1 Broken Object Level Authorization**: cross-identity object replay,
-  anonymous replay, identifier swapping on path segments and id parameters.
+  anonymous replay, identifier swapping on path segments and id parameters. The
+  cross-identity probes run only when the second identity is a different
+  caller, and say in the notes when they did not.
 - **API2 Broken Authentication**: credentials in URLs, JWT decoding, weak HMAC
   secret recovery, `alg:none` and re-signed token replay, algorithm confusion
   against the issuer's own published key, missing expiry, remote key URLs,
@@ -293,6 +295,13 @@ finding is disputed or when something on the target breaks mid-test.
 - One timed probe, on `thorough` only. A sleep payload holds a database thread,
   so it is off on `passive` and `readonly`, capped at two parameters per
   operation, and costs about six seconds per parameter it confirms.
+- A cross-identity finding is never reported from one account asked twice. If
+  both identities carry the same credential, or two tokens with the same
+  subject or the same client, the probe is skipped and the run says so: a
+  critical finding naming an account boundary has to have had two accounts to
+  compare. Credentials the second identity does not replace are removed from
+  its request, so a write can never succeed on the first identity's token and
+  be read as the second one's.
 - No outbound callback service: nuclei runs with `-no-interactsh`.
 - Redirects are read, never followed. Requests are never retried.
 - No database. Tokens, headers and responses live in the browser tab and the
@@ -344,7 +353,7 @@ interpolated into a quoted string on an engine that has a sleep function.
 node --check namazu/static/app.js
 ```
 
-364 tests across 93 checks, about 90 seconds to run, most of which is the
+390 tests across 93 checks, about 90 seconds to run, most of which is the
 time-based SQL tests waiting for real delays. Detections are asserted in both
 directions: a check fires on the broken handler, and stays silent on the correct
 one. Where a check rests on a control, the test asserts the control is what
