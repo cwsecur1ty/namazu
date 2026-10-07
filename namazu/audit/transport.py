@@ -25,7 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
-from ..discovery import check_headers, check_url, read_bounded
+from ..discovery import check_headers, check_url, client_headers, read_bounded
 from .model import Exchange
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
@@ -167,6 +167,14 @@ class Executor:
             )
         url = check_url(url)
         sent_headers = check_headers(dict(headers or {}))
+        # The Request is built by hand so a client cookie jar cannot follow a
+        # probe, which also means the client's default headers do not apply. The
+        # identity has to be stamped on here, and a User-Agent an operator set
+        # on the Headers tab still wins.
+        if not any(name.lower() == "user-agent" for name in sent_headers):
+            carried = self.client.headers.get("user-agent")
+            if carried:
+                sent_headers["User-Agent"] = carried
         if body is not None and content_type and not any(
             name.lower() == "content-type" for name in sent_headers
         ):
@@ -221,5 +229,11 @@ def _transport_error(exc: httpx.HTTPError) -> str:
     return f"transport error: {type(exc).__name__}"
 
 
-def build_client(verify_tls: bool = True) -> httpx.Client:
-    return httpx.Client(verify=verify_tls, trust_env=False)
+def build_client(verify_tls: bool = True, user_agent: str | None = None) -> httpx.Client:
+    """One client per audit, carrying Namazu's outbound identity.
+
+    A header set on an individual probe still wins over this, so an operator
+    who puts a User-Agent on the Headers tab keeps it.
+    """
+    return httpx.Client(verify=verify_tls, trust_env=False,
+                        headers=client_headers(user_agent))

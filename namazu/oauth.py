@@ -29,7 +29,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 import httpx
 
 from .audit import jwtlab
-from .discovery import check_url
+from .discovery import check_url, client_headers
 
 SESSION_TTL = 600  # seconds a pending authorization stays collectable
 MAX_SESSIONS = 16
@@ -50,7 +50,7 @@ def pkce_pair() -> tuple[str, str]:
 # ── discovery ────────────────────────────────────────────────────────────────
 
 def discover(issuer: str, *, verify_tls: bool = True, timeout: float = 15.0,
-             client: httpx.Client | None = None) -> dict:
+             client: httpx.Client | None = None, user_agent: str | None = None) -> dict:
     """Fetch an authorization server's metadata document."""
     issuer = check_url(issuer.strip())
     parts = urlsplit(issuer)
@@ -64,7 +64,8 @@ def discover(issuer: str, *, verify_tls: bool = True, timeout: float = 15.0,
     bases += [urlunsplit((parts.scheme, parts.netloc, path, "", "")) for path in WELL_KNOWN]
 
     owns = client is None
-    http = client or httpx.Client(verify=verify_tls, trust_env=False)
+    http = client or httpx.Client(verify=verify_tls, trust_env=False,
+                                  headers=client_headers(user_agent))
     tried: list[dict] = []
     try:
         for url in dict.fromkeys(bases):
@@ -144,13 +145,14 @@ def _auth_headers(client_id: str, client_secret: str, style: str) -> tuple[dict,
 
 def request_token(token_url: str, form: dict, *, client_id: str = "", client_secret: str = "",
                   auth_style: str = "post", verify_tls: bool = True, timeout: float = 15.0,
-                  client: httpx.Client | None = None) -> dict:
+                  client: httpx.Client | None = None, user_agent: str | None = None) -> dict:
     """Post to the token endpoint and normalise the response."""
     token_url = check_url(token_url.strip())
     headers, extra = _auth_headers(client_id, client_secret, auth_style)
     payload = {**form, **extra}
     owns = client is None
-    http = client or httpx.Client(verify=verify_tls, trust_env=False)
+    http = client or httpx.Client(verify=verify_tls, trust_env=False,
+                                  headers=client_headers(user_agent))
     try:
         response = http.post(
             token_url, data=payload, timeout=timeout, follow_redirects=False,
@@ -348,6 +350,7 @@ def collect(session: str) -> dict:
 # ── authorization server probes ──────────────────────────────────────────────
 
 def probe_authorization_server(*, authorization_endpoint: str, client_id: str, redirect_uri: str,
+                              user_agent: str | None = None,
                                metadata: dict | None = None, verify_tls: bool = True,
                                timeout: float = 15.0, client: httpx.Client | None = None) -> list:
     """Read-only checks against the authorize endpoint.
@@ -360,7 +363,8 @@ def probe_authorization_server(*, authorization_endpoint: str, client_id: str, r
 
     authorization_endpoint = check_url(authorization_endpoint.strip())
     owns = client is None
-    http = client or httpx.Client(verify=verify_tls, trust_env=False)
+    http = client or httpx.Client(verify=verify_tls, trust_env=False,
+                                  headers=client_headers(user_agent))
     findings: list = []
     evil = "https://namazu-probe.invalid/callback"
 

@@ -42,7 +42,8 @@ def clear_cache() -> None:
     _tokens.clear()
 
 
-def _mint(config: dict, *, verify_tls: bool, timeout: float) -> dict:
+def _mint(config: dict, *, verify_tls: bool, timeout: float,
+          user_agent: str | None = None) -> dict:
     """Obtain a token for an OAuth configuration, honouring the chosen grant."""
     grant = str(config.get("grant") or "client_credentials")
     token_endpoint = str(config.get("token_endpoint") or "").strip()
@@ -56,6 +57,7 @@ def _mint(config: dict, *, verify_tls: bool, timeout: float) -> dict:
         "auth_style": str(config.get("auth_style") or "post"),
         "verify_tls": verify_tls,
         "timeout": timeout,
+        "user_agent": user_agent,
     }
     scope = str(config.get("scope") or "")
     try:
@@ -81,7 +83,8 @@ def _mint(config: dict, *, verify_tls: bool, timeout: float) -> dict:
     raise CredentialError(f"Unsupported OAuth grant for an audit identity: {grant}")
 
 
-def _token_headers(config: dict, *, verify_tls: bool, timeout: float) -> tuple[dict, dict]:
+def _token_headers(config: dict, *, verify_tls: bool, timeout: float,
+                   user_agent: str | None = None) -> tuple[dict, dict]:
     """Headers for an OAuth identity, minting or reusing as needed."""
     key = _fingerprint(config)
     cached = _tokens.get(key)
@@ -89,7 +92,7 @@ def _token_headers(config: dict, *, verify_tls: bool, timeout: float) -> tuple[d
     if cached and cached["expires_at"] > now:
         return dict(cached["headers"]), cached["summary"]
 
-    token = _mint(config, verify_tls=verify_tls, timeout=timeout)
+    token = _mint(config, verify_tls=verify_tls, timeout=timeout, user_agent=user_agent)
     lifetime = token.get("expires_in")
     try:
         ttl = max(int(lifetime) - REFRESH_MARGIN, 30) if lifetime else DEFAULT_TTL
@@ -104,7 +107,7 @@ def _token_headers(config: dict, *, verify_tls: bool, timeout: float) -> tuple[d
 
 
 def resolve(identities: dict, key: str, *, verify_tls: bool = True,
-            timeout: float = 15.0) -> tuple[dict, dict | None, str]:
+            timeout: float = 15.0, user_agent: str | None = None) -> tuple[dict, dict | None, str]:
     """Turn one configured identity into request headers.
 
     Returns (headers, token summary, note). The note is empty on success and
@@ -120,7 +123,8 @@ def resolve(identities: dict, key: str, *, verify_tls: bool = True,
         base = value.get("headers") if isinstance(value.get("headers"), dict) else {}
         headers = {str(name): str(item) for name, item in base.items()}
         try:
-            minted, summary = _token_headers(config, verify_tls=verify_tls, timeout=timeout)
+            minted, summary = _token_headers(config, verify_tls=verify_tls, timeout=timeout,
+                                             user_agent=user_agent)
         except CredentialError as exc:
             return headers, None, f"The {key} identity could not obtain an OAuth token. {exc}"
         # A minted token replaces any matching header rather than sitting beside it.

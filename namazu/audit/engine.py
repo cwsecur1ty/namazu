@@ -134,7 +134,7 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
                     identities: dict | None = None, profile: str = DEFAULT_PROFILE,
                     allow_mutating: bool = False, verify_tls: bool = True,
                     timeout: float = 15.0, concurrency: int | None = None,
-                    client=None) -> dict:
+                    user_agent: str | None = None, client=None) -> dict:
     """Run the audit battery against one documented operation."""
     parsed = normalize_spec(spec)
     operation = next((op for op in parsed["operations"] if op["id"] == operation_id), None)
@@ -148,9 +148,9 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
     # The token summaries are deliberately dropped: an access token must not
     # travel into a report, and the summary is only useful to the Auth panel.
     identity_a, _token_a, note_a = identity_resolver.resolve(
-        identities, "primary", verify_tls=verify_tls, timeout=timeout)
+        identities, "primary", verify_tls=verify_tls, timeout=timeout, user_agent=user_agent)
     identity_b, _token_b, note_b = identity_resolver.resolve(
-        identities, "secondary", verify_tls=verify_tls, timeout=timeout)
+        identities, "secondary", verify_tls=verify_tls, timeout=timeout, user_agent=user_agent)
     credential_notes = [note for note in (note_a, note_b) if note]
     endpoint = f"{operation['method']} {operation['path']}"
 
@@ -159,7 +159,7 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
     built = build_request(parsed, operation_id, base_url=base_url, headers=identity_a)
     budget = Budget(settings["requests_per_operation"])
     owns_client = client is None
-    http = client or build_client(verify_tls)
+    http = client or build_client(verify_tls, user_agent)
     workers = _workers(settings, concurrency)
     executor = Executor(http, budget, timeout=timeout, allow_mutating=allow_mutating,
                         concurrency=workers)
@@ -409,7 +409,8 @@ def _result(endpoint, operation, findings, budget, profile, *, notes=None, basel
 
 def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict | None = None,
                     verify_tls: bool = True, timeout: float = 15.0, budget: int = 60,
-                    concurrency: int | None = None, client=None) -> dict:
+                    concurrency: int | None = None, user_agent: str | None = None,
+                    client=None) -> dict:
     """Sweep the host around the documented surface. Read-only."""
     parsed = normalize_spec(spec)
     target = base_url or parsed.get("base_url") or ""
@@ -419,7 +420,7 @@ def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict
         raise ValueError("The base URL must begin with http:// or https://.")
 
     identity_a, _token, credential_note = identity_resolver.resolve(
-        identities, "primary", verify_tls=verify_tls, timeout=timeout)
+        identities, "primary", verify_tls=verify_tls, timeout=timeout, user_agent=user_agent)
     findings = list(specscan.review_document(parsed))
     documented_paths = {op["path"] for op in parsed["operations"]}
 

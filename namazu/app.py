@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import oauth
+from . import __version__, oauth
 from .audit import audit_inventory, audit_operation, external
 from .discovery import fetch_document
 from .runner import execute_request, prepare_request
@@ -66,6 +66,9 @@ class ImportInput(BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)
     verify_tls: bool = True
     timeout: float = Field(default=15, ge=1, le=120)
+    # httpx would otherwise announce itself as python-httpx, which a WAF in
+    # front of the target often refuses outright.
+    user_agent: str | None = Field(default=None, max_length=512)
 
 
 class RequestInput(BaseModel):
@@ -80,6 +83,9 @@ class RequestInput(BaseModel):
     allow_mutating: bool = False
     verify_tls: bool = True
     timeout: float = Field(default=15, ge=1, le=120)
+    # httpx would otherwise announce itself as python-httpx, which a WAF in
+    # front of the target often refuses outright.
+    user_agent: str | None = Field(default=None, max_length=512)
 
     def options(self):
         values = {"base_url": self.base_url, "parameters": self.parameters,
@@ -100,6 +106,9 @@ class AuditInput(BaseModel):
     verify_tls: bool = True
     timeout: float = Field(default=15, ge=1, le=120)
     budget: int = Field(default=60, ge=1, le=200)
+    # httpx would otherwise announce itself as python-httpx, which a WAF in
+    # front of the target often refuses outright.
+    user_agent: str | None = Field(default=None, max_length=512)
     # None lets the profile choose. The engine caps the top end.
     concurrency: int | None = Field(default=None, ge=1, le=16)
 
@@ -117,7 +126,7 @@ async def http_error(_request, exc):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "tool": "Namazu", "version": "0.1.0"}
+    return {"status": "ok", "tool": "Namazu", "version": __version__}
 
 
 @app.post("/api/import")
@@ -126,7 +135,8 @@ def import_document(body: ImportInput):
         raise ValueError("Provide either a documentation URL or a JSON/YAML specification")
     if body.url:
         document, source, warnings = fetch_document(body.url, headers=body.headers,
-                                                  verify_tls=body.verify_tls, timeout=body.timeout)
+                                                  verify_tls=body.verify_tls, timeout=body.timeout,
+                                                  user_agent=body.user_agent)
         result = parse_spec(document, source)
         result["warnings"] = list(dict.fromkeys(result["warnings"] + warnings))
         return result
@@ -151,14 +161,15 @@ def audit(body: AuditInput):
     return audit_operation(body.spec, body.operation_id, base_url=body.base_url,
                            identities=body.identities, profile=body.profile,
                            allow_mutating=body.allow_mutating, verify_tls=body.verify_tls,
-                           timeout=body.timeout, concurrency=body.concurrency)
+                           timeout=body.timeout, concurrency=body.concurrency,
+                           user_agent=body.user_agent)
 
 
 @app.post("/api/audit/inventory")
 def audit_surface(body: AuditInput):
     return audit_inventory(body.spec, base_url=body.base_url, identities=body.identities,
                            verify_tls=body.verify_tls, timeout=body.timeout, budget=body.budget,
-                           concurrency=body.concurrency)
+                           concurrency=body.concurrency, user_agent=body.user_agent)
 
 
 class OAuthInput(BaseModel):
@@ -182,6 +193,9 @@ class OAuthInput(BaseModel):
     spec: dict | None = None
     verify_tls: bool = True
     timeout: float = Field(default=15, ge=1, le=120)
+    # httpx would otherwise announce itself as python-httpx, which a WAF in
+    # front of the target often refuses outright.
+    user_agent: str | None = Field(default=None, max_length=512)
 
 
 @app.post("/api/oauth/discover")

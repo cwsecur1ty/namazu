@@ -710,6 +710,11 @@
               <div class="field"><label class="check"><input id="verify-tls" type="checkbox" checked><span>Verify TLS certificates</span></label><p class="hint">Disable only for an engagement's self-signed test server.</p></div>
             </div>
             <div class="field">
+              <label for="user-agent">User agent</label>
+              <input id="user-agent" type="text" autocomplete="off" spellcheck="false" placeholder="Namazu/0.1.0 (+https://github.com/cwsecur1ty/namazu)">
+              <p class="hint">Sent on every request Namazu makes, including contract import and the OAuth token exchange. Left empty it announces itself as Namazu. Set a value when a WAF in front of the target refuses an unfamiliar client.</p>
+            </div>
+            <div class="field">
               <label class="check"><input id="allow-writes-mirror" type="checkbox"><span>Allow POST, PUT, PATCH, DELETE and other write methods</span></label>
               <p class="hint">Applies to single requests and runner requests. Enable only for targets you are authorized to test.</p>
             </div>

@@ -594,7 +594,8 @@
     if (state.busy) return;
     message("import-error", "");
     try {
-      const payload = { headers: importKv.read(), timeout: numericTimeout("import-timeout"), verify_tls: $("import-verify-tls").checked };
+      const payload = { headers: importKv.read(), timeout: numericTimeout("import-timeout"),
+                        verify_tls: $("import-verify-tls").checked, user_agent: userAgent() };
       if (useSample) {
         payload.raw_spec = JSON.stringify(sample);
       } else if (state.importMode === "url") {
@@ -1110,6 +1111,7 @@
       verify_tls: $("verify-tls").checked,
       timeout: numericTimeout("request-timeout"),
       allow_mutating: $("allow-writes").checked,
+      user_agent: userAgent(),
     };
   }
   function bodyContentTypes(op) { return Object.keys(op?.request_body?.content || op?.requestBody?.content || {}); }
@@ -2092,6 +2094,12 @@
     $("identity-b-state").textContent = count ? `${count} header${count === 1 ? "" : "s"}` : "not set";
   }
 
+  /** Empty means "announce yourself as Namazu", which the server decides. */
+  function userAgent() {
+    const value = $("user-agent").value.trim();
+    return value || null;
+  }
+
   function auditProfile() { return $("audit-profile").value; }
 
   /** Null means "let the profile decide", which is what the server does with it. */
@@ -2695,6 +2703,9 @@
 
 
   function wireAudit() {
+    $("user-agent").addEventListener("change", () => {
+      prefs.write("user-agent", $("user-agent").value.trim());
+    });
     $("audit-concurrency").addEventListener("change", () => {
       describeConcurrency();
       prefs.write("audit-concurrency", $("audit-concurrency").value);
@@ -2784,6 +2795,7 @@
       use_pkce: $("oauth-pkce").checked,
       verify_tls: $("verify-tls").checked,
       timeout: Number($("request-timeout").value) || 15,
+      user_agent: userAgent(),
     };
   }
 
@@ -3366,6 +3378,7 @@
 
     $("audit-profile").value = prefs.read("audit-profile", "readonly");
     $("audit-concurrency").value = prefs.read("audit-concurrency", "");
+    $("user-agent").value = prefs.read("user-agent", "");
     describeConcurrency();
 
     identityKv.setAll({});

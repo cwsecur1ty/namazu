@@ -14,8 +14,24 @@ from urllib.parse import parse_qs, urljoin, urlsplit
 import httpx
 import yaml
 
+from . import __version__
+
 MAX_DOCUMENT_BYTES = 8 * 1024 * 1024
 MAX_FETCHES = 24
+
+# httpx identifies itself as python-httpx/<version>, which a WAF in front of
+# the target commonly refuses outright: the operator sees a block page instead
+# of a token. Namazu says what it is instead, and an engagement that needs a
+# different value can set one.
+DEFAULT_USER_AGENT = f"Namazu/{__version__} (+https://github.com/cwsecur1ty/namazu)"
+
+
+def client_headers(user_agent: str | None = None) -> dict:
+    """Default headers for any client Namazu builds."""
+    chosen = str(user_agent or "").strip() or DEFAULT_USER_AGENT
+    if "\r" in chosen or "\n" in chosen:
+        raise ValueError("The user agent cannot contain line breaks")
+    return {"User-Agent": chosen}
 
 
 def check_url(url: str) -> str:
@@ -117,7 +133,8 @@ def _candidates(raw: str, url: str, value, conventional: bool) -> list[str]:
 
 
 def fetch_document(url: str, *, headers: dict | None = None, verify_tls: bool = True,
-                   timeout: float = 15, client: httpx.Client | None = None) -> tuple[dict, str, list[str]]:
+                   timeout: float = 15, client: httpx.Client | None = None,
+                   user_agent: str | None = None) -> tuple[dict, str, list[str]]:
     """Bounded same-origin credential use; foreign definitions receive no supplied headers."""
     check_url(url)
     headers = check_headers(headers or {})
@@ -127,7 +144,8 @@ def fetch_document(url: str, *, headers: dict | None = None, verify_tls: bool = 
     warnings = []
     used_conventional_paths = False
     deadline = time.monotonic() + min(max(timeout, 1) * 3, 120)
-    context = nullcontext(client) if client is not None else httpx.Client(verify=verify_tls, trust_env=False)
+    context = nullcontext(client) if client is not None else httpx.Client(
+        verify=verify_tls, trust_env=False, headers=client_headers(user_agent))
     with context as http:
         while pending and len(visited) < MAX_FETCHES:
             current = pending.pop(0)
@@ -143,8 +161,11 @@ def fetch_document(url: str, *, headers: dict | None = None, verify_tls: bool = 
                 scoped_headers = headers if current_origin == credential_origin else {}
                 if headers and current_origin != credential_origin:
                     warnings.append("Documentation headers were omitted for a different origin")
-                # Request() avoids client cookie jars/default headers persisting between fetches.
-                request = httpx.Request("GET", current, headers=scoped_headers,
+                # Request() avoids client cookie jars/default headers persisting between
+                # fetches. The user agent is not a credential, so it rides along on every
+                # fetch; anything the caller set explicitly still wins.
+                request = httpx.Request("GET", current,
+                                        headers={**client_headers(user_agent), **scoped_headers},
                                         extensions={"timeout": dict.fromkeys(("connect", "read", "write", "pool"), min(timeout, remaining))})
                 request_deadline = min(deadline, time.monotonic() + timeout)
                 response = http.send(request, stream=True, follow_redirects=False, auth=None)
