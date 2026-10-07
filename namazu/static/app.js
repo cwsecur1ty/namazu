@@ -3003,11 +3003,24 @@
     if (preset.token_endpoint) $("oauth-token-url").value = preset.token_endpoint;
     if (preset.scope) $("oauth-scope").value = preset.scope;
     oauthVisible();
-    oauthStatus(preset.implicit
-      ? "This scheme documents the implicit flow. Namazu will use authorization code + PKCE instead. "
-        + "If it works, the implicit grant can be retired."
-      : "", preset.implicit ? "unknown" : "unknown");
-    if (!preset.implicit) oauthStatus("");
+    // Substituting code + PKCE for a documented implicit flow is the right
+    // thing to try and a bad thing to do quietly. A client registered for
+    // implicit usually permits no other grant and lists only the redirect URI
+    // of the page it was built for, so the substituted request is refused and
+    // the refusal looks like anything but a swapped grant.
+    if (preset.implicit) {
+      const uri = $("oauth-redirect-uri").value.trim() || `${location.origin}/oauth/callback`;
+      oauthStatus(
+        "This scheme documents the implicit flow, which Namazu does not send. It will request "
+        + "authorization code + PKCE instead. That reaches a token only if this client also "
+        + `permits the code grant and lists ${uri} among its registered redirect URIs. A client `
+        + "registered for implicit alone will refuse the request, and the refusal can arrive as a "
+        + "login page or a block page rather than an OAuth error. To test the client as it stands, "
+        + "authorise in the API's own documentation page and paste the access token under Bearer "
+        + "token.");
+    } else {
+      oauthStatus("");
+    }
   }
 
 
