@@ -1088,21 +1088,18 @@ def test_external_findings_are_attributed_to_their_tool():
         assert item.confidence == "probable"
 
 
-def test_nuclei_command_excludes_destructive_tags_and_callbacks():
-    """The safety flags are part of the contract with the user, so pin them."""
+def test_nuclei_command_excludes_destructive_tags_and_callbacks(monkeypatch):
+    """The safety flags are part of the contract with the user, so pin them.
+
+    The binary is stubbed as well as the runner, so this asserts the same thing
+    on a machine with nuclei installed and on a clean CI runner without it.
+    """
     from namazu.audit import external
     captured = {}
 
-    def fake_run(command, timeout):
-        captured["command"] = command
-        return 0, "", "", ""
-
-    original = external._run
-    external._run = fake_run
-    try:
-        external.run_nuclei(target="https://a.test")
-    finally:
-        external._run = original
+    monkeypatch.setattr(external.shutil, "which", lambda name: "/usr/bin/nuclei")
+    monkeypatch.setattr(external, "_run", lambda command, timeout: (captured.update(command=command), (0, "", "", ""))[1])
+    external.run_nuclei(target="https://a.test")
     command = captured["command"]
     assert "-no-interactsh" in command            # no outbound callback service
     assert "-exclude-tags" in command
@@ -1111,23 +1108,17 @@ def test_nuclei_command_excludes_destructive_tags_and_callbacks():
         assert tag in excluded
 
 
-def test_schemathesis_excludes_write_methods_unless_allowed():
+def test_schemathesis_excludes_write_methods_unless_allowed(monkeypatch):
+    """Stubs the binary too, so the assertion holds without schemathesis installed."""
     from namazu.audit import external
     captured = {}
 
-    def fake_run(command, timeout):
-        captured["command"] = command
-        return 0, "", "", ""
-
-    original = external._run
-    external._run = fake_run
-    try:
-        external.run_schemathesis(schema="s", base_url=BASE)
-        read_only = captured["command"]
-        external.run_schemathesis(schema="s", base_url=BASE, allow_mutating=True)
-        with_writes = captured["command"]
-    finally:
-        external._run = original
+    monkeypatch.setattr(external, "_schemathesis_bin", lambda: "/usr/bin/st")
+    monkeypatch.setattr(external, "_run", lambda command, timeout: (captured.update(command=command), (0, "", "", ""))[1])
+    external.run_schemathesis(schema="s", base_url=BASE)
+    read_only = captured["command"]
+    external.run_schemathesis(schema="s", base_url=BASE, allow_mutating=True)
+    with_writes = captured["command"]
     assert "--exclude-method-regex" in read_only
     assert "POST|PUT|PATCH|DELETE" in read_only[read_only.index("--exclude-method-regex") + 1]
     assert "--exclude-method-regex" not in with_writes
