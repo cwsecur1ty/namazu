@@ -25,7 +25,13 @@ from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
-from ..discovery import check_headers, check_url, client_headers, read_bounded
+from ..discovery import (
+    Connection,
+    check_headers,
+    check_url,
+    connection_for,
+    read_bounded,
+)
 from .model import Exchange
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
@@ -229,11 +235,11 @@ def _transport_error(exc: httpx.HTTPError) -> str:
     return f"transport error: {type(exc).__name__}"
 
 
-def build_client(verify_tls: bool = True, user_agent: str | None = None) -> httpx.Client:
-    """One client per audit, carrying Namazu's outbound identity.
+def build_client(verify_tls: bool = True, user_agent: str | None = None,
+                 connection: Connection | None = None) -> httpx.Client:
+    """One client per audit, carrying Namazu's outbound identity and route.
 
     A header set on an individual probe still wins over this, so an operator
     who puts a User-Agent on the Headers tab keeps it.
     """
-    return httpx.Client(verify=verify_tls, trust_env=False,
-                        headers=client_headers(user_agent))
+    return connection_for(connection, verify_tls, user_agent).open()

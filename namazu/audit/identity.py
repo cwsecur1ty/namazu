@@ -17,6 +17,7 @@ import json
 import time
 
 from .. import oauth
+from ..discovery import Connection
 
 # Mint a replacement this long before the server's own expiry, so a token does
 # not lapse between being handed out and being used.
@@ -31,10 +32,18 @@ class CredentialError(RuntimeError):
     """A configured identity could not be turned into a usable credential."""
 
 
-def _fingerprint(config: dict) -> str:
-    """A stable key for a configuration, without keeping the secret readable."""
+def _fingerprint(config: dict, connection: Connection | None = None) -> str:
+    """A stable key for a configuration, without keeping the secret readable.
+
+    The route is part of the key. The same credentials fetched direct and
+    through a proxy produce the same token, but reusing the cached one would
+    leave the exchange missing from the proxy history that the operator reads
+    as the record of the run.
+    """
     material = json.dumps({key: config.get(key) for key in sorted(config)}, sort_keys=True,
                           default=str)
+    if connection is not None:
+        material += repr(connection)
     return hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
 
 
@@ -43,7 +52,7 @@ def clear_cache() -> None:
 
 
 def _mint(config: dict, *, verify_tls: bool, timeout: float,
-          user_agent: str | None = None) -> dict:
+          user_agent: str | None = None, connection: Connection | None = None) -> dict:
     """Obtain a token for an OAuth configuration, honouring the chosen grant."""
     grant = str(config.get("grant") or "client_credentials")
     token_endpoint = str(config.get("token_endpoint") or "").strip()
@@ -58,6 +67,9 @@ def _mint(config: dict, *, verify_tls: bool, timeout: float,
         "verify_tls": verify_tls,
         "timeout": timeout,
         "user_agent": user_agent,
+        # The token exchange takes the same route out as the probes, so an
+        # operator watching a proxy sees the credential being fetched too.
+        "connection": connection,
     }
     scope = str(config.get("scope") or "")
     try:
@@ -84,15 +96,17 @@ def _mint(config: dict, *, verify_tls: bool, timeout: float,
 
 
 def _token_headers(config: dict, *, verify_tls: bool, timeout: float,
-                   user_agent: str | None = None) -> tuple[dict, dict]:
+                   user_agent: str | None = None,
+                   connection: Connection | None = None) -> tuple[dict, dict]:
     """Headers for an OAuth identity, minting or reusing as needed."""
-    key = _fingerprint(config)
+    key = _fingerprint(config, connection)
     cached = _tokens.get(key)
     now = time.time()
     if cached and cached["expires_at"] > now:
         return dict(cached["headers"]), cached["summary"]
 
-    token = _mint(config, verify_tls=verify_tls, timeout=timeout, user_agent=user_agent)
+    token = _mint(config, verify_tls=verify_tls, timeout=timeout, user_agent=user_agent,
+                  connection=connection)
     lifetime = token.get("expires_in")
     try:
         ttl = max(int(lifetime) - REFRESH_MARGIN, 30) if lifetime else DEFAULT_TTL
@@ -107,7 +121,8 @@ def _token_headers(config: dict, *, verify_tls: bool, timeout: float,
 
 
 def resolve(identities: dict, key: str, *, verify_tls: bool = True,
-            timeout: float = 15.0, user_agent: str | None = None) -> tuple[dict, dict | None, str]:
+            timeout: float = 15.0, user_agent: str | None = None,
+            connection: Connection | None = None) -> tuple[dict, dict | None, str]:
     """Turn one configured identity into request headers.
 
     Returns (headers, token summary, note). The note is empty on success and
@@ -124,7 +139,7 @@ def resolve(identities: dict, key: str, *, verify_tls: bool = True,
         headers = {str(name): str(item) for name, item in base.items()}
         try:
             minted, summary = _token_headers(config, verify_tls=verify_tls, timeout=timeout,
-                                             user_agent=user_agent)
+                                             user_agent=user_agent, connection=connection)
         except CredentialError as exc:
             return headers, None, f"The {key} identity could not obtain an OAuth token. {exc}"
         # A minted token replaces any matching header rather than sitting beside it.

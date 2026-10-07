@@ -611,8 +611,9 @@
     if (state.busy) return;
     message("import-error", "");
     try {
-      const payload = { headers: importKv.read(), timeout: numericTimeout("import-timeout"),
-                        verify_tls: $("import-verify-tls").checked, user_agent: userAgent() };
+      const payload = { ...routePayload(), headers: importKv.read(),
+                        timeout: numericTimeout("import-timeout"),
+                        verify_tls: $("import-verify-tls").checked };
       if (useSample) {
         payload.raw_spec = JSON.stringify(sample);
       } else if (state.importMode === "url") {
@@ -1125,10 +1126,9 @@
       spec: state.spec,
       ...(base && state.baseOverride ? { base_url: base } : {}),
       headers: requestHeaders(),
-      verify_tls: $("verify-tls").checked,
+      ...routePayload(),
       timeout: numericTimeout("request-timeout"),
       allow_mutating: $("allow-writes").checked,
-      user_agent: userAgent(),
     };
   }
   function bodyContentTypes(op) { return Object.keys(op?.request_body?.content || op?.requestBody?.content || {}); }
@@ -2117,6 +2117,27 @@
     return value || null;
   }
 
+  /** How requests leave the machine: the same route for every endpoint.
+   *
+   * One builder on purpose. These fields were listed by hand at each call
+   * site, and the audit payload had drifted: it carried verify_tls but not the
+   * user agent, so a value set to get past a WAF applied to contract import
+   * and single requests and not to the hundreds of requests an audit sends.
+   */
+  function routePayload() {
+    const text = (id) => $(id).value.trim() || null;
+    return {
+      verify_tls: $("verify-tls").checked,
+      user_agent: userAgent(),
+      proxy: text("proxy-url"),
+      ca_bundle: text("ca-bundle"),
+      client_cert: text("client-cert"),
+      client_key: text("client-key"),
+      // Not trimmed: whitespace can be part of a passphrase.
+      client_key_password: $("client-key-password").value || null,
+    };
+  }
+
   function auditProfile() { return $("audit-profile").value; }
 
   /** Null means "let the profile decide", which is what the server does with it. */
@@ -2604,7 +2625,7 @@
       profile,
       identities: { primary: renewableIdentity(connection.headers), secondary: identityB() },
       allow_mutating: connection.allow_mutating,
-      verify_tls: connection.verify_tls,
+      ...routePayload(),
       timeout: connection.timeout,
       concurrency: auditConcurrency(),
     };
@@ -2821,9 +2842,8 @@
       refresh_token: $("oauth-refresh-token").value,
       auth_style: $("oauth-client-auth").value,
       use_pkce: $("oauth-pkce").checked,
-      verify_tls: $("verify-tls").checked,
+      ...routePayload(),
       timeout: Number($("request-timeout").value) || 15,
-      user_agent: userAgent(),
       redirect_uri: $("oauth-redirect-uri").value.trim() || null,
     };
   }

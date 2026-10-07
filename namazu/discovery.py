@@ -6,9 +6,11 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import re
 import time
 from contextlib import nullcontext
+from dataclasses import dataclass, field, replace
 from urllib.parse import parse_qs, urljoin, urlsplit
 
 import httpx
@@ -87,6 +89,130 @@ def client_headers(user_agent: str | None = None) -> dict:
     if "\r" in chosen or "\n" in chosen:
         raise ValueError("The user agent cannot contain line breaks")
     return {"User-Agent": chosen}
+
+
+# Proxy schemes httpx can route through. socks5 needs the socksio package,
+# which is not a dependency, so open() turns its ImportError into advice.
+PROXY_SCHEMES = ("http", "https", "socks5", "socks5h")
+
+
+@dataclass(frozen=True)
+class Connection:
+    """How Namazu's requests leave this machine.
+
+    One object shared by every client Namazu builds, so a path configured once
+    holds for the spec fetch, the token exchange, the single request and every
+    audit probe alike.
+
+    The proxy and the CA bundle belong together: an intercepting proxy presents
+    its own certificate, so a proxy set without its CA turns every HTTPS probe
+    into a verification error, which reads like a broken target rather than a
+    missing setting.
+    """
+
+    verify_tls: bool = True
+    user_agent: str | None = None
+    proxy: str | None = None
+    ca_bundle: str | None = None
+    client_cert: str | None = None
+    client_key: str | None = None
+    # Kept out of repr(). A dataclass repr reaches tracebacks, and a traceback
+    # is the thing an operator pastes into a ticket.
+    client_key_password: str | None = field(default=None, repr=False)
+
+    @classmethod
+    def build(cls, *, verify_tls: bool = True, user_agent: str | None = None,
+              proxy: str | None = None, ca_bundle: str | None = None,
+              client_cert: str | None = None, client_key: str | None = None,
+              client_key_password: str | None = None) -> Connection:
+        """Construct from operator input, where a blank field means unset."""
+        def clean(value):
+            return (str(value).strip() or None) if value is not None else None
+
+        return cls(
+            verify_tls=bool(verify_tls), user_agent=clean(user_agent), proxy=clean(proxy),
+            ca_bundle=clean(ca_bundle), client_cert=clean(client_cert),
+            client_key=clean(client_key),
+            # Not stripped: whitespace can be part of a passphrase.
+            client_key_password=(client_key_password or None),
+        )
+
+    @property
+    def routed(self) -> bool:
+        """Whether traffic leaves through something other than a direct connection."""
+        return self.proxy is not None
+
+    def describe(self) -> str:
+        """A line for a report, naming the path without naming any secret."""
+        parts = []
+        if self.proxy:
+            parts.append(f"through the proxy at {self.proxy}")
+        if self.ca_bundle:
+            parts.append("verifying TLS against the supplied CA bundle")
+        elif not self.verify_tls:
+            parts.append("without verifying TLS")
+        if self.client_cert:
+            parts.append("presenting a client certificate")
+        return "Requests were sent " + ", ".join(parts) + "." if parts else ""
+
+    def validate(self) -> None:
+        """Fail on a bad setting now, rather than on the first probe."""
+        if self.proxy is not None:
+            try:
+                parts = urlsplit(self.proxy)
+                port = parts.port  # noqa: F841  see check_url
+            except ValueError as exc:
+                raise ValueError(f"The proxy URL is not valid: {self.proxy}") from exc
+            if parts.scheme not in PROXY_SCHEMES or not parts.hostname:
+                raise ValueError(
+                    "The proxy must be an http://, https:// or socks5:// URL with a host, "
+                    "for example http://127.0.0.1:8080 for Burp's default listener")
+        if self.client_key is not None and self.client_cert is None:
+            raise ValueError("A client key needs the certificate that goes with it")
+        if self.client_key_password is not None and self.client_key is None:
+            raise ValueError("A client key password needs the key file it unlocks")
+        for label, path in (("CA bundle", self.ca_bundle),
+                            ("client certificate", self.client_cert),
+                            ("client key", self.client_key)):
+            if path is not None and not os.path.isfile(path):
+                raise ValueError(f"The {label} file was not found: {path}")
+
+    def open(self) -> httpx.Client:
+        """A client configured for this connection. Callers close it."""
+        self.validate()
+        # An explicit opt-out of verification wins over a CA bundle: asking for
+        # both is contradictory, and the one that disables a control is the one
+        # the operator typed on purpose.
+        verify = False if not self.verify_tls else (self.ca_bundle or True)
+        cert: object = None
+        if self.client_cert is not None:
+            if self.client_key is None:
+                cert = self.client_cert
+            elif self.client_key_password is None:
+                cert = (self.client_cert, self.client_key)
+            else:
+                cert = (self.client_cert, self.client_key, self.client_key_password)
+        try:
+            return httpx.Client(verify=verify, cert=cert, proxy=self.proxy, trust_env=False,
+                                headers=client_headers(self.user_agent))
+        except ImportError as exc:
+            raise ValueError(
+                "Routing through a socks5 proxy needs the socksio package: "
+                "pip install 'httpx[socks]'") from exc
+
+
+def connection_for(connection: Connection | None, verify_tls: bool = True,
+                   user_agent: str | None = None) -> Connection:
+    """The connection to use, from an explicit one or the older two arguments.
+
+    Every entry point still accepts ``verify_tls`` and ``user_agent`` directly,
+    so this keeps one meaning for both spellings instead of two code paths.
+    """
+    if connection is None:
+        return Connection(verify_tls=verify_tls, user_agent=user_agent)
+    if user_agent and not connection.user_agent:
+        return replace(connection, user_agent=user_agent)
+    return connection
 
 
 def check_url(url: str) -> str:
@@ -189,9 +315,12 @@ def _candidates(raw: str, url: str, value, conventional: bool) -> list[str]:
 
 def fetch_document(url: str, *, headers: dict | None = None, verify_tls: bool = True,
                    timeout: float = 15, client: httpx.Client | None = None,
-                   user_agent: str | None = None) -> tuple[dict, str, list[str]]:
+                   user_agent: str | None = None,
+                   connection: Connection | None = None) -> tuple[dict, str, list[str]]:
     """Bounded same-origin credential use; foreign definitions receive no supplied headers."""
     check_url(url)
+    link = connection_for(connection, verify_tls, user_agent)
+    user_agent = link.user_agent
     headers = check_headers(headers or {})
     credential_origin = origin(url)
     pending = [url]
@@ -199,8 +328,7 @@ def fetch_document(url: str, *, headers: dict | None = None, verify_tls: bool = 
     warnings = []
     used_conventional_paths = False
     deadline = time.monotonic() + min(max(timeout, 1) * 3, 120)
-    context = nullcontext(client) if client is not None else httpx.Client(
-        verify=verify_tls, trust_env=False, headers=client_headers(user_agent))
+    context = nullcontext(client) if client is not None else link.open()
     with context as http:
         while pending and len(visited) < MAX_FETCHES:
             current = pending.pop(0)

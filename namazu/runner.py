@@ -9,7 +9,14 @@ from urllib.parse import urlencode
 
 import httpx
 
-from .discovery import check_headers, check_url, read_bounded
+from .discovery import (
+    Connection,
+    check_headers,
+    check_url,
+    client_headers,
+    connection_for,
+    read_bounded,
+)
 from .spec import build_request, parse_spec, validate_schema
 
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -103,7 +110,8 @@ def _form_value(value):
 
 def execute_request(spec: dict, operation_id: str, *, allow_mutating: bool = False,
                     timeout: float = 15, verify_tls: bool = True,
-                    client: httpx.Client | None = None, **options) -> dict:
+                    client: httpx.Client | None = None, user_agent: str | None = None,
+                    connection: Connection | None = None, **options) -> dict:
     parsed = normalize_spec(spec)
     built = build_request(parsed, operation_id, **options)
     operation = next(op for op in parsed["operations"] if op["id"] == operation_id)
@@ -141,7 +149,13 @@ def execute_request(spec: dict, operation_id: str, *, allow_mutating: bool = Fal
         else:
             raise ValueError("Enter a text body for this media type; structured bodies require JSON or form encoding")
     started = time.monotonic()
-    context = nullcontext(client) if client is not None else httpx.Client(verify=verify_tls, trust_env=False)
+    link = connection_for(connection, verify_tls, user_agent)
+    # The Request is built by hand, so the client's default headers never
+    # apply. Without this the single request goes out as python-httpx, which is
+    # the user agent a WAF in front of the target refuses; anything the
+    # operator set on the Headers tab still wins.
+    headers = {**client_headers(link.user_agent), **headers}
+    context = nullcontext(client) if client is not None else link.open()
     with context as http:
         request = httpx.Request(built["method"], built["url"], headers=headers, **payload,
                                 extensions={"timeout": dict.fromkeys(("connect", "read", "write", "pool"), timeout)})

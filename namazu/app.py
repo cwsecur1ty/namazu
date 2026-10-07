@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from . import __version__, oauth
 from .audit import audit_inventory, audit_operation, external
-from .discovery import fetch_document
+from .discovery import Connection, fetch_document
 from .runner import execute_request, prepare_request
 from .spec import parse_spec
 
@@ -58,21 +58,49 @@ async def local_requests(request: Request, call_next):
     return response
 
 
-class ImportInput(BaseModel):
+class ConnectionInput(BaseModel):
+    """How requests leave this machine, shared by every endpoint that sends one.
+
+    An authorised engagement runs through Burp or ZAP, so the proxy belongs on
+    every route rather than on one of them. The certificate fields are paths on
+    the machine running Namazu, which keeps key material off the wire.
+    """
+
     model_config = ConfigDict(extra="forbid")
-    url: str | None = None
-    raw_spec: str | None = None
-    source_url: str = ""
-    headers: dict[str, str] = Field(default_factory=dict)
     verify_tls: bool = True
     timeout: float = Field(default=15, ge=1, le=120)
     # httpx would otherwise announce itself as python-httpx, which a WAF in
     # front of the target often refuses outright.
     user_agent: str | None = Field(default=None, max_length=512)
+    # http://127.0.0.1:8080 is Burp's default listener.
+    proxy: str | None = Field(default=None, max_length=512)
+    # An intercepting proxy presents its own certificate, so trusting it needs
+    # its CA. Without this, pointing at a proxy turns every HTTPS probe into a
+    # verification error.
+    ca_bundle: str | None = Field(default=None, max_length=1024)
+    client_cert: str | None = Field(default=None, max_length=1024)
+    client_key: str | None = Field(default=None, max_length=1024)
+    client_key_password: str | None = Field(default=None, max_length=512)
+
+    def connection(self) -> Connection:
+        link = Connection.build(
+            verify_tls=self.verify_tls, user_agent=self.user_agent, proxy=self.proxy,
+            ca_bundle=self.ca_bundle, client_cert=self.client_cert,
+            client_key=self.client_key, client_key_password=self.client_key_password)
+        # Fail here, where the message reaches the operator as a 400, rather
+        # than on the first probe as a transport error.
+        link.validate()
+        return link
 
 
-class RequestInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class ImportInput(ConnectionInput):
+    url: str | None = None
+    raw_spec: str | None = None
+    source_url: str = ""
+    headers: dict[str, str] = Field(default_factory=dict)
+
+
+class RequestInput(ConnectionInput):
     spec: dict
     operation_id: str
     base_url: str | None = None
@@ -81,11 +109,6 @@ class RequestInput(BaseModel):
     content_type: str | None = None
     headers: dict[str, str] = Field(default_factory=dict)
     allow_mutating: bool = False
-    verify_tls: bool = True
-    timeout: float = Field(default=15, ge=1, le=120)
-    # httpx would otherwise announce itself as python-httpx, which a WAF in
-    # front of the target often refuses outright.
-    user_agent: str | None = Field(default=None, max_length=512)
 
     def options(self):
         values = {"base_url": self.base_url, "parameters": self.parameters,
@@ -95,20 +118,14 @@ class RequestInput(BaseModel):
         return values
 
 
-class AuditInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class AuditInput(ConnectionInput):
     spec: dict
     operation_id: str | None = None
     base_url: str | None = None
     profile: str = "readonly"
     identities: dict[str, dict] = Field(default_factory=dict)
     allow_mutating: bool = False
-    verify_tls: bool = True
-    timeout: float = Field(default=15, ge=1, le=120)
     budget: int = Field(default=60, ge=1, le=200)
-    # httpx would otherwise announce itself as python-httpx, which a WAF in
-    # front of the target often refuses outright.
-    user_agent: str | None = Field(default=None, max_length=512)
     # None lets the profile choose. The engine caps the top end.
     concurrency: int | None = Field(default=None, ge=1, le=16)
 
@@ -135,8 +152,8 @@ def import_document(body: ImportInput):
         raise ValueError("Provide either a documentation URL or a JSON/YAML specification")
     if body.url:
         document, source, warnings = fetch_document(body.url, headers=body.headers,
-                                                  verify_tls=body.verify_tls, timeout=body.timeout,
-                                                  user_agent=body.user_agent)
+                                                  timeout=body.timeout,
+                                                  connection=body.connection())
         result = parse_spec(document, source)
         result["warnings"] = list(dict.fromkeys(result["warnings"] + warnings))
         return result
@@ -151,7 +168,8 @@ def prepare(body: RequestInput):
 @app.post("/api/run")
 def run(body: RequestInput):
     return execute_request(body.spec, body.operation_id, allow_mutating=body.allow_mutating,
-                           verify_tls=body.verify_tls, timeout=body.timeout, **body.options())
+                           timeout=body.timeout, connection=body.connection(),
+                           **body.options())
 
 
 @app.post("/api/audit")
@@ -160,20 +178,18 @@ def audit(body: AuditInput):
         raise ValueError("Choose an operation to audit")
     return audit_operation(body.spec, body.operation_id, base_url=body.base_url,
                            identities=body.identities, profile=body.profile,
-                           allow_mutating=body.allow_mutating, verify_tls=body.verify_tls,
-                           timeout=body.timeout, concurrency=body.concurrency,
-                           user_agent=body.user_agent)
+                           allow_mutating=body.allow_mutating, timeout=body.timeout,
+                           concurrency=body.concurrency, connection=body.connection())
 
 
 @app.post("/api/audit/inventory")
 def audit_surface(body: AuditInput):
     return audit_inventory(body.spec, base_url=body.base_url, identities=body.identities,
-                           verify_tls=body.verify_tls, timeout=body.timeout, budget=body.budget,
-                           concurrency=body.concurrency, user_agent=body.user_agent)
+                           timeout=body.timeout, budget=body.budget,
+                           concurrency=body.concurrency, connection=body.connection())
 
 
-class OAuthInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class OAuthInput(ConnectionInput):
     grant: str = "authorization_code"
     issuer: str | None = None
     authorization_endpoint: str | None = None
@@ -191,18 +207,14 @@ class OAuthInput(BaseModel):
     redirect_uri: str | None = None
     session: str | None = None
     spec: dict | None = None
-    verify_tls: bool = True
-    timeout: float = Field(default=15, ge=1, le=120)
-    # httpx would otherwise announce itself as python-httpx, which a WAF in
-    # front of the target often refuses outright.
-    user_agent: str | None = Field(default=None, max_length=512)
 
 
 @app.post("/api/oauth/discover")
 def oauth_discover(body: OAuthInput):
     result = {"from_spec": oauth.from_spec(body.spec) if isinstance(body.spec, dict) else []}
     if body.issuer:
-        result["metadata"] = oauth.discover(body.issuer, verify_tls=body.verify_tls, timeout=body.timeout)
+        result["metadata"] = oauth.discover(body.issuer, timeout=body.timeout,
+                                            connection=body.connection())
     return result
 
 
@@ -213,7 +225,7 @@ def oauth_token(body: OAuthInput):
         raise ValueError("Enter the token endpoint URL")
     shared = {"token_url": body.token_endpoint, "client_id": body.client_id,
               "client_secret": body.client_secret, "auth_style": body.auth_style,
-              "verify_tls": body.verify_tls, "timeout": body.timeout}
+              "timeout": body.timeout, "connection": body.connection()}
     if body.grant == "client_credentials":
         return oauth.client_credentials(scope=body.scope, audience=body.audience, **shared)
     if body.grant == "password":
@@ -239,7 +251,7 @@ def oauth_authorize(body: OAuthInput, request: Request):
         client_id=body.client_id, client_secret=body.client_secret, redirect_uri=redirect_uri,
         scope=body.scope, audience=body.audience, auth_style=body.auth_style,
         use_pkce=body.use_pkce, extra_params=body.extra_params,
-        verify_tls=body.verify_tls, timeout=body.timeout,
+        timeout=body.timeout, connection=body.connection(),
     )
 
 
@@ -259,13 +271,14 @@ def oauth_probe(body: OAuthInput, request: Request):
     metadata = None
     if body.issuer:
         try:
-            metadata = oauth.discover(body.issuer, verify_tls=body.verify_tls, timeout=body.timeout)
+            metadata = oauth.discover(body.issuer, timeout=body.timeout,
+                                      connection=body.connection())
         except ValueError:
             metadata = None
     findings = oauth.probe_authorization_server(
         authorization_endpoint=body.authorization_endpoint, client_id=body.client_id,
         redirect_uri=redirect_uri, metadata=metadata,
-        verify_tls=body.verify_tls, timeout=body.timeout,
+        timeout=body.timeout, connection=body.connection(),
     )
     return {"findings": [item.to_dict() for item in findings],
             "metadata": metadata, "redirect_uri": redirect_uri}

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from urllib.parse import urlsplit
 
+from ..discovery import connection_for
 from ..runner import normalize_spec
 from ..spec import build_request
 from . import (
@@ -134,7 +135,7 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
                     identities: dict | None = None, profile: str = DEFAULT_PROFILE,
                     allow_mutating: bool = False, verify_tls: bool = True,
                     timeout: float = 15.0, concurrency: int | None = None,
-                    user_agent: str | None = None, client=None) -> dict:
+                    user_agent: str | None = None, connection=None, client=None) -> dict:
     """Run the audit battery against one documented operation."""
     parsed = normalize_spec(spec)
     operation = next((op for op in parsed["operations"] if op["id"] == operation_id), None)
@@ -147,10 +148,13 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
 
     # The token summaries are deliberately dropped: an access token must not
     # travel into a report, and the summary is only useful to the Auth panel.
+    link = connection_for(connection, verify_tls, user_agent)
     identity_a, _token_a, note_a = identity_resolver.resolve(
-        identities, "primary", verify_tls=verify_tls, timeout=timeout, user_agent=user_agent)
+        identities, "primary", verify_tls=verify_tls, timeout=timeout, user_agent=user_agent,
+        connection=link)
     identity_b, _token_b, note_b = identity_resolver.resolve(
-        identities, "secondary", verify_tls=verify_tls, timeout=timeout, user_agent=user_agent)
+        identities, "secondary", verify_tls=verify_tls, timeout=timeout, user_agent=user_agent,
+        connection=link)
     credential_notes = [note for note in (note_a, note_b) if note]
     endpoint = f"{operation['method']} {operation['path']}"
 
@@ -159,7 +163,7 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
     built = build_request(parsed, operation_id, base_url=base_url, headers=identity_a)
     budget = Budget(settings["requests_per_operation"])
     owns_client = client is None
-    http = client or build_client(verify_tls, user_agent)
+    http = client or build_client(connection=link)
     workers = _workers(settings, concurrency)
     executor = Executor(http, budget, timeout=timeout, allow_mutating=allow_mutating,
                         concurrency=workers)
@@ -195,7 +199,9 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
             http.close()
         return result
 
-    findings += posture.inspect_tls(built["url"], timeout=min(timeout, 10.0))
+    tls_findings = posture.inspect_tls(built["url"], timeout=min(timeout, 10.0))
+    findings += tls_findings
+    notes += _route_notes(link, url=built["url"], tls_inspected=bool(tls_findings))
     findings += contract.review(parsed, operation, baseline, endpoint)
     findings += inventory.zombie_check(baseline, endpoint)
     findings += passive.review(baseline, endpoint=endpoint, operation=operation,
@@ -382,6 +388,25 @@ def _log(executor, endpoint: str) -> list:
     return entries
 
 
+def _route_notes(link, *, url: str = "", tls_inspected: bool = False) -> list[str]:
+    """What the report should say about how the requests left.
+
+    Empty for a direct connection, because a report that states the default
+    tells the reader nothing.
+    """
+    described = link.describe()
+    if not described:
+        return []
+    notes = [described]
+    # The certificate inspection opens its own TLS socket rather than going
+    # through the proxy, on purpose: a proxy that intercepts TLS presents its
+    # own certificate, so routing this would inspect the proxy, not the target.
+    if link.routed and tls_inspected and url.lower().startswith("https://"):
+        notes.append("The certificate inspection connected to the host directly, not through the "
+                     "proxy, so that it read the target's own certificate rather than the proxy's.")
+    return notes
+
+
 def _result(endpoint, operation, findings, budget, profile, *, notes=None, baseline=None,
             source_url: str = "", executor=None) -> dict:
     _attach_commands(findings, source_url)
@@ -409,6 +434,7 @@ def _result(endpoint, operation, findings, budget, profile, *, notes=None, basel
 
 def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict | None = None,
                     verify_tls: bool = True, timeout: float = 15.0, budget: int = 60,
+                    connection=None,
                     concurrency: int | None = None, user_agent: str | None = None,
                     client=None) -> dict:
     """Sweep the host around the documented surface. Read-only."""
@@ -420,13 +446,14 @@ def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict
         raise ValueError("The base URL must begin with http:// or https://.")
 
     identity_a, _token, credential_note = identity_resolver.resolve(
-        identities, "primary", verify_tls=verify_tls, timeout=timeout, user_agent=user_agent)
+        identities, "primary", verify_tls=verify_tls, timeout=timeout, user_agent=user_agent,
+        connection=connection_for(connection, verify_tls, user_agent))
     findings = list(specscan.review_document(parsed))
     documented_paths = {op["path"] for op in parsed["operations"]}
 
     tracker = Budget(budget)
     owns_client = client is None
-    http = client or build_client(verify_tls)
+    http = client or build_client(connection=connection_for(connection, verify_tls, user_agent))
     executor = Executor(http, tracker, timeout=timeout, allow_mutating=False,
                         concurrency=_workers(PROFILES["readonly"], concurrency))
     try:
@@ -450,6 +477,7 @@ def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict
         "discovery": summary,
         "log": _log(executor, "surface sweep"),
         "notes": ([credential_note] if credential_note else [])
+                 + _route_notes(connection_for(connection, verify_tls, user_agent))
                  + (["Request budget reached; the sweep stopped early."] if summary.get("budget_exhausted") else []),
         "findings": [item.to_dict() for item in deduped],
         "summary": summarize(deduped),
