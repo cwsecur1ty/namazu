@@ -31,6 +31,7 @@ from . import (
     passive,
     posture,
     specscan,
+    xmllab,
 )
 from . import identity as identity_resolver
 from .model import Finding, finding
@@ -331,6 +332,18 @@ def _write_probes(executor, parsed, operation, built, endpoint, headers, identit
     method = operation["method"]
     if method not in ("POST", "PUT", "PATCH"):
         return out
+
+    # An operation that takes XML gets the external entity probes. Three
+    # requests, run before the injection battery because that one costs tens
+    # and is the right thing to lose if the budget runs out.
+    xml_media = xmllab.request_media(operation)
+    if xml_media and baseline is not None:
+        probes = xmllab.probe(executor, baseline=baseline, operation=operation,
+                              endpoint=endpoint, base_headers=headers, media=xml_media)
+        out += probes
+        if not probes:
+            notes.append(f"The XML body for this operation ({xml_media}) was probed for external "
+                         "entity processing and nothing was found.")
     privileged = [
         item.parameter for item in specscan.review_operation(parsed, operation)
         if item.id == "spec.mass-assignment-surface" and item.parameter
