@@ -258,7 +258,7 @@ version.
 node --check namazu/static/app.js
 ```
 
-207 tests across 84 checks. Detections are asserted in both directions: a check fires on the
+217 tests across 89 checks. Detections are asserted in both directions: a check fires on the
 broken handler, and stays silent on the correct one.
 
 The HTTP API is `POST /api/import`, `/api/prepare`, `/api/run`, `/api/audit`,

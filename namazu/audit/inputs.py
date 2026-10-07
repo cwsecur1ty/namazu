@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 import re
 import secrets
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit
 
 from .model import Exchange, finding, mark, similarity
 from .transport import BudgetExhausted, Executor
@@ -60,6 +60,74 @@ def _replace_query(url: str, key: str, value: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(replaced), parts.fragment))
 
 
+class Point(str):
+    """An injection point, which renders as its parameter name.
+
+    Subclassing str so every probe that formats or compares the name keeps
+    working unchanged. ``index`` is None for a query parameter and the path
+    segment index for a path parameter.
+    """
+
+    __slots__ = ("index",)
+
+    def __new__(cls, name: str, index: int | None = None):
+        point = super().__new__(cls, name)
+        point.index = index
+        return point
+
+    @property
+    def in_path(self) -> bool:
+        return self.index is not None
+
+    def apply(self, url: str, value: str) -> str:
+        """The URL with this point's value replaced."""
+        if self.index is None:
+            return _replace_query(url, str(self), value)
+        parts = urlsplit(url)
+        segments = parts.path.split("/")
+        if self.index >= len(segments):
+            return url
+        segments[self.index] = quote(value, safe="")
+        return urlunsplit((parts.scheme, parts.netloc, "/".join(segments),
+                           parts.query, parts.fragment))
+
+    def current(self, url: str) -> str:
+        """The value this point currently carries in the URL."""
+        if self.index is None:
+            return dict(parse_qsl(urlsplit(url).query, keep_blank_values=True)).get(str(self), "")
+        segments = urlsplit(url).path.split("/")
+        return unquote(segments[self.index]) if self.index < len(segments) else ""
+
+
+def _path_points(baseline, path_template: str, documented_path: list | None) -> list:
+    """Align the operation's path template with the URL to locate its parameters.
+
+    A path parameter is the most common identifier position in a REST API and
+    reaches the same sinks a query parameter does, so it gets the same battery.
+    """
+    if not path_template:
+        return []
+    names = {entry.get("name") for entry in (documented_path or [])
+             if isinstance(entry, dict) and entry.get("name")}
+    template = path_template.split("/")
+    actual = urlsplit(baseline.url).path.split("/")
+    points = []
+    # The URL may sit under a base path, so align from the end where the
+    # template and the live path agree in length.
+    offset = len(actual) - len(template)
+    if offset < 0:
+        return []
+    for index, segment in enumerate(template):
+        match = re.fullmatch(r"\{(.+)\}", segment.strip())
+        if not match:
+            continue
+        name = match.group(1)
+        if names and name not in names:
+            continue
+        points.append(Point(name, offset + index))
+    return points
+
+
 # Names worth spending budget on first: they carry the highest-signal probes.
 INTERESTING = re.compile(
     r"(?i)^(redirect|redirect_?uri|redirect_?url|return|return_?url|next|url|uri|target|dest|"
@@ -79,10 +147,17 @@ def _documented_value(field: str, documented: list | None):
     return None
 
 
-def _seed_value(baseline: Exchange, field: str, documented: list | None):
-    """A plausible value for `field`: whatever the request carried, else the contract's."""
-    present = dict(parse_qsl(urlsplit(baseline.url).query, keep_blank_values=True))
-    return present.get(field) or _documented_value(field, documented)
+def _seed_value(baseline: Exchange, field, documented: list | None):
+    """A plausible value for this point: what the request carried, else the contract's."""
+    if isinstance(field, Point):
+        current = field.current(baseline.url)
+        if current:
+            return current
+    else:
+        present = dict(parse_qsl(urlsplit(baseline.url).query, keep_blank_values=True))
+        if present.get(field):
+            return present[field]
+    return _documented_value(str(field), documented)
 
 
 def _names_of(documented: list | None) -> list[str]:
@@ -107,13 +182,14 @@ def _query_fields(url: str, documented: list | None = None, limit: int = MAX_FIE
                                       0 if name in present else 1))
     for name in candidates:
         if name not in out:
-            out.append(name)
+            out.append(Point(name))
     return out[:limit]
 
 
 
 def probe(executor: Executor, *, baseline: Exchange, endpoint: str, base_headers: dict,
           documented_query: list | None = None, documented_header: list | None = None,
+          documented_path: list | None = None, path_template: str = "",
           max_fields: int = MAX_FIELDS) -> list:
     """Run read-only input probes over the request's query fields."""
     findings: list = []
@@ -121,7 +197,11 @@ def probe(executor: Executor, *, baseline: Exchange, endpoint: str, base_headers
         return findings
     # No query parameters does not mean nothing to probe: header parameters and
     # forwarding headers are tested either way.
-    fields = _query_fields(baseline.url, documented_query, max_fields)
+    # Path parameters carry identifiers and reach the same sinks as query
+    # parameters, so they get the same battery rather than only an id swap.
+    fields = _path_points(baseline, path_template, documented_path)
+    fields += _query_fields(baseline.url, documented_query, max_fields)
+    fields = fields[:max_fields + 2]
     try:
         for field in fields:
             if not executor.affordable(4):
@@ -146,8 +226,8 @@ def probe(executor: Executor, *, baseline: Exchange, endpoint: str, base_headers
 
 
 def _send(executor, baseline, field, value, label, base_headers) -> Exchange:
-    return executor.send(baseline.method, _replace_query(baseline.url, field, value),
-                         label=label, headers=base_headers, identity="identity A")
+    url = field.apply(baseline.url, value) if isinstance(field, Point) else _replace_query(baseline.url, field, value)
+    return executor.send(baseline.method, url, label=label, headers=base_headers, identity="identity A")
 
 
 def _sql_error(executor, baseline, endpoint, field, base_headers) -> list:
@@ -671,6 +751,8 @@ def _crlf(executor, baseline, endpoint, field, base_headers) -> list:
 
 def _parameter_pollution(executor, baseline, endpoint, field, base_headers, documented=None) -> list:
     """Two values for one parameter: does a filter see one and the handler the other?"""
+    if isinstance(field, Point) and field.in_path:
+        return []  # repeating a path segment changes the route, not a parameter value
     seed = _seed_value(baseline, field, documented)
     if not seed or not executor.affordable(2):
         return []

@@ -193,6 +193,11 @@ CATALOGUE: dict[str, dict] = {
     "authz.bfla": {"cwe": 285, "refs": [CHEAT["authz"]], "method": None},
     "authz.write-bfla": {"cwe": 285, "refs": [CHEAT["authz"]], "method": None},
     "authz.method-bypass": {"cwe": 285, "refs": [CHEAT["authz"]], "method": None},
+    "authz.invalid-credentials-accepted": {"cwe": 287, "refs": [CHEAT["authz"], RFC["jwt-bcp"]], "method": None},
+    "contract.server-error": {"cwe": 248, "refs": [CHEAT["errors"], RFC["oas"]], "method": None},
+    "contract.undocumented-status": {"cwe": 1059, "refs": [RFC["oas"]], "method": None},
+    "contract.content-type-mismatch": {"cwe": 1059, "refs": [RFC["oas"]], "method": None},
+    "contract.response-schema-violation": {"cwe": 1059, "refs": [RFC["oas"], CHEAT["rest"]], "method": None},
     "authz.path-bypass": {"cwe": 284, "refs": [CHEAT["authz"], CHEAT["rest"]], "method": None},
     "authz.header-bypass": {"cwe": 290, "refs": [CHEAT["authz"], CHEAT["hostheader"]], "method": None},
     "cache.deception": {"cwe": 524, "refs": [RFC["cache"], CHEAT["headers"]], "method": None},
@@ -250,6 +255,7 @@ CATALOGUE: dict[str, dict] = {
 
 # CWE ids used above that are not in the short name table.
 CWE_NAMES.setdefault(22, "Path Traversal")
+CWE_NAMES.setdefault(248, "Uncaught Exception")
 CWE_NAMES.setdefault(290, "Authentication Bypass by Spoofing")
 CWE_NAMES.setdefault(749, "Exposed Dangerous Method or Function")
 CWE_NAMES.setdefault(943, "Improper Neutralization in Data Query Logic")

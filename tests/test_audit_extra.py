@@ -1203,3 +1203,180 @@ def test_graphql_without_suggestions_is_clean():
     with _client(handler) as client:
         result = audit_inventory(_spec_for_log(), base_url=BASE, client=client)
     assert "inventory.graphql-suggestions" not in _ids(result)
+
+
+# ── path parameters ─────────────────────────────────────────────────────────
+
+def _path_spec():
+    return parse_spec({
+        "openapi": "3.0.3", "info": {"title": "Orders", "version": "1"},
+        "servers": [{"url": BASE}],
+        "paths": {"/orders/{orderId}": {"get": {
+            "parameters": [{"name": "orderId", "in": "path", "required": True,
+                            "schema": {"type": "integer", "example": 1}}],
+            "responses": {"200": {"description": "ok", "content": {"application/json": {
+                "schema": {"type": "object", "properties": {"id": {"type": "integer"}}}}}}}}}},
+    }, BASE)
+
+
+def test_sql_error_is_found_in_a_path_parameter():
+    """Path parameters carry identifiers and were previously never probed."""
+    def handler(request):
+        from urllib.parse import unquote
+        # A real unparameterised query breaks on an odd number of quotes, not on
+        # any quote at all. The balanced control must come back clean.
+        if unquote(str(request.url)).count("'") % 2 == 1:
+            return httpx.Response(500, text="SQLSTATE[42000]: You have an error in your SQL syntax")
+        return _json({"id": 1})
+
+    with _client(handler) as client:
+        result = audit_operation(_path_spec(), "GET /orders/{orderId}", base_url=BASE, client=client)
+    hit = next(f for f in result["findings"] if f["id"] == "input.sql-error")
+    assert hit["parameter"] == "orderId"
+
+
+def test_traversal_is_found_in_a_path_parameter():
+    spec = parse_spec({
+        "openapi": "3.0.3", "info": {"title": "Files", "version": "1"},
+        "servers": [{"url": BASE}],
+        "paths": {"/files/{path}": {"get": {
+            "parameters": [{"name": "path", "in": "path", "required": True,
+                            "schema": {"type": "string", "example": "notes.txt"}}],
+            "responses": {"200": {"description": "ok", "content": {"text/plain": {
+                "schema": {"type": "string"}}}}}}}},
+    }, BASE)
+
+    def handler(request):
+        from urllib.parse import unquote
+        if "etc/passwd" in unquote(str(request.url)):
+            return httpx.Response(200, text="root:x:0:0:root:/root:/bin/bash")
+        return httpx.Response(200, text="notes")
+
+    with _client(handler) as client:
+        result = audit_operation(spec, "GET /files/{path}", base_url=BASE, client=client)
+    hit = next(f for f in result["findings"] if f["id"] == "input.path-traversal")
+    assert hit["parameter"] == "path"
+
+
+def test_path_parameter_probes_do_not_fire_on_a_clean_handler():
+    with _client(lambda r: _json({"id": 1})) as client:
+        result = audit_operation(_path_spec(), "GET /orders/{orderId}", base_url=BASE, client=client)
+    for check in ("input.sql-error", "input.sql-boolean", "input.path-traversal",
+                  "input.template-injection", "input.nosql-operator", "input.ldap-error"):
+        assert check not in _ids(result)
+
+
+def test_parameter_pollution_is_skipped_for_path_segments():
+    """Repeating a path segment changes the route, so the probe does not apply."""
+    sent = []
+
+    def handler(request):
+        sent.append(str(request.url))
+        return _json({"id": 1})
+
+    with _client(handler) as client:
+        audit_operation(_path_spec(), "GET /orders/{orderId}", base_url=BASE, client=client)
+    assert not any(url.count("/orders/") > 1 for url in sent)
+
+
+# ── contract conformance as findings ────────────────────────────────────────
+
+def test_undocumented_status_is_reported():
+    spec = parse_spec({
+        "openapi": "3.0.3", "info": {"title": "t", "version": "1"},
+        "servers": [{"url": BASE}],
+        "paths": {"/thing": {"get": {"responses": {"200": {"description": "ok",
+            "content": {"application/json": {"schema": {"type": "object"}}}}}}}},
+    }, BASE)
+    with _client(lambda r: _json({"detail": "teapot"}, 418)) as client:
+        result = audit_operation(spec, "GET /thing", base_url=BASE, client=client)
+    hit = next(f for f in result["findings"] if f["id"] == "contract.undocumented-status")
+    assert hit["evidence"]["status"] == 418
+    assert hit["evidence"]["documented_statuses"] == ["200"]
+
+
+def test_server_error_on_a_contract_valid_request_is_reported():
+    spec = parse_spec({
+        "openapi": "3.0.3", "info": {"title": "t", "version": "1"},
+        "servers": [{"url": BASE}],
+        "paths": {"/thing": {"get": {"responses": {"200": {"description": "ok",
+            "content": {"application/json": {"schema": {"type": "object"}}}}}}}},
+    }, BASE)
+    with _client(lambda r: httpx.Response(500, text="boom")) as client:
+        result = audit_operation(spec, "GET /thing", base_url=BASE, client=client)
+    hit = next(f for f in result["findings"] if f["id"] == "contract.server-error")
+    assert hit["severity"] == "medium"
+    assert "contract.undocumented-status" not in _ids(result)  # the 500 is the better finding
+
+
+def test_response_schema_violation_is_reported():
+    spec = parse_spec({
+        "openapi": "3.0.3", "info": {"title": "t", "version": "1"},
+        "servers": [{"url": BASE}],
+        "paths": {"/thing": {"get": {"responses": {"200": {"description": "ok",
+            "content": {"application/json": {"schema": {
+                "type": "object", "required": ["id"],
+                "properties": {"id": {"type": "integer"}}}}}}}}}},
+    }, BASE)
+    with _client(lambda r: _json({"id": "not-an-integer"})) as client:
+        result = audit_operation(spec, "GET /thing", base_url=BASE, client=client)
+    hit = next(f for f in result["findings"] if f["id"] == "contract.response-schema-violation")
+    assert hit["evidence"]["violations"]
+
+
+def test_conforming_response_produces_no_contract_findings():
+    spec = parse_spec({
+        "openapi": "3.0.3", "info": {"title": "t", "version": "1"},
+        "servers": [{"url": BASE}],
+        "paths": {"/thing": {"get": {"responses": {"200": {"description": "ok",
+            "content": {"application/json": {"schema": {
+                "type": "object", "properties": {"id": {"type": "integer"}}}}}}}}}},
+    }, BASE)
+    with _client(lambda r: _json({"id": 1})) as client:
+        result = audit_operation(spec, "GET /thing", base_url=BASE, client=client)
+    assert not [f for f in result["findings"] if f["id"].startswith("contract.")]
+
+
+# ── ignored authentication ──────────────────────────────────────────────────
+
+def _gated_path_spec():
+    return parse_spec({
+        "openapi": "3.0.3", "info": {"title": "Orders", "version": "1"},
+        "servers": [{"url": BASE}],
+        "paths": {"/orders/{orderId}": {"get": {
+            "security": [{"bearer": []}],
+            "parameters": [{"name": "orderId", "in": "path", "required": True,
+                            "schema": {"type": "integer", "example": 1}}],
+            "responses": {"200": {"description": "ok", "content": {"application/json": {
+                "schema": {"type": "object", "properties": {"id": {"type": "integer"},
+                                                           "owner": {"type": "string"}}}}}}}}}},
+        "components": {"securitySchemes": {"bearer": {"type": "http", "scheme": "bearer"}}},
+    }, BASE)
+
+
+def test_invalid_credential_accepted_is_critical():
+    """Rejecting a missing header while accepting a nonsense token is the gap."""
+    def handler(request):
+        if not request.headers.get("authorization"):
+            return _json({"detail": "unauthorized"}, 401)
+        return _json({"id": 1, "owner": "alice"})   # never verifies the token
+
+    with _client(handler) as client:
+        result = audit_operation(_gated_path_spec(), "GET /orders/{orderId}", base_url=BASE,
+                                 identities={"primary": ALICE}, client=client)
+    hit = next(f for f in result["findings"] if f["id"] == "authz.invalid-credentials-accepted")
+    assert hit["severity"] == "critical" and hit["confidence"] == "confirmed"
+    assert hit["evidence"]["body_similarity"] >= 0.9
+    assert "namazu.invalid.credential" in hit["evidence"]["sent_value"]
+
+
+def test_verifying_server_is_not_reported_as_ignoring_auth():
+    def handler(request):
+        if request.headers.get("authorization") == "Bearer alice-token":
+            return _json({"id": 1, "owner": "alice"})
+        return _json({"detail": "unauthorized"}, 401)
+
+    with _client(handler) as client:
+        result = audit_operation(_gated_path_spec(), "GET /orders/{orderId}", base_url=BASE,
+                                 identities={"primary": ALICE}, client=client)
+    assert "authz.invalid-credentials-accepted" not in _ids(result)

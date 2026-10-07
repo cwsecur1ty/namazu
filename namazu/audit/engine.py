@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 
 from ..runner import normalize_spec
 from ..spec import build_request
-from . import authz, bypass, catalogue, inputs, inventory, jwtlab, passive, posture, specscan
+from . import authz, bypass, catalogue, contract, inputs, inventory, jwtlab, passive, posture, specscan
 from .model import Finding, finding
 from .transport import Budget, BudgetExhausted, Executor, MutationRefused, build_client
 
@@ -138,6 +138,7 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
         return result
 
     findings += posture.inspect_tls(built["url"], timeout=min(timeout, 10.0))
+    findings += contract.review(parsed, operation, baseline, endpoint)
     findings += inventory.zombie_check(baseline, endpoint)
     findings += passive.review(baseline, endpoint=endpoint, operation=operation,
                                document=parsed.get("document") or {})
@@ -152,6 +153,9 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
                 executor, baseline=baseline, endpoint=endpoint, operation=operation,
                 identity_a=identity_a, identity_b=identity_b, base_headers=built["headers"],
             )
+            findings += contract.invalid_credentials(
+                executor, baseline=baseline, endpoint=endpoint, operation=operation,
+                identity=identity_a, headers=built["headers"])
             findings += bypass.probe(executor, baseline=baseline, endpoint=endpoint,
                                      headers=built["headers"])
             findings += bypass.cache_deception(executor, baseline=baseline, endpoint=endpoint,
@@ -184,6 +188,14 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
                                          for item in (operation.get("parameters") or [])
                                          if item.get("in") == "header" and item.get("name")
                                      ],
+                                     documented_path=[
+                                         {"name": item.get("name"),
+                                          "example": item.get("example", (item.get("schema") or {}).get("example")),
+                                          "type": (item.get("schema") or {}).get("type")}
+                                         for item in (operation.get("parameters") or [])
+                                         if item.get("in") == "path" and item.get("name")
+                                     ],
+                                     path_template=operation["path"],
                                      max_fields=settings.get("max_fields", 3))
         if settings["writes"]:
             findings += _write_probes(executor, parsed, operation, built, endpoint,
