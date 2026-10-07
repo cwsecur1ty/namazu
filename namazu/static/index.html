@@ -421,7 +421,11 @@
                   </div>
                   <div class="field"><label class="check"><input id="oauth-pkce" type="checkbox" checked><span>Use PKCE (S256)</span></label></div>
                 </div>
-                <p class="hint" id="oauth-redirect-note"></p>
+                <div class="field" id="oauth-redirect-field">
+                  <label for="oauth-redirect-uri">Redirect URI <span class="opt">optional, defaults to this origin</span></label>
+                  <input id="oauth-redirect-uri" type="text" autocomplete="off" spellcheck="false">
+                  <p class="hint" id="oauth-redirect-note"></p>
+                </div>
                 <div class="row-actions">
                   <button type="button" class="btn primary sm" id="oauth-get-token">Get token</button>
                   <button type="button" class="btn sm" id="oauth-probe">Test authorization server</button>

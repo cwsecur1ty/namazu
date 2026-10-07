@@ -2703,6 +2703,10 @@
 
 
   function wireAudit() {
+    $("oauth-redirect-uri").addEventListener("input", () => {
+      prefs.write("oauth-redirect-uri", $("oauth-redirect-uri").value.trim());
+      oauthVisible();
+    });
     $("user-agent").addEventListener("change", () => {
       prefs.write("user-agent", $("user-agent").value.trim());
     });
@@ -2770,9 +2774,16 @@
     $("oauth-password-fields").hidden = grant !== "password";
     $("oauth-refresh-field").hidden = grant !== "refresh_token";
     $("oauth-probe").hidden = grant !== "authorization_code";
+    const chosen = $("oauth-redirect-uri").value.trim() || `${location.origin}/oauth/callback`;
+    $("oauth-redirect-field").hidden = grant !== "authorization_code";
+    $("oauth-redirect-uri").placeholder = `${location.origin}/oauth/callback`;
     $("oauth-redirect-note").textContent = grant === "authorization_code"
-      ? `Register ${location.origin}/oauth/callback as a redirect URI for this client. Namazu opens the `
-        + "authorization page in a new tab and collects the code when the browser comes back."
+      ? `Register ${chosen} for this client. Namazu opens the authorization page in a new tab and `
+        + "collects the code when the browser comes back, so this has to be a URL that reaches "
+        + "Namazu. If the authorization page answers with a block page from a security service, "
+        + "the redirect URI is the usual cause: an http:// URL containing “localhost” "
+        + "inside a query parameter matches a common WAF rule. Try the same port on 127.0.0.1, "
+        + "registering that form too."
       : "This grant runs entirely from the Namazu server; no browser redirect is involved.";
   }
 
@@ -2796,6 +2807,7 @@
       verify_tls: $("verify-tls").checked,
       timeout: Number($("request-timeout").value) || 15,
       user_agent: userAgent(),
+      redirect_uri: $("oauth-redirect-uri").value.trim() || null,
     };
   }
 
@@ -3379,6 +3391,7 @@
     $("audit-profile").value = prefs.read("audit-profile", "readonly");
     $("audit-concurrency").value = prefs.read("audit-concurrency", "");
     $("user-agent").value = prefs.read("user-agent", "");
+    $("oauth-redirect-uri").value = prefs.read("oauth-redirect-uri", "");
     describeConcurrency();
 
     identityKv.setAll({});
