@@ -49,7 +49,7 @@
     audit: { findings: [], running: false, cancelled: false, done: 0, total: 0,
 
              requests: 0, notes: [], discovery: null, finding: null, startedAt: null,
-             log: [], logEntry: null, logTruncated: false },
+             log: [], logEntry: null, logTruncated: false, statuses: [] },
 
   };
 
@@ -3389,6 +3389,35 @@
 
   function identityB() { return identityKv.safeRead(); }
 
+  /**
+   * An identity the engine can keep alive. A header is a snapshot; an OAuth
+   * configuration lets the server mint a replacement when the token expires,
+   * which is what a run across dozens of operations needs.
+   */
+  function renewableIdentity(headers) {
+    if ($("auth-mode").value !== "oauth2") return headers;
+    const config = oauthConfig();
+    const renewable = config.grant === "client_credentials" || config.grant === "password"
+      || (config.grant !== "client_credentials" && oauthState.refreshToken);
+    if (!config.token_endpoint || !renewable) return headers;
+    return {
+      headers,
+      oauth: {
+        grant: oauthState.refreshToken && config.grant === "authorization_code"
+          ? "refresh_token" : config.grant,
+        token_endpoint: config.token_endpoint,
+        client_id: config.client_id,
+        client_secret: config.client_secret,
+        scope: config.scope,
+        audience: config.audience,
+        username: config.username,
+        password: config.password,
+        refresh_token: oauthState.refreshToken || config.refresh_token,
+        auth_style: config.auth_style,
+      },
+    };
+  }
+
   function updateIdentityState() {
 
     const count = Object.keys(identityB()).length;
@@ -3791,6 +3820,44 @@
     announce(`Showing finding: ${item.title}.`);
   }
 
+  /**
+   * A whole run of 404s is almost never forty dead operations. It is the base
+   * URL missing the API's own base path, so say that instead of reporting
+   * every endpoint as a zombie.
+   */
+  function runDiagnostics() {
+    const audit = state.audit;
+    const statuses = audit.statuses || [];
+    // Two is the floor: a single 404 is a plausible zombie operation, but two
+    // out of two is a base URL that does not reach the API.
+    if (statuses.length < 2) return null;
+    const notFound = statuses.filter((status) => status === 404).length;
+    const unauthorised = statuses.filter((status) => status === 401 || status === 403).length;
+    const base = $("base-url").value.trim();
+    const servers = [...($("server-options").children || [])].map((option) => option.value);
+
+    if (notFound / statuses.length >= 0.8) {
+      const suggestion = servers.find((server) => server && server !== base);
+      return {
+        kind: "bad",
+        text: `${notFound} of ${statuses.length} operations returned 404. That usually means the base `
+          + `URL is missing the path the API is served under, rather than the operations being absent. `
+          + `The contract paths are appended to the base URL exactly as written.`
+          + (suggestion ? ` The contract lists ${suggestion}; the run used ${base || "(empty)"}.` : ""),
+      };
+    }
+    if (unauthorised / statuses.length >= 0.8) {
+      return {
+        kind: "bad",
+        text: `${unauthorised} of ${statuses.length} operations returned 401 or 403. The audit is `
+          + `running unauthenticated or with a credential the API rejected. Configure OAuth 2 under `
+          + `Auth, or add the credential header, then run again. Findings from this run describe an `
+          + `API you were never let into.`,
+      };
+    }
+    return null;
+  }
+
   function renderAuditReport() {
 
     const body = $("audit-report-body");
@@ -3809,6 +3876,11 @@
 
     }
 
+    const diagnosis = runDiagnostics();
+    if (diagnosis) {
+      body.append(reportCard("Check the run setup",
+        [el("div", "prose caution prewrap", diagnosis.text)]));
+    }
     const tally = severityTally(audit.findings);
 
     const grid = el("div", "tally");
@@ -4013,7 +4085,7 @@
 
       profile,
 
-      identities: { primary: connection.headers, secondary: identityB() },
+      identities: { primary: renewableIdentity(connection.headers), secondary: identityB() },
 
       allow_mutating: connection.allow_mutating,
 
@@ -4028,7 +4100,7 @@
     state.audit = {
       findings: [], running: true, cancelled: false, done: 0, total: operations.length,
       requests: 0, notes: [], discovery: null, finding: null,
-      log: [], logEntry: null, logTruncated: false,
+      log: [], logEntry: null, logTruncated: false, statuses: [],
       startedAt: new Date().toISOString(),
     };
 
@@ -4096,6 +4168,7 @@
 
           absorb(result, `${op.method} ${op.path}`);
           absorbLog(result, `${op.method} ${op.path}`);
+          if (Number.isFinite(result.baseline_status)) state.audit.statuses.push(result.baseline_status);
 
         } catch (error) {
 
@@ -4281,7 +4354,9 @@
 
   /* ───────────────────────── OAuth 2 ───────────────────────── */
 
-  const oauthState = { token: null, pollTimer: 0, window: null };
+  // refreshToken is kept so a long audit can renew server-side without
+  // reopening the browser flow.
+  const oauthState = { token: null, pollTimer: 0, window: null, refreshToken: "", target: "primary" };
 
 
 

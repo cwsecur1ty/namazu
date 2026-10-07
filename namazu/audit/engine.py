@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 
 from ..runner import normalize_spec
 from ..spec import build_request
-from . import authz, bypass, catalogue, contract, inputs, inventory, jwtlab, passive, posture, specscan
+from . import authz, bypass, catalogue, contract, identity as identity_resolver, inputs, inventory, jwtlab, passive, posture, specscan
 from .model import Finding, finding
 from .transport import Budget, BudgetExhausted, Executor, MutationRefused, build_client
 
@@ -94,8 +94,11 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
     if settings["writes"] and not allow_mutating:
         raise ValueError("Write probes need allow_mutating; enable write requests first.")
 
-    identity_a = _identity_headers(identities, "primary")
-    identity_b = _identity_headers(identities, "secondary")
+    identity_a, token_a, note_a = identity_resolver.resolve(
+        identities, "primary", verify_tls=verify_tls, timeout=timeout)
+    identity_b, token_b, note_b = identity_resolver.resolve(
+        identities, "secondary", verify_tls=verify_tls, timeout=timeout)
+    credential_notes = [note for note in (note_a, note_b) if note]
     endpoint = f"{operation['method']} {operation['path']}"
 
     findings: list = list(specscan.review_operation(parsed, operation))
@@ -105,7 +108,7 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
     owns_client = client is None
     http = client or build_client(verify_tls)
     executor = Executor(http, budget, timeout=timeout, allow_mutating=allow_mutating)
-    notes: list[str] = []
+    notes: list[str] = list(credential_notes)
 
     try:
         baseline = executor.send(
@@ -317,6 +320,7 @@ def _result(endpoint, operation, findings, budget, profile, *, notes=None, basel
         "profile": profile,
         "requests_sent": budget.spent,
         "request_budget": budget.limit,
+        "baseline_status": baseline.status if baseline is not None else None,
         "notes": [note for note in (notes or []) if note],
         "baseline": baseline.to_dict() if baseline is not None else None,
         "log": log,
@@ -336,7 +340,8 @@ def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict
     if urlsplit(target).scheme not in ("http", "https"):
         raise ValueError("The base URL must begin with http:// or https://.")
 
-    identity_a = _identity_headers(identities, "primary")
+    identity_a, _token, credential_note = identity_resolver.resolve(
+        identities, "primary", verify_tls=verify_tls, timeout=timeout)
     findings = list(specscan.review_document(parsed))
     documented_paths = {op["path"] for op in parsed["operations"]}
 
@@ -363,7 +368,8 @@ def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict
         "request_budget": tracker.limit,
         "discovery": summary,
         "log": _log(executor, "surface sweep"),
-        "notes": (["Request budget reached; the sweep stopped early."] if summary.get("budget_exhausted") else []),
+        "notes": ([credential_note] if credential_note else [])
+                 + (["Request budget reached; the sweep stopped early."] if summary.get("budget_exhausted") else []),
         "findings": [item.to_dict() for item in deduped],
         "summary": summarize(deduped),
     }

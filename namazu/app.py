@@ -96,7 +96,7 @@ class AuditInput(BaseModel):
     operation_id: str | None = None
     base_url: str | None = None
     profile: str = "readonly"
-    identities: dict[str, dict[str, str]] = Field(default_factory=dict)
+    identities: dict[str, dict] = Field(default_factory=dict)
     allow_mutating: bool = False
     verify_tls: bool = True
     timeout: float = Field(default=15, ge=1, le=120)

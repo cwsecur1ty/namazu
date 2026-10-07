@@ -166,6 +166,14 @@ second identity can be a genuinely different account.
 | Refresh token | no | Renew without repeating the browser flow. |
 | Password | no | Supported because engagements still meet it; its use is reported as a finding. |
 
+An OAuth identity can also be handed to the audit directly rather than pasted
+in as a header. The engine mints the token server-side and renews it when it
+nears expiry, so a run across dozens of operations does not start returning 401
+halfway through because the token lapsed. Client credentials and password mint
+directly; an authorization code identity renews from the refresh token it was
+issued. A credential that cannot be obtained is reported as a setup problem,
+not as a page of findings.
+
 It also tests the authorization server itself with three read-only probes: an
 unregistered `redirect_uri`, `response_type=token`, and an authorization request
 with no `code_challenge`. A rejection is the healthy result.
@@ -258,7 +266,7 @@ version.
 node --check namazu/static/app.js
 ```
 
-217 tests across 89 checks. Detections are asserted in both directions: a check fires on the
+226 tests across 89 checks. Detections are asserted in both directions: a check fires on the
 broken handler, and stays silent on the correct one.
 
 The HTTP API is `POST /api/import`, `/api/prepare`, `/api/run`, `/api/audit`,

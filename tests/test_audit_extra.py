@@ -1,5 +1,6 @@
 """Tests for the second batch of checks and for OAuth 2 support."""
 import json
+import time
 
 import httpx
 import pytest
@@ -1380,3 +1381,135 @@ def test_verifying_server_is_not_reported_as_ignoring_auth():
         result = audit_operation(_gated_path_spec(), "GET /orders/{orderId}", base_url=BASE,
                                  identities={"primary": ALICE}, client=client)
     assert "authz.invalid-credentials-accepted" not in _ids(result)
+
+
+# ── OAuth identities for the audit ──────────────────────────────────────────
+
+def _oauth_identity(**overrides):
+    config = {"grant": "client_credentials", "token_endpoint": "https://id.test/token",
+              "client_id": "svc", "client_secret": "s3cr3t", "scope": "orders:read"}
+    config.update(overrides)
+    return {"oauth": config}
+
+
+def test_audit_mints_a_token_from_an_oauth_identity(monkeypatch):
+    from namazu.audit import identity
+    identity.clear_cache()
+    calls = []
+
+    def fake_cc(**kwargs):
+        calls.append(kwargs)
+        return {"access_token": "at-1", "token_type": "Bearer", "header_name": "Authorization",
+                "header_value": "Bearer at-1", "expires_in": 3600}
+
+    monkeypatch.setattr(identity.oauth, "client_credentials", fake_cc)
+    headers, summary, note = identity.resolve({"primary": _oauth_identity()}, "primary")
+    assert headers == {"Authorization": "Bearer at-1"}
+    assert note == ""
+    assert calls[0]["scope"] == "orders:read"
+    # The token itself must not travel in anything that reaches a report.
+    assert "access_token" not in summary and "header_value" not in summary
+
+
+def test_a_minted_token_is_reused_until_it_nears_expiry(monkeypatch):
+    """A run across forty operations must not mint forty tokens."""
+    from namazu.audit import identity
+    identity.clear_cache()
+    mints = []
+
+    monkeypatch.setattr(identity.oauth, "client_credentials",
+                        lambda **kw: (mints.append(1), {
+                            "access_token": "at", "token_type": "Bearer",
+                            "header_name": "Authorization", "header_value": "Bearer at",
+                            "expires_in": 3600})[1])
+    for _ in range(5):
+        identity.resolve({"primary": _oauth_identity()}, "primary")
+    assert len(mints) == 1
+
+
+def test_an_expiring_token_is_reminted(monkeypatch):
+    from namazu.audit import identity
+    identity.clear_cache()
+    counter = {"n": 0}
+
+    def fake_cc(**kwargs):
+        counter["n"] += 1
+        return {"access_token": f"at-{counter['n']}", "token_type": "Bearer",
+                "header_name": "Authorization", "header_value": f"Bearer at-{counter['n']}",
+                "expires_in": 31}      # under the refresh margin, so it is never reused
+
+    monkeypatch.setattr(identity.oauth, "client_credentials", fake_cc)
+    first, _, _ = identity.resolve({"primary": _oauth_identity()}, "primary")
+    # Capture the real clock before patching, or the lambda calls itself.
+    later = time.time() + 120
+    monkeypatch.setattr(identity.time, "time", lambda: later)
+    second, _, _ = identity.resolve({"primary": _oauth_identity()}, "primary")
+    assert first != second
+    assert counter["n"] == 2
+
+
+def test_a_credential_failure_is_reported_not_turned_into_401_findings(monkeypatch):
+    """A broken credential must read as a setup problem, not as a finding."""
+    from namazu.audit import identity
+    identity.clear_cache()
+
+    def fail(**kwargs):
+        raise ValueError("The token request failed (HTTP 401): invalid_client")
+
+    monkeypatch.setattr(identity.oauth, "client_credentials", fail)
+    headers, summary, note = identity.resolve({"primary": _oauth_identity()}, "primary")
+    assert headers == {} and summary is None
+    assert "could not obtain an OAuth token" in note
+    assert "invalid_client" in note
+
+
+def test_authorization_code_without_a_refresh_token_explains_itself(monkeypatch):
+    from namazu.audit import identity
+    identity.clear_cache()
+    _headers, _summary, note = identity.resolve(
+        {"primary": _oauth_identity(grant="authorization_code")}, "primary")
+    assert "needs a browser" in note
+    assert "refresh token" in note
+
+
+def test_a_refresh_token_keeps_an_authorization_code_identity_alive(monkeypatch):
+    from namazu.audit import identity
+    identity.clear_cache()
+    seen = {}
+
+    monkeypatch.setattr(identity.oauth, "refresh",
+                        lambda **kw: (seen.update(kw), {
+                            "access_token": "at", "token_type": "Bearer",
+                            "header_name": "Authorization", "header_value": "Bearer at",
+                            "expires_in": 600})[1])
+    headers, _summary, note = identity.resolve(
+        {"primary": _oauth_identity(grant="refresh_token", refresh_token="rt-1")}, "primary")
+    assert note == "" and headers["Authorization"] == "Bearer at"
+    assert seen["refresh_token"] == "rt-1"
+
+
+def test_flat_header_identities_still_work():
+    """The original shape stays supported, so existing callers do not break."""
+    from namazu.audit import identity
+    headers, summary, note = identity.resolve({"primary": {"Authorization": "Bearer x"}}, "primary")
+    assert headers == {"Authorization": "Bearer x"}
+    assert summary is None and note == ""
+
+
+def test_credential_failure_surfaces_in_the_audit_result(monkeypatch):
+    from namazu.audit import identity
+    identity.clear_cache()
+    monkeypatch.setattr(identity.oauth, "client_credentials",
+                        lambda **kw: (_ for _ in ()).throw(ValueError("invalid_client")))
+
+    with _client(lambda r: _json({"id": 1})) as client:
+        result = audit_operation(_path_spec(), "GET /orders/{orderId}", base_url=BASE,
+                                 identities={"primary": _oauth_identity()}, client=client)
+    assert any("could not obtain an OAuth token" in note for note in result["notes"])
+
+
+def test_audit_result_reports_the_baseline_status():
+    """The client needs this to spot a whole run of 404s as a setup problem."""
+    with _client(lambda r: _json({"detail": "nope"}, 404)) as client:
+        result = audit_operation(_path_spec(), "GET /orders/{orderId}", base_url=BASE, client=client)
+    assert result["baseline_status"] == 404
