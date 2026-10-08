@@ -455,8 +455,10 @@
 
   /* ───────────────────────── server calls ───────────────────────── */
 
-  async function api(path, payload) {
-    const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), credentials: "same-origin" });
+  async function api(path, payload, method = "POST") {
+    const options = { method, headers: { "Content-Type": "application/json" }, credentials: "same-origin" };
+    if (method !== "GET") options.body = JSON.stringify(payload);
+    const response = await fetch(path, options);
     let data;
     try { data = await response.json(); }
     catch { throw new Error(`Namazu returned an unreadable response (HTTP ${response.status}). Check that the local server is running.`); }
@@ -2527,6 +2529,8 @@
       main.append(el("div", "finding-name", item.title));
       const meta = el("div", "finding-meta");
       meta.append(el("span", `conf ${item.confidence}`, item.confidence));
+      const tag = sourceTag(item);
+      if (tag) meta.append(tag);
       meta.append(el("span", "ep", item.endpoint || item.owasp || ""));
       main.append(meta);
       row.append(main);
@@ -2631,7 +2635,10 @@
     state.audit.finding = item;
     activateSection("audit");
     showView("view-finding");
-    $("finding-severity").textContent = `${item.severity} · ${item.confidence}`;
+    const source = findingSource(item);
+    $("finding-severity").textContent = source
+      ? `${item.severity} · ${item.confidence} · ${source}`
+      : `${item.severity} · ${item.confidence}`;
     $("finding-severity").className = "chip";
     $("finding-severity").dataset.sev = item.severity;
     $("finding-title").textContent = item.title;
@@ -2844,6 +2851,103 @@
 
 
 
+  /* ─────────────── second opinion: external scanners ─────────────── */
+
+  // A finding id prefix is the authoritative tag: external.py builds every one
+  // of these as "<tool>.<template or check>", and nothing else in the
+  // catalogue uses a tool name as its prefix.
+  const EXTERNAL_TOOLS = ["nuclei", "schemathesis"];
+
+  function findingSource(item) {
+    const id = String(item?.id || "");
+    return EXTERNAL_TOOLS.find((tool) => id.startsWith(`${tool}.`)) || "";
+  }
+
+  function sourceTag(item) {
+    const source = findingSource(item);
+    if (!source) return null;
+    const tag = el("span", "src", source);
+    tag.title = `Reported by ${source}, not verified by Namazu.`;
+    return tag;
+  }
+
+  async function loadTools() {
+    const status = $("tools-state");
+    status.textContent = "checking…";
+    let tools;
+    try { tools = await api("/api/tools", null, "GET"); }
+    catch (error) { status.textContent = "unavailable"; message("work-error", errorText(error)); return; }
+    const list = $("tool-list");
+    list.replaceChildren();
+    const ready = Object.entries(tools).filter(([, info]) => info.available);
+    status.textContent = ready.length ? `${ready.length} available` : "none installed";
+    for (const [name, info] of Object.entries(tools)) {
+      const row = el("div", "tool-row");
+      row.append(el("span", "tool-name", name));
+      if (info.version) row.append(el("span", "tool-ver", info.version));
+      if (info.available) {
+        const run = el("button", "btn", "Run");
+        run.type = "button";
+        run.dataset.tool = name;
+        run.addEventListener("click", () => runExternalTool(name, run));
+        row.append(run);
+      } else {
+        const hint = el("span", "tool-ver", "not installed");
+        hint.title = info.install || "";
+        row.append(hint);
+      }
+      list.append(row);
+      list.append(el("p", "tool-role", info.role || ""));
+    }
+  }
+
+  async function runExternalTool(name, button) {
+    if (!state.spec) { toast("Import a contract first."); return; }
+    if (state.audit.running) { toast("Wait for the audit to finish."); return; }
+    let connection;
+    try { connection = connectionPayload(); }
+    catch (error) { toast(errorText(error)); return; }
+    const target = connection.base_url || state.spec.base_url || $("base-url").value.trim();
+    if (!target) { toast("Set a base URL before running an external tool."); return; }
+
+    button.disabled = true;
+    const label = button.textContent;
+    button.textContent = "Running…";
+    announce(`${name} is running. This can take a few minutes.`);
+    try {
+      const result = await api("/api/tools/run", {
+        spec: state.spec,
+        base_url: target,
+        // The endpoint reads the tool name from this field.
+        profile: name,
+        identities: { primary: connection.headers },
+        allow_mutating: connection.allow_mutating,
+        ...routePayload(),
+        timeout: connection.timeout,
+      });
+      if (!result.ran) {
+        toast(`${name} did not run.`);
+        for (const note of result.notes || []) state.audit.notes.push(`${name}: ${note}`);
+        renderAuditReport();
+        return;
+      }
+      const before = state.audit.findings.length;
+      absorb(result, name);
+      const added = state.audit.findings.length - before;
+      activateSection("audit");
+      renderFindings();
+      renderAuditReport();
+      toast(added
+        ? `${name}: ${added} finding(s) added, tagged ${name}.`
+        : `${name} ran and found nothing to add.`);
+    } catch (error) {
+      message("work-error", `${name}: ${errorText(error)}`);
+    } finally {
+      button.disabled = false;
+      button.textContent = label;
+    }
+  }
+
   function absorb(result, label) {
     state.audit.requests += result.requests_sent || 0;
     for (const note of result.notes || []) state.audit.notes.push(`${label}: ${note}`);
@@ -3029,6 +3133,12 @@
       $("cancel-audit").disabled = true;
       $("cancel-audit").textContent = "Stopping…";
       announce("The audit will stop once the current endpoint finishes.");
+    });
+    $("second-opinion-block").addEventListener("toggle", (event) => {
+      if (event.target.open && !event.target.dataset.loaded) {
+        event.target.dataset.loaded = "1";
+        loadTools();
+      }
     });
     $("finding-search").addEventListener("input", renderFindings);
     $("severity-filter").addEventListener("change", renderFindings);

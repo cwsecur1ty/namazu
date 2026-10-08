@@ -238,9 +238,23 @@ required; when one is absent the run says so rather than leaving a silent gap.
 | [**schemathesis**](https://github.com/schemathesis/schemathesis) | Property-based testing from the same OpenAPI document: undeclared 500s, schema violations, ignored authentication. | `pip install schemathesis` |
 | [**nuclei**](https://github.com/projectdiscovery/nuclei) | Community templates for known CVEs, exposed panels, default credentials and misconfigurations. | `go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest` |
 
-Their findings are normalised into the same advisory shape and clearly attributed
-to the tool that produced them, marked `probable` because Namazu did not verify
-them itself.
+**Audit → Second opinion** lists whichever of them this machine can run, with
+its version. Running one folds what it reports into the same findings list,
+severity bar and export as everything else, tagged with the tool's name in the
+list and in the finding header, and marked `probable` with a limitation saying
+Namazu did not verify the match itself. A nuclei template match is never
+presented as something this tool established.
+
+Both are held read-only: destructive, fuzzing and brute-force templates are
+excluded, nuclei runs with `-no-interactsh` so there is no outbound callback,
+and schemathesis stays on safe methods unless Allow writes is on.
+
+nuclei runs CVE templates as well as exposure, misconfiguration and technology
+ones. That is the set worth having — a known vulnerable version behind the API
+is the thing it is here to find — but it costs minutes rather than seconds.
+Several template matches at the same URL collapse into one finding listing the
+matchers that fired, so the finding count is lower than nuclei's own match
+count.
 
 ## Reading a finding
 
@@ -408,7 +422,7 @@ interpolated into a quoted string on an engine that has a sleep function.
 node --check namazu/static/app.js
 ```
 
-431 tests across 93 checks, about 90 seconds to run, most of which is the
+432 tests across 93 checks, about 90 seconds to run, most of which is the
 time-based SQL tests waiting for real delays. Detections are asserted in both
 directions: a check fires on the broken handler, and stays silent on the correct
 one. Where a check rests on a control, the test asserts the control is what

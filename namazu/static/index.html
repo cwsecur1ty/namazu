@@ -228,6 +228,14 @@
             <div class="row-actions"><button type="button" class="link" id="add-identity-b">+ Add header</button></div>
           </div>
         </details>
+        <details class="disclosure" id="second-opinion-block">
+          <summary>Second opinion <span class="dim" id="tools-state">not checked</span></summary>
+          <div class="disclosure-body">
+            <p class="hint">Runs an external scanner against the same target and folds what it reports into this findings list, tagged with the tool that found it. Namazu does not re-verify those matches, and says so on each one.</p>
+            <div id="tool-list" class="tool-list"></div>
+            <p class="hint">Both are run read-only: destructive and brute-force templates are excluded, nuclei runs without its callback service, and schemathesis is held to safe methods unless Allow writes is on. nuclei includes CVE templates, so expect minutes rather than seconds.</p>
+          </div>
+        </details>
         <div class="stack">
           <button type="button" class="btn primary wide" id="run-audit">Run audit</button>
           <button type="button" class="btn wide" id="cancel-audit" hidden>Stop after current</button>

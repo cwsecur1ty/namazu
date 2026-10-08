@@ -39,8 +39,12 @@ WRITE_METHODS = ("POST", "PUT", "PATCH", "DELETE")
 # Nuclei tags that probe destructively or generate traffic out of proportion to
 # what they prove. Excluded always, not only in read-only mode.
 # The full corpus is ~10k templates and takes far longer than an audit should.
-# This set is the part that speaks to an HTTP API surface.
-DEFAULT_NUCLEI_TAGS = "exposure,misconfig,config,default-login,api,tech"
+# This set is the part that speaks to an HTTP API surface. "cve" is in it
+# because leaving it out was the main reason a run added almost nothing: a
+# known vulnerable version behind the API is exactly what this tool is here to
+# find, and a CVE template is a read-only signature match. It costs minutes
+# rather than seconds, which is why the panel says so before you start.
+DEFAULT_NUCLEI_TAGS = "cve,exposure,misconfig,config,default-login,api,tech"
 NUCLEI_EXCLUDE_TAGS = "dos,fuzz,intrusive,brute-force,bruteforce"
 ANSI = re.compile(chr(27) + '\\[[0-9;]*m')
 NUCLEI_SEVERITY_MAP = {"critical": "critical", "high": "high", "medium": "medium",

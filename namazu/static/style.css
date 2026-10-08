@@ -673,6 +673,18 @@ body.resizing-v { cursor: row-resize; user-select: none; }
   .pane-gutter { cursor: default; }
 }
 
+/* second-opinion tools, and the tag their findings carry */
+.tool-list { display: flex; flex-direction: column; gap: 6px; }
+.tool-row { display: flex; align-items: center; gap: 7px; padding: 6px 0; border-bottom: 1px solid var(--line-soft); }
+.tool-row:last-child { border-bottom: 0; }
+.tool-name { font: 600 12px var(--font); color: var(--ink); }
+.tool-ver { font: 10px var(--mono); color: var(--dim); }
+.tool-row .btn { margin-left: auto; padding: 0 9px; height: 23px; font-size: 11px; }
+.tool-role { font-size: 11px; color: var(--dim); padding-bottom: 6px; }
+.src { font: 600 9.5px var(--mono); letter-spacing: .04em; text-transform: uppercase;
+       padding: 1px 5px; border-radius: 2px; color: var(--ink);
+       background: var(--raised); border: 1px solid var(--line); }
+
 /* collapsible advisory sections */
 details.card > summary.card-head { cursor: pointer; display: flex; align-items: center; gap: 7px;
                                    list-style: none; user-select: none; }

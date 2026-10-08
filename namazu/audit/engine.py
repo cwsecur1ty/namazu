@@ -96,11 +96,6 @@ def _declared(operation: dict, location: str) -> list:
     return out
 
 
-def _identity_headers(identities: dict, key: str) -> dict:
-    value = (identities or {}).get(key) or {}
-    return {str(name): str(item) for name, item in value.items()} if isinstance(value, dict) else {}
-
-
 def _attach_commands(findings: list, source_url: str) -> list:
     """Give contract-only findings a way to be re-derived from a console."""
     for item in findings:

@@ -1116,6 +1116,14 @@ def test_nuclei_command_excludes_destructive_tags_and_callbacks(monkeypatch):
     excluded = command[command.index("-exclude-tags") + 1]
     for tag in ("dos", "fuzz", "intrusive"):
         assert tag in excluded
+    # The templates that pay for the run. Leaving cve out of the default set was
+    # why nuclei added almost nothing to a report; it is a read-only signature
+    # match, and the destructive exclusions above still apply to it.
+    included = command[command.index("-tags") + 1]
+    for tag in ("cve", "exposure", "misconfig"):
+        assert tag in included, f"{tag} templates would not run: {included}"
+    for tag in ("dos", "fuzz", "intrusive", "brute-force"):
+        assert tag not in included
 
 
 def test_schemathesis_excludes_write_methods_unless_allowed(monkeypatch):

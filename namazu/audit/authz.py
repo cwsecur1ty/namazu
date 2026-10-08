@@ -178,19 +178,35 @@ def _cross_identity(executor, baseline, endpoint, identity_b, base_headers, decl
     same search results is normal. And the data must not already be readable
     anonymously, because then the problem is missing authentication, which is
     reported on its own, not a broken boundary between two users.
+
+    Every gate says in the run notes why it stopped the probe.
     """
+    def skipped(reason: str) -> list:
+        """Record why the probe did not run. Silence here reads as a clean result.
+
+        A reader who supplied two accounts and sees no cross-identity finding
+        has no way to tell a passing boundary from a probe that never ran, and
+        the first thing they suspect is that their credentials did not arrive.
+        """
+        if notes is not None:
+            notes.append(f"The cross-identity read did not run: {reason}.")
+        return []
+
     addresses_object = bool(object_references(baseline.url))
     admin_route_early = bool(ADMIN_PATH.search(urlsplit(baseline.url).path))
     if not addresses_object and not admin_route_early:
-        return []
-    if anonymous is not None and _looks_like_data(anonymous)             and similarity(baseline.body, anonymous.body) >= 0.95:
-        return []
+        return skipped(
+            "this request addresses no specific object, so there is no per-object boundary to "
+            "test. Two accounts seeing the same collection or search result is normal")
+    if (anonymous is not None and _looks_like_data(anonymous)
+            and similarity(baseline.body, anonymous.body) >= 0.95):
+        return skipped(
+            "the same data came back with no credentials at all, so the finding here is missing "
+            "authentication, reported on its own, rather than a broken boundary between two accounts")
     reason = same_principal(base_headers, identity_b)
     if reason:
-        if notes is not None:
-            notes.append(f"The cross-identity read did not run: {reason}. A boundary between two "
-                         "accounts can only be tested with two different accounts.")
-        return []
+        return skipped(f"{reason}. A boundary between two accounts can only be tested with two "
+                       "different accounts")
 
     headers = {**strip_credentials(base_headers), **identity_b}
     # Named in the evidence when the credentials are readable, so a reader can

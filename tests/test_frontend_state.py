@@ -60,3 +60,23 @@ def test_the_oauth_refresh_token_reaches_the_audit(source):
     assert re.search(r'target !== "secondary" && token\.refresh_token', source), (
         "the refresh token is no longer scoped to the primary identity, so the "
         "second identity's credential could be used to mint the first's.")
+
+
+def test_the_external_tool_tags_match_the_ids_the_server_emits(source):
+    """The findings list tags an external finding by its id prefix.
+
+    external.py builds every one as f"<tool>.<template or check>", and the
+    browser reads that prefix to decide whether to show the tool's name beside
+    the finding. Renaming the prefix on either side loses the tag silently: a
+    nuclei match would then sit in the list looking like something Namazu
+    established itself, which is the one thing the tag exists to prevent.
+    """
+    declared = re.search(r"const EXTERNAL_TOOLS = \[(.+?)\]", source)
+    assert declared, "app.js no longer declares which tools it tags"
+    tools = set(re.findall(r'"([a-z]+)"', declared.group(1)))
+    assert tools, "no tool names parsed out of EXTERNAL_TOOLS"
+    external = (APP.parent.parent / "audit" / "external.py").read_text(encoding="utf-8")
+    for tool in sorted(tools):
+        assert f'f"{tool}.' in external, (
+            f"app.js tags {tool} findings by prefix, but external.py no longer "
+            f'builds ids as f"{tool}.<...>"')
