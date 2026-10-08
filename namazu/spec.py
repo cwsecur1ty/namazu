@@ -128,6 +128,68 @@ def _servers(values: Any, source_url: str, warnings: list[str]) -> list[str]:
     return list(dict.fromkeys(result))
 
 
+def _unresolvable_refs(document: dict, limit: int = 6) -> list[str]:
+    """Every $ref in the document that cannot be resolved against it.
+
+    Namazu reads one document. A specification split across files, which is the
+    normal layout for anything large, therefore arrives with its schemas
+    missing, and nothing about that was visible before: the import reported a
+    clean contract, every missing schema became null in the generated request
+    body, the baseline was rejected or answered the wrong thing, and most
+    probes stopped there. A thin report with no explanation is the worst
+    possible way to tell someone their contract was not understood.
+
+    Values that hold literal API payloads are skipped. A key called "$ref"
+    inside an example or an enum is data, not a reference.
+    """
+    literal = ("example", "examples", "enum", "const", "default")
+    external: list[str] = []
+    missing: list[str] = []
+    seen: set[str] = set()
+
+    def visit(node: Any) -> None:
+        if isinstance(node, list):
+            for item in node:
+                visit(item)
+            return
+        if not isinstance(node, dict):
+            return
+        ref = node.get("$ref")
+        if isinstance(ref, str) and ref not in seen:
+            seen.add(ref)
+            if not ref.startswith("#"):
+                external.append(ref)
+            else:
+                try:
+                    _pointer(document, ref)
+                except ValueError:
+                    missing.append(ref)
+        for key, value in node.items():
+            if key not in literal:
+                visit(value)
+
+    visit(document)
+
+    def listed(refs: list[str]) -> str:
+        shown = ", ".join(sorted(refs)[:limit])
+        return f"{shown} and {len(refs) - limit} more" if len(refs) > limit else shown
+
+    out = []
+    if external:
+        out.append(
+            f"{len(external)} reference(s) point outside this document, so the schemas they name "
+            f"are unknown: {listed(external)}. Namazu reads a single document. Generated request "
+            "bodies carry null where those schemas should be, and the checks that read them do not "
+            "run. Bundle the specification into one file first, for example with "
+            "`redocly bundle` or `swagger-cli bundle`, to audit the whole surface.")
+    if missing:
+        out.append(
+            f"{len(missing)} reference(s) name a schema this document does not define: "
+            f"{listed(missing)}. These resolve to nothing for the same reason as above, and that "
+            "is a defect in the document rather than a consequence of splitting it.")
+    return out
+
+
 def parse_spec(raw: str | dict, source_url: str = "") -> dict:
     """Read Swagger 2.0 or OpenAPI 3.0/3.1, retaining the original schema refs."""
     if isinstance(raw, str):
@@ -259,7 +321,7 @@ def parse_spec(raw: str | dict, source_url: str = "") -> dict:
             operations.append({"id": f"{method.upper()} {path}", "operation_id": operation.get("operationId", ""), "method": method.upper(), "path": path, "summary": operation.get("summary", ""), "description": operation.get("description", ""), "deprecated": bool(operation.get("deprecated", False)), "tags": operation.get("tags", []), "parameters": parameters, "request_body": request_body, "responses": responses, "security": operation.get("security", document.get("security", [])), "servers": op_servers, "unresolved_parameters": unresolved_parameters})
             if swagger:
                 operations[-1]["produces"] = list(produces)
-    return {"title": str(info.get("title", "Untitled API")), "version": version, "api_version": str(info.get("version", "")), "source_url": source_url, "base_url": servers[0] if servers else "", "servers": servers, "operations": operations, "schemas": schemas, "security_schemes": security_schemes, "warnings": list(dict.fromkeys(warnings)), "document": document}
+    return {"title": str(info.get("title", "Untitled API")), "version": version, "api_version": str(info.get("version", "")), "source_url": source_url, "base_url": servers[0] if servers else "", "servers": servers, "operations": operations, "schemas": schemas, "security_schemes": security_schemes, "warnings": list(dict.fromkeys(warnings + _unresolvable_refs(document))), "document": document}
 
 
 def _normalise_schema(value: Any, *, legacy: bool, direction: str, document: dict | None = None) -> Any:

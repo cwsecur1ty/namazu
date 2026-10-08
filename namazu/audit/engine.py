@@ -172,6 +172,13 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
     # tool has to be attributable from the report instead.
     if (quiet_note := executor.signature.describe()):
         notes.insert(0, quiet_note)
+    # Whatever went wrong building the documented request. An unresolved schema
+    # reference puts null where a field should be, which the target rejects or
+    # answers wrongly, and then most probes stop at the baseline. The audit used
+    # to discard these, so a report could be thin for a stated reason nobody
+    # was ever shown.
+    for warning in built.get("warnings") or []:
+        notes.append(f"Building the documented request: {warning}")
 
     try:
         baseline = executor.send(

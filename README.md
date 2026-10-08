@@ -228,6 +228,34 @@ with no `code_challenge`. A rejection is the healthy result.
 
 </details>
 
+## One document
+
+Namazu reads the single document you import. A specification split across files
+with `$ref: common.yaml#/...` therefore arrives with those schemas missing, and
+that matters more than it sounds: a reference it cannot resolve becomes `null`
+in the generated request body, the target rejects or mis-answers the baseline,
+and most probes stop there. The result is a short report for a reason nobody
+chose.
+
+The import now says so, naming the references and how many, and the run notes
+repeat it. Bundle first to audit the whole surface:
+
+```sh
+redocly bundle openapi.yaml -o bundled.yaml     # or: swagger-cli bundle
+```
+
+A reference naming a schema the document does not define is reported
+separately, since that is a defect in the document rather than a consequence of
+splitting it.
+
+Everything else resolves: `allOf` inheritance and chains of it, `allOf` beside
+its own `properties`, `oneOf`/`anyOf` with a discriminator, objects behind
+several `$ref` hops, arrays of references, self-referential schemas, 3.1
+nullable type unions, and `readOnly`/`writeOnly`. Each of those shapes is
+pinned by a test asserting both that a request body is generated and that the
+privileged properties behind it are still found, because a shape that silently
+yields nothing produces no finding rather than a wrong one.
+
 ## Second opinions
 
 Two mature tools cover ground Namazu does not, and both run locally. Neither is
@@ -250,8 +278,8 @@ excluded, nuclei runs with `-no-interactsh` so there is no outbound callback,
 and schemathesis stays on safe methods unless Allow writes is on.
 
 nuclei runs CVE templates as well as exposure, misconfiguration and technology
-ones. That is the set worth having — a known vulnerable version behind the API
-is the thing it is here to find — but it costs minutes rather than seconds.
+ones. That is the set worth having, since a known vulnerable version behind the
+API is the thing it is here to find, but it costs minutes rather than seconds.
 Several template matches at the same URL collapse into one finding listing the
 matchers that fired, so the finding count is lower than nuclei's own match
 count.
@@ -422,7 +450,7 @@ interpolated into a quoted string on an engine that has a sleep function.
 node --check namazu/static/app.js
 ```
 
-432 tests across 93 checks, about 90 seconds to run, most of which is the
+452 tests across 93 checks, about 90 seconds to run, most of which is the
 time-based SQL tests waiting for real delays. Detections are asserted in both
 directions: a check fires on the broken handler, and stays silent on the correct
 one. Where a check rests on a control, the test asserts the control is what
