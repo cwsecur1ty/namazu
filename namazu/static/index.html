@@ -260,7 +260,7 @@
         <span class="dim" id="audit-foot">Not run</span>
         <div class="foot-actions">
           <button type="button" class="link" id="audit-report">Report</button>
-          <button type="button" class="link" id="audit-log">Log</button>
+          <button type="button" class="link" id="audit-log">Traffic</button>
           <button type="button" class="link" id="export-audit" disabled>Export</button>
         </div>
       </div>
@@ -640,7 +640,13 @@
       <div class="op-bar">
         <h2 class="view-title">Audit report</h2>
         <span class="chip" id="audit-state" hidden></span>
-        <div class="op-actions"><button type="button" class="btn" id="export-audit-top" disabled>Export JSON</button></div>
+        <div class="op-actions">
+          <div class="segmented" role="tablist" aria-label="Audit result view">
+            <button type="button" class="seg active" role="tab" aria-selected="true" id="report-here">Findings</button>
+            <button type="button" class="seg" role="tab" aria-selected="false" id="report-traffic">Traffic <span class="seg-count" id="report-traffic-count" hidden>0</span></button>
+          </div>
+          <button type="button" class="btn" id="export-audit-top" disabled>Export JSON</button>
+        </div>
       </div>
       <div class="progress" id="audit-progress" role="progressbar" aria-label="Audit progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><div></div></div>
       <div class="report" id="audit-report-body">
@@ -662,14 +668,17 @@
       <div class="report" id="finding-body"></div>
     </section>
 
-    <!-- audit request log -->
+    <!-- audit traffic: request history, request, response -->
     <section class="view" id="view-audit-log" hidden>
       <div class="op-bar">
-        <h2 class="view-title">Request log</h2>
+        <h2 class="view-title">Traffic</h2>
         <span class="count" id="log-count">0</span>
         <span class="dim" id="log-shown"></span>
         <div class="op-actions">
-          <button type="button" class="btn" id="log-back">Back to report</button>
+          <div class="segmented" role="tablist" aria-label="Audit result view">
+            <button type="button" class="seg" role="tab" aria-selected="false" id="log-back">Findings</button>
+            <button type="button" class="seg active" role="tab" aria-selected="true" id="log-here">Traffic</button>
+          </div>
           <button type="button" class="btn" id="export-log">Export JSON</button>
         </div>
       </div>
@@ -686,19 +695,43 @@
           <option value="errors">Errors and 4xx/5xx</option>
           <option value="mutating">State-changing only</option>
         </select>
+        <button type="button" class="link" id="log-reset-panes" title="Restore the default pane widths">Reset panes</button>
       </div>
-      <div class="log-split">
-        <div class="table-scroll log-table-wrap" tabindex="0" aria-label="Audit request log">
-          <table class="results log-table">
-            <thead><tr>
-              <th scope="col">#</th><th scope="col">Method</th><th scope="col">Path</th>
-              <th scope="col">Probe</th><th scope="col">Status</th>
-              <th scope="col">Size</th><th scope="col">Time</th>
-            </tr></thead>
-            <tbody id="log-rows"></tbody>
-          </table>
+      <div class="log-panes" id="log-panes">
+        <div class="log-pane log-history">
+          <div class="table-scroll log-table-wrap" id="log-table-wrap" tabindex="0" aria-label="Request history. Use the up and down arrows to inspect each request.">
+            <table class="results log-table">
+              <thead><tr>
+                <th scope="col">#</th><th scope="col">Method</th><th scope="col">Path</th>
+                <th scope="col">Probe</th><th scope="col">Status</th>
+                <th scope="col">Size</th><th scope="col">Time</th>
+              </tr></thead>
+              <tbody id="log-rows"></tbody>
+            </table>
+          </div>
         </div>
-        <div class="log-detail" id="log-detail" hidden></div>
+
+        <div class="pane-gutter" id="log-gutter-a" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the history pane"></div>
+
+        <div class="log-pane" id="log-request-pane">
+          <div class="pane-head">
+            <span class="pane-title">Request</span>
+            <div class="pane-tabs" id="log-request-tabs"></div>
+            <button type="button" class="link" id="log-request-copy">Copy</button>
+          </div>
+          <div class="pane-body" id="log-request-body"></div>
+        </div>
+
+        <div class="pane-gutter" id="log-gutter-b" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the request pane"></div>
+
+        <div class="log-pane" id="log-response-pane">
+          <div class="pane-head">
+            <span class="pane-title">Response</span>
+            <div class="pane-tabs" id="log-response-tabs"></div>
+            <button type="button" class="link" id="log-response-copy">Copy</button>
+          </div>
+          <div class="pane-body" id="log-response-body"></div>
+        </div>
       </div>
     </section>
 

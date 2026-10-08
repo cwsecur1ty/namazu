@@ -396,14 +396,24 @@ def _skipped(endpoint, operation, findings, budget, profile, *, reason: str,
 
 
 MAX_LOG_ENTRIES = 200
+# How much of a response body each log entry carries. Wider than the excerpt in
+# a finding's proof, because the traffic view is the only place an operator
+# reads a request that produced no finding, and narrow enough that two hundred
+# of them do not turn one operation's result into a download.
+LOG_BODY_CHARS = 2000
 
 
 def _log(executor, endpoint: str) -> list:
     """Every request the audit made, in order, whether or not it produced a finding."""
     if executor is None:
         return []
-    entries = [{**exchange.to_dict(), "endpoint": endpoint, "seq": index + 1}
-               for index, exchange in enumerate(executor.exchanges[:MAX_LOG_ENTRIES])]
+    entries = []
+    for index, exchange in enumerate(executor.exchanges[:MAX_LOG_ENTRIES]):
+        record = exchange.to_dict()
+        # body_length stays the real length, so the UI can say how much of the
+        # body it is showing rather than implying this is all of it.
+        record["body_excerpt"] = exchange.excerpt(LOG_BODY_CHARS)
+        entries.append({**record, "endpoint": endpoint, "seq": index + 1})
     return entries
 
 

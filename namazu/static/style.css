@@ -326,6 +326,15 @@ body.resizing-v { cursor: row-resize; user-select: none; }
 .tab:hover { color: var(--ink); }
 .tab.active { color: var(--ink); border-bottom-color: var(--accent); }
 .tabstrip-tools { display: flex; align-items: center; gap: 12px; margin-left: auto; padding: 0 6px; }
+
+/* A two-way switch between the findings and the traffic that produced them. */
+.segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.seg { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px;
+       font: 600 11.5px var(--font); color: var(--dim); }
+.seg + .seg { border-left: 1px solid var(--line); }
+.seg:hover { color: var(--ink); background: var(--raised); }
+.seg.active { color: var(--ink); background: var(--sel); }
+.seg-count { font: 10px var(--mono); color: var(--dim); }
 .pane-body { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px; }
 .pane-body.res-body { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
 #response-result { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -616,32 +625,52 @@ body.resizing-v { cursor: row-resize; user-select: none; }
 .log-filters .search { flex: 1; max-width: 460px; }
 .log-filters .panel-filters .search input, .log-filters .search input { padding-left: 29px; }
 .log-filters select { width: auto; min-width: 170px; font-size: 11.5px; height: 26px; }
-.log-split { display: flex; min-height: 0; flex: 1; }
-.log-table-wrap { flex: 1 1 58%; min-width: 0; border-right: 1px solid var(--line); }
-.log-detail { flex: 1 1 42%; min-width: 0; overflow: auto; background: var(--surface);
-              display: flex; flex-direction: column; }
+/* Traffic: request history, then the request and the response beside it. The
+   three panes are one grid, and the two gutters move the first two column
+   widths; the response pane takes whatever is left. */
+.log-panes { display: grid; min-height: 0; flex: 1;
+             grid-template-columns: var(--pane-a, 38%) 5px var(--pane-b, 30%) 5px minmax(0, 1fr); }
+.log-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0;
+            background: var(--surface); }
+.log-table-wrap { min-width: 0; }
+.pane-gutter { background: var(--line); cursor: col-resize; }
+.pane-gutter:hover, .pane-gutter.dragging { background: var(--accent); }
+.pane-gutter:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px; }
+.pane-head { display: flex; align-items: center; gap: 8px; min-height: 29px; padding: 0 10px;
+             border-bottom: 1px solid var(--line-soft); background: var(--panel); flex: none; }
+.pane-title { font: 10px var(--mono); letter-spacing: .06em; text-transform: uppercase;
+              color: var(--dim); white-space: nowrap; }
+.pane-tabs { display: flex; gap: 2px; margin-left: auto; }
+.pane-body { overflow: auto; flex: 1; min-height: 0; }
+.pane-body .proof-label { padding: 9px 12px 3px; }
+.pane-body .cmd-block { margin: 6px 10px; }
+.pane-body .code-block { border-radius: 0; border-left: 0; border-right: 0; max-height: none; }
+.pane-note { color: var(--dim); font-size: 11.5px; padding: 10px 12px; }
+.raw-http { font: 12px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere;
+            padding: 10px 12px; margin: 0; color: var(--ink); background: var(--code); }
 .log-table th { font-size: 10px; }
 .log-table td { padding: 5px 10px; font-size: 11.5px; vertical-align: middle; }
 .log-table th:nth-child(1), .log-table td:nth-child(1) { width: 46px; text-align: right; }
 .log-table th:nth-child(2), .log-table td:nth-child(2) { width: 60px; }
-.log-table th:nth-child(5), .log-table td:nth-child(5) { width: 72px; }
-.log-table th:nth-child(6), .log-table td:nth-child(6) { width: 70px; }
-.log-table th:nth-child(7), .log-table td:nth-child(7) { width: 72px; }
+.log-table th:nth-child(5), .log-table td:nth-child(5) { width: 64px; }
+.log-table th:nth-child(6), .log-table td:nth-child(6) { width: 64px; }
+.log-table th:nth-child(7), .log-table td:nth-child(7) { width: 66px; }
 .log-table td.num { text-align: right; font-variant-numeric: tabular-nums; color: var(--dim); }
 .log-row { cursor: pointer; }
 .log-row:hover td { background: var(--raised); }
 .log-row.active td { background: var(--sel); }
 .log-url { overflow-wrap: anywhere; color: var(--ink); }
 .log-empty { color: var(--dim); padding: 16px 12px; }
-.log-detail-head { display: flex; align-items: center; gap: 8px; padding: 9px 12px; flex-wrap: wrap;
-                   border-bottom: 1px solid var(--line-soft); background: var(--panel); flex: none; }
-.log-detail-url { font-size: 11.5px; overflow-wrap: anywhere; min-width: 0; flex: 1; }
-.log-detail .proof-label { padding: 10px 12px 4px; }
-.log-detail .cmd-block { margin: 0 12px; }
-.log-detail .code-block { border-radius: 0; border-left: 0; border-right: 0; max-height: 260px; }
-@media (max-width: 1150px) {
-  .log-split { flex-direction: column; }
-  .log-table-wrap { flex: 0 0 auto; max-height: 45vh; border-right: 0; border-bottom: 1px solid var(--line); }
+.log-status { display: flex; align-items: center; gap: 6px; padding: 7px 10px; flex-wrap: wrap;
+              border-bottom: 1px solid var(--line-soft); }
+.log-status .mono { font-size: 11.5px; overflow-wrap: anywhere; min-width: 0; }
+
+/* Too narrow for three columns: stack them. The gutters stay as hairlines and
+   stop being draggable, which the drag handler checks for too. */
+@media (max-width: 1250px) {
+  .log-panes { grid-template-columns: minmax(0, 1fr);
+               grid-template-rows: minmax(110px, 36%) 1px minmax(0, 1fr) 1px minmax(0, 1fr); }
+  .pane-gutter { cursor: default; }
 }
 
 /* collapsible advisory sections */

@@ -1898,12 +1898,32 @@
 
 
 
-  /* ───────────────────────── request log ───────────────────────── */
+  /* ─────────────── traffic: history, request, response ─────────────── */
   const MAX_LOG = 4000;
+  // Pane widths as a percentage of the row, so a resized window keeps the
+  // ratio an operator chose rather than the pixel count.
+  const PANE_DEFAULTS = { a: 38, b: 30 };
+  const PANE_MIN = 12;
+  const REQUEST_TABS = [["pretty", "Pretty"], ["raw", "Raw"], ["curl", "curl"]];
+  const RESPONSE_TABS = [["pretty", "Pretty"], ["raw", "Raw"]];
+  // Enough reason phrases to make a reconstructed status line read like one.
+  const STATUS_TEXT = {
+    200: "OK", 201: "Created", 202: "Accepted", 204: "No Content", 301: "Moved Permanently",
+    302: "Found", 303: "See Other", 304: "Not Modified", 307: "Temporary Redirect",
+    308: "Permanent Redirect", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden",
+    404: "Not Found", 405: "Method Not Allowed", 406: "Not Acceptable", 409: "Conflict",
+    410: "Gone", 413: "Content Too Large", 415: "Unsupported Media Type",
+    422: "Unprocessable Content", 429: "Too Many Requests", 500: "Internal Server Error",
+    501: "Not Implemented", 502: "Bad Gateway", 503: "Service Unavailable", 504: "Gateway Timeout",
+  };
+  // The filtered rows in display order. The arrow keys walk this, not the DOM.
+  let logShown = [];
 
   function renderLog() {
     const rows = state.audit.log;
     $("log-count").textContent = rows.length;
+    $("report-traffic-count").textContent = rows.length;
+    $("report-traffic-count").hidden = !rows.length;
     const query = $("log-search").value.trim().toLowerCase();
     const only = $("log-filter").value;
     const shown = rows.filter((entry) => {
@@ -1914,23 +1934,25 @@
       return `${entry.method} ${entry.url} ${entry.label} ${entry.status} ${entry.identity} ${entry.endpoint}`
         .toLowerCase().includes(query);
     });
+    logShown = shown;
 
     const body = $("log-rows");
     body.replaceChildren();
     if (!shown.length) {
       const row = el("tr");
-      const cell = el("td", "", rows.length ? "No request matches this filter."
-        : "No requests yet. Run an audit to populate the log.");
+      const cell = el("td", "log-empty", rows.length ? "No request matches this filter."
+        : "No requests yet. Run an audit to populate the history.");
       cell.colSpan = 7;
-      cell.className = "log-empty";
       row.append(cell);
       body.append(row);
-      $("log-detail").hidden = true;
+      $("log-shown").textContent = rows.length ? `0 of ${rows.length} requests` : "";
+      selectLogEntry(null);
       return;
     }
     for (const entry of shown) {
-      const row = el("tr", `log-row${state.audit.logEntry?.key === entry.key ? " active" : ""}`);
-      row.tabIndex = 0;
+      const row = el("tr", "log-row");
+      row.dataset.key = entry.key;
+      row.tabIndex = -1;
       row.append(el("td", "mono dim", entry.seqGlobal));
       const method = el("td");
       method.append(methodBadge(entry.method));
@@ -1945,16 +1967,21 @@
       row.append(status);
       row.append(el("td", "mono num", humanBytes(entry.body_length || 0)));
       row.append(el("td", "mono num", Number.isFinite(entry.elapsed_ms) ? `${Math.round(entry.elapsed_ms)} ms` : "-"));
-      const open = () => showLogEntry(entry);
-      row.addEventListener("click", open);
-      row.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); }
+      row.addEventListener("click", () => {
+        selectLogEntry(entry);
+        // Focus the list, not the row, so the arrow keys carry on from
+        // whichever request was clicked rather than needing a tab first.
+        $("log-table-wrap").focus({ preventScroll: true });
       });
       body.append(row);
     }
     $("log-shown").textContent = shown.length === rows.length
       ? `${rows.length} requests`
       : `${shown.length} of ${rows.length} requests`;
+    // The panes always describe a row the table is showing, so a filter that
+    // hides the selection moves it rather than leaving a stale request open.
+    const held = shown.find((entry) => entry.key === state.audit.logEntry?.key);
+    selectLogEntry(held || shown[0]);
   }
 
   function shortUrl(url) {
@@ -1964,50 +1991,232 @@
     } catch { return url; }
   }
 
-  function showLogEntry(entry) {
+  function selectLogEntry(entry, scroll = false) {
     state.audit.logEntry = entry;
-    const panel = $("log-detail");
-    panel.replaceChildren();
-    panel.hidden = false;
+    for (const row of $("log-rows").children) {
+      const active = Boolean(entry) && row.dataset.key === entry.key;
+      row.classList.toggle("active", active);
+      if (active && scroll) row.scrollIntoView({ block: "nearest" });
+    }
+    renderRequestPane(entry);
+    renderResponsePane(entry);
+  }
 
-    const head = el("div", "log-detail-head");
+  /** Move the selection by `step` rows through the filtered history. */
+  function stepLogEntry(step) {
+    if (!logShown.length) return;
+    const at = logShown.findIndex((entry) => entry.key === state.audit.logEntry?.key);
+    const next = at < 0 ? 0 : Math.min(Math.max(at + step, 0), logShown.length - 1);
+    selectLogEntry(logShown[next], true);
+  }
+
+  function currentTab(key, tabs) {
+    const stored = prefs.read(key, tabs[0][0]);
+    return tabs.some(([value]) => value === stored) ? stored : tabs[0][0];
+  }
+
+  /** The pane's own tab strip. Returns the tab that should be rendered. */
+  function paneTabs(container, tabs, key, redraw) {
+    const active = currentTab(key, tabs);
+    container.replaceChildren();
+    for (const [value, label] of tabs) {
+      const button = el("button", `cmd-tab${value === active ? " active" : ""}`, label);
+      button.type = "button";
+      button.addEventListener("click", () => { prefs.write(key, value); redraw(); });
+      container.append(button);
+    }
+    return active;
+  }
+
+  function headerCase(name) {
+    return String(name).split("-")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join("-");
+  }
+
+  function headerTable(headers, fallback) {
+    const table = el("div", "header-table");
+    const entries = Object.entries(headers || {});
+    for (const [name, value] of entries) {
+      table.append(el("div", "hk", headerCase(name)), el("div", "hv", value));
+    }
+    if (!entries.length) table.append(el("div", "hk", "-"), el("div", "hv", fallback || "none"));
+    return table;
+  }
+
+  function rawRequest(entry) {
+    let target = entry.url;
+    try {
+      const parsed = new URL(entry.url);
+      target = parsed.pathname + parsed.search;
+    } catch { /* not parseable: show the whole URL on the request line */ }
+    const lines = [`${entry.method} ${target || "/"} HTTP/1.1`];
+    for (const [name, value] of Object.entries(entry.request_headers || {})) {
+      lines.push(`${headerCase(name)}: ${value}`);
+    }
+    return `${lines.join("\n")}\n\n${entry.request_body || ""}`;
+  }
+
+  function rawResponse(entry) {
+    if (entry.error) return `No response: ${entry.error}`;
+    const reason = STATUS_TEXT[entry.status] ? ` ${STATUS_TEXT[entry.status]}` : "";
+    const lines = [`HTTP/1.1 ${entry.status}${reason}`];
+    for (const [name, value] of Object.entries(entry.response_headers || {})) {
+      lines.push(`${headerCase(name)}: ${value}`);
+    }
+    return `${lines.join("\n")}\n\n${entry.body_excerpt || ""}`;
+  }
+
+  // The raw views are built from the parsed exchange, so the reader is told
+  // not to treat them as a capture of the bytes that crossed the wire.
+  const RAW_NOTE = "Reconstructed from the captured exchange. Header order and casing are Namazu's, "
+    + "not the bytes on the wire, and credential headers are masked.";
+
+  /** How much of the body this entry carries, when the server sent more. */
+  function bodyNote(entry) {
+    const held = (entry.body_excerpt || "").replace(/…$/, "").length;
+    const total = entry.body_length || 0;
+    if (total <= held) return "";
+    return `The history keeps the first ${held.toLocaleString()} of ${total.toLocaleString()} characters.`;
+  }
+
+  function renderRequestPane(entry) {
+    const body = $("log-request-body");
+    body.replaceChildren();
+    $("log-request-copy").hidden = !entry;
+    if (!entry) {
+      $("log-request-tabs").replaceChildren();
+      body.append(el("p", "pane-note", "Select a request on the left to inspect it."));
+      return;
+    }
+    const tab = paneTabs($("log-request-tabs"), REQUEST_TABS, "log-request-tab",
+                         () => renderRequestPane(entry));
+    if (tab === "curl") {
+      body.append(commandBlock(entry.commands || { bash: entry.curl }, []));
+      body.append(el("p", "pane-note",
+        "Credentials are masked. Put the real value back before running it."));
+      return;
+    }
+    if (tab === "raw") {
+      const text = rawRequest(entry);
+      body.append(markedInto(el("pre", "raw-http"), text, bodyHighlights(text), { limit: 4 }));
+      body.append(el("p", "pane-note", RAW_NOTE));
+      return;
+    }
+    const head = el("div", "log-status");
     head.append(methodBadge(entry.method));
-    head.append(el("span", "mono log-detail-url", entry.url));
+    head.append(el("span", "mono", entry.url));
     head.append(el("span", "chip", entry.identity));
     if (entry.mutating) head.append(el("span", "chip warn", "wrote data"));
-    head.append(entry.error ? pill("error", "fail") : pill(`HTTP ${entry.status}`, statusKind(entry.status)));
-    panel.append(head);
-    panel.append(el("p", "hint pad", `${entry.endpoint} · ${entry.label}`));
-
-    panel.append(el("p", "proof-label", "reproduce"));
-    panel.append(commandBlock(entry.commands || { bash: entry.curl }, []));
-
-    panel.append(el("p", "proof-label", "request headers"));
-    const request = el("div", "header-table");
-    for (const [name, value] of Object.entries(entry.request_headers || {})) {
-      request.append(el("div", "hk", name), el("div", "hv", value));
-    }
-    panel.append(request);
+    body.append(head);
+    body.append(el("p", "hint pad", `${entry.endpoint} · ${entry.label}`));
+    body.append(el("p", "proof-label", "request headers"));
+    body.append(headerTable(entry.request_headers, "no headers recorded"));
     if (entry.request_body) {
-      panel.append(el("p", "proof-label", "request body"));
-      panel.append(el("pre", "code-block wrap", entry.request_body));
+      body.append(el("p", "proof-label", "request body"));
+      body.append(el("pre", "code-block wrap", prettyBody(entry.request_body)));
+    } else {
+      body.append(el("p", "pane-note", "This request has no body."));
     }
+  }
 
-    panel.append(el("p", "proof-label", "response headers"));
-    const response = el("div", "header-table");
-    for (const [name, value] of Object.entries(entry.response_headers || {})) {
-      response.append(el("div", "hk", name), el("div", "hv", value));
+  function renderResponsePane(entry) {
+    const body = $("log-response-body");
+    body.replaceChildren();
+    $("log-response-copy").hidden = !entry;
+    if (!entry) {
+      $("log-response-tabs").replaceChildren();
+      body.append(el("p", "pane-note", "Nothing to show yet."));
+      return;
     }
-    if (!Object.keys(entry.response_headers || {}).length) {
-      response.append(el("div", "hk", "-"), el("div", "hv", entry.error || "no response"));
+    const tab = paneTabs($("log-response-tabs"), RESPONSE_TABS, "log-response-tab",
+                         () => renderResponsePane(entry));
+    if (tab === "raw") {
+      const text = rawResponse(entry);
+      body.append(markedInto(el("pre", "raw-http"), text, bodyHighlights(text), { limit: 4 }));
+      const note = bodyNote(entry);
+      body.append(el("p", "pane-note", note ? `${RAW_NOTE} ${note}` : RAW_NOTE));
+      return;
     }
-    panel.append(response);
+    const head = el("div", "log-status");
+    head.append(entry.error ? pill("error", "fail")
+      : pill(`HTTP ${entry.status}${STATUS_TEXT[entry.status] ? ` ${STATUS_TEXT[entry.status]}` : ""}`,
+             statusKind(entry.status)));
+    head.append(el("span", "mono dim", `${humanBytes(entry.body_length || 0)} · ${
+      Number.isFinite(entry.elapsed_ms) ? `${Math.round(entry.elapsed_ms)} ms` : "no timing"}`));
+    if (entry.truncated) head.append(el("span", "chip warn", "capped at 512 KB"));
+    body.append(head);
+    if (entry.error) {
+      body.append(el("p", "pane-note", `The request did not complete: ${entry.error}.`));
+      return;
+    }
+    body.append(el("p", "proof-label", "response headers"));
+    body.append(headerTable(entry.response_headers, "no headers returned"));
     if (entry.body_excerpt) {
-      panel.append(el("p", "proof-label", `response body · ${humanBytes(entry.body_length || 0)}`));
-      panel.append(markedInto(el("pre", "code-block wrap"), entry.body_excerpt,
-        bodyHighlights(entry.body_excerpt), { limit: 4 }));
+      body.append(el("p", "proof-label", `response body · ${humanBytes(entry.body_length || 0)}`));
+      const text = prettyBody(entry.body_excerpt);
+      body.append(markedInto(el("pre", "code-block wrap"), text, bodyHighlights(text), { limit: 4 }));
+      const note = bodyNote(entry);
+      if (note) body.append(el("p", "pane-note", note));
+    } else {
+      body.append(el("p", "pane-note", "The response has an empty body."));
     }
-    renderLog();
+  }
+
+  /* pane sizing */
+
+  // Below this width three columns cannot hold a path and a body, so the panes
+  // stack and the gutters stop being handles. The breakpoint is in style.css too.
+  function stackedPanes() { return window.matchMedia("(max-width: 1250px)").matches; }
+
+  function paneWidth(which) {
+    const value = Number(prefs.read(`log-pane-${which}`, PANE_DEFAULTS[which]));
+    if (!Number.isFinite(value)) return PANE_DEFAULTS[which];
+    return Math.min(Math.max(value, PANE_MIN), 100 - 2 * PANE_MIN);
+  }
+
+  function applyPanes() {
+    const panes = $("log-panes");
+    panes.style.setProperty("--pane-a", `${paneWidth("a")}%`);
+    panes.style.setProperty("--pane-b", `${paneWidth("b")}%`);
+  }
+
+  function resizePane(which, percent) {
+    const other = paneWidth(which === "a" ? "b" : "a");
+    // Whatever is left over belongs to the response pane, which gets a floor too.
+    prefs.write(`log-pane-${which}`,
+                Math.min(Math.max(percent, PANE_MIN), 100 - other - PANE_MIN));
+    applyPanes();
+  }
+
+  function wireGutter(gutter, which) {
+    gutter.addEventListener("pointerdown", (event) => {
+      if (stackedPanes()) return;
+      event.preventDefault();
+      const rect = $("log-panes").getBoundingClientRect();
+      // Gutter B starts where pane A ends, so its drag is measured from there.
+      const offset = which === "a" ? 0 : paneWidth("a");
+      const move = (moved) => {
+        resizePane(which, ((moved.clientX - rect.left) / rect.width) * 100 - offset);
+      };
+      const release = () => {
+        gutter.classList.remove("dragging");
+        gutter.removeEventListener("pointermove", move);
+        gutter.removeEventListener("pointerup", release);
+        gutter.removeEventListener("pointercancel", release);
+        if (gutter.hasPointerCapture(event.pointerId)) gutter.releasePointerCapture(event.pointerId);
+      };
+      gutter.classList.add("dragging");
+      gutter.setPointerCapture(event.pointerId);
+      gutter.addEventListener("pointermove", move);
+      gutter.addEventListener("pointerup", release);
+      gutter.addEventListener("pointercancel", release);
+    });
+    gutter.addEventListener("keydown", (event) => {
+      const step = event.key === "ArrowLeft" ? -2 : event.key === "ArrowRight" ? 2 : 0;
+      if (!step || stackedPanes()) return;
+      event.preventDefault();
+      resizePane(which, paneWidth(which) + step);
+    });
   }
 
   function absorbLog(result, endpoint) {
@@ -2048,22 +2257,57 @@
     toast("Request log exported.");
   }
 
+  function showTraffic() {
+    state.audit.finding = null;
+    activateSection("audit");
+    showView("view-audit-log");
+    applyPanes();
+    renderLog();
+  }
+
+  function showAuditReport() {
+    state.audit.finding = null;
+    showView("view-audit-report");
+    renderFindings();
+  }
+
   function wireLog() {
     $("log-search").addEventListener("input", renderLog);
     $("log-filter").addEventListener("change", renderLog);
     $("export-log").addEventListener("click", exportLog);
-    $("audit-log").addEventListener("click", () => {
-      state.audit.finding = null;
-      activateSection("audit");
-      showView("view-audit-log");
-      renderLog();
+    $("audit-log").addEventListener("click", showTraffic);
+    $("report-traffic").addEventListener("click", showTraffic);
+    $("report-here").addEventListener("click", showAuditReport);
+    $("log-back").addEventListener("click", showAuditReport);
+    $("log-here").addEventListener("click", () => $("log-table-wrap").focus());
+    $("log-request-copy").addEventListener("click", () => {
+      if (state.audit.logEntry) copyText(rawRequest(state.audit.logEntry), "Request");
     });
-    $("log-back").addEventListener("click", () => {
-      showView("view-audit-report");
-      renderFindings();
+    $("log-response-copy").addEventListener("click", () => {
+      if (state.audit.logEntry) copyText(rawResponse(state.audit.logEntry), "Response");
     });
+    $("log-reset-panes").addEventListener("click", () => {
+      for (const which of ["a", "b"]) prefs.clear(`log-pane-${which}`);
+      applyPanes();
+    });
+    wireGutter($("log-gutter-a"), "a");
+    wireGutter($("log-gutter-b"), "b");
+    // One request at a time, the way a history list is read.
+    $("log-table-wrap").addEventListener("keydown", (event) => {
+      const moves = { ArrowDown: 1, ArrowUp: -1, PageDown: 10, PageUp: -10 };
+      if (event.key in moves) {
+        event.preventDefault();
+        stepLogEntry(moves[event.key]);
+      } else if (event.key === "Home" && logShown.length) {
+        event.preventDefault();
+        selectLogEntry(logShown[0], true);
+      } else if (event.key === "End" && logShown.length) {
+        event.preventDefault();
+        selectLogEntry(logShown[logShown.length - 1], true);
+      }
+    });
+    applyPanes();
   }
-
   /* ───────────────────────── security audit ───────────────────────── */
 
   const identityKv = createKv("identity-b-rows", { noun: "Header", onChange: () => updateIdentityState() });

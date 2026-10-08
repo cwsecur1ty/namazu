@@ -28,7 +28,7 @@ are, and admitting what it does not prove.
 | **Evidence first** | Every finding carries the exchanges that produced it, with a redacted `curl` for bash, PowerShell and cmd. |
 | **Honest confidence** | `confirmed`, `probable` or `possible`, plus a **Limitations** section saying what the finding does *not* establish. |
 | **Controls, not guesses** | Injection probes ship with a decoy control; a finding fires only when the payload and the decoy behave differently. |
-| **A full request log** | Every request the audit sent, in order, whether or not it produced a finding. |
+| **A full request log** | Every request the audit sent, in order, whether or not it produced a finding, in a three-pane history / request / response view. |
 | **Nothing silent** | Budget reached, write probes refused, tool missing: it is in the report, not swallowed. |
 
 <br>
@@ -269,13 +269,23 @@ a command that prints the exact part of the document instead:
 curl -s https://api.example.com/openapi.json | jq '.components.securitySchemes.legacy.flows.implicit'
 ```
 
-## Request log
+## Traffic
 
-**Audit → Log** lists every request sent, in order: the 404 calibration, the
+**Audit → Traffic** is three panes: the request history, and beside it the
+request and the response for whichever row is selected.
+
+The history lists every request sent, in order: the 404 calibration, the
 inventory sweep, the baseline, each probe and each control. Columns are
 sequence, method, path, which probe sent it, status, size and time. Filter to
-probes, errors or state-changing requests. Selecting a row shows the full
-exchange and its reproduction command.
+probes, errors or state-changing requests, and walk the list with the arrow
+keys.
+
+The request and response panes each offer **Pretty** and **Raw**; the request
+pane also carries the reproduction command for bash, PowerShell and cmd. Raw is
+rebuilt from the captured exchange rather than being a capture of the bytes on
+the wire, and the pane says so. Credential headers are masked in both. Drag
+either gutter to resize, or focus it and use the arrow keys; the widths are
+remembered.
 
 This is the record of what the tool actually did, which is what you need when a
 finding is disputed or when something on the target breaks mid-test.
@@ -353,7 +363,7 @@ interpolated into a quoted string on an engine that has a sleep function.
 node --check namazu/static/app.js
 ```
 
-390 tests across 93 checks, about 90 seconds to run, most of which is the
+400 tests across 93 checks, about 90 seconds to run, most of which is the
 time-based SQL tests waiting for real delays. Detections are asserted in both
 directions: a check fires on the broken handler, and stays silent on the correct
 one. Where a check rests on a control, the test asserts the control is what
