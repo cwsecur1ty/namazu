@@ -28,6 +28,13 @@ from dataclasses import dataclass
 
 STATES = ("completed", "blocked", "skipped", "inconclusive", "not-applicable", "attempted")
 
+# Which state wins when two are recorded for one check. Most serious first, so
+# a gap can never be overwritten by a later success: a check blocked on one
+# endpoint and completed on another has a gap, and that is what the report has
+# to show. The browser labels a check across endpoints with the same order.
+PRECEDENCE = ("blocked", "inconclusive", "completed", "not-applicable", "skipped",
+              "attempted")
+
 # Every probe family the engine can run, with what it needs and what it means.
 # ``needs_baseline`` marks the families whose conclusions are drawn by comparing
 # a probe response against a working baseline; those are exactly the ones that
@@ -156,58 +163,62 @@ class Entry:
 class Ledger:
     """The coverage record for one operation, or for a sweep.
 
-    Nothing writes a state twice: a probe family that has already been blocked
-    cannot later be recorded as completed, because the first decision is the
-    one that explains the result.
+    A check can be recorded more than once, across endpoints or as a run
+    narrows down what it could do. :data:`PRECEDENCE` decides which state
+    survives, and it is ordered so that a gap always does: a family blocked on
+    one operation cannot end the run looking completed because it ran on
+    another.
     """
 
     def __init__(self) -> None:
         self._entries: dict[str, Entry] = {}
         self._order: list[str] = []
 
-    def _set(self, check: str, state: str, reason: str = "", remediation: str = "") -> None:
-        if check not in self._entries:
+    def _record(self, check: str, state: str, reason: str = "",
+                remediation: str = "") -> Entry:
+        """Record a state, keeping whichever of the two is more serious.
+
+        One precedence rule rather than a rule per method, so the outcome does
+        not depend on the order the engine happens to call these in. It is the
+        same order the browser uses to label a check across several endpoints:
+        a gap must not be able to be overwritten by a later success.
+        """
+        entry = self._entries.get(check)
+        if entry is None:
             self._order.append(check)
             self._entries[check] = Entry(check, state, reason, remediation)
-            return
-        entry = self._entries[check]
-        # attempted is a placeholder: anything real replaces it.
-        if entry.state == "attempted" and state != "attempted":
-            entry.state, entry.reason, entry.remediation = state, reason, remediation
+            return self._entries[check]
+        if PRECEDENCE.index(state) <= PRECEDENCE.index(entry.state):
+            entry.state = state
+            # Only overwrite the explanation when there is one, so a bare
+            # complete() after a reasoned state does not blank the reason.
+            if reason:
+                entry.reason = reason
+            if remediation:
+                entry.remediation = remediation
+        return entry
 
     def attempt(self, check: str) -> None:
-        self._set(check, "attempted")
+        self._record(check, "attempted")
 
     def complete(self, check: str, *, findings: int = 0, requests: int = 0) -> None:
-        self._set(check, "completed")
-        entry = self._entries[check]
-        entry.state = "completed" if entry.state == "attempted" else entry.state
+        entry = self._record(check, "completed")
+        # Counted whatever the state settled on. A check blocked on one
+        # endpoint and productive on another still found what it found.
         entry.findings += findings
         entry.requests += requests
 
     def block(self, check: str, reason: str, remediation: str = "") -> None:
-        self._set(check, "blocked", reason, remediation)
-        self._entries[check].state = "blocked"
-        self._entries[check].reason = reason
-        self._entries[check].remediation = remediation
+        self._record(check, "blocked", reason, remediation)
 
     def skip(self, check: str, reason: str) -> None:
-        self._set(check, "skipped", reason)
-        if self._entries[check].state in ("attempted", "skipped"):
-            self._entries[check].state = "skipped"
-            self._entries[check].reason = reason
+        self._record(check, "skipped", reason)
 
     def inconclusive(self, check: str, reason: str, remediation: str = "") -> None:
-        self._set(check, "inconclusive", reason, remediation)
-        self._entries[check].state = "inconclusive"
-        self._entries[check].reason = reason
-        self._entries[check].remediation = remediation
+        self._record(check, "inconclusive", reason, remediation)
 
     def not_applicable(self, check: str, reason: str) -> None:
-        self._set(check, "not-applicable", reason)
-        if self._entries[check].state == "attempted":
-            self._entries[check].state = "not-applicable"
-            self._entries[check].reason = reason
+        self._record(check, "not-applicable", reason)
 
     def state(self, check: str) -> str:
         entry = self._entries.get(check)

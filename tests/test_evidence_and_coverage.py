@@ -1223,3 +1223,78 @@ def test_the_creation_states_are_the_ones_the_runner_can_produce():
     """A fourth state appearing in run_sequence without being listed here would
     reach a report with nothing documenting what it means."""
     assert set(matrix.CREATION) == {"created", "possibly-created", "attempted"}
+
+
+# ── the coverage ledger's one precedence rule ──────────────────────────────
+
+def test_the_precedence_order_lists_every_state():
+    """A state missing from it raises ValueError on the second record of a
+    check, which would surface as an audit crash rather than a wrong label."""
+    assert set(coverage.PRECEDENCE) == set(coverage.STATES)
+
+
+def test_a_gap_cannot_be_overwritten_by_a_later_success():
+    """The rule the whole ledger rests on. A family blocked on one operation
+    and completed on another has a gap, and that is what has to be shown."""
+    ledger = coverage.Ledger()
+    ledger.block("authorization", "the baseline was refused", "use an entitled identity")
+    ledger.complete("authorization", findings=2)
+    assert ledger.state("authorization") == "blocked"
+    entry = next(item for item in ledger.entries() if item.check == "authorization")
+    assert entry.reason == "the baseline was refused"
+    assert entry.remediation == "use an entitled identity"
+    # The findings it did produce are still counted. A check blocked on one
+    # route and productive on another still found what it found.
+    assert entry.findings == 2
+
+
+def test_the_order_the_engine_calls_in_cannot_change_the_outcome():
+    forwards, backwards = coverage.Ledger(), coverage.Ledger()
+    forwards.complete("input-handling", findings=1)
+    forwards.block("input-handling", "budget spent")
+    backwards.block("input-handling", "budget spent")
+    backwards.complete("input-handling", findings=1)
+    assert forwards.state("input-handling") == backwards.state("input-handling") == "blocked"
+
+
+def test_a_bare_complete_does_not_blank_an_explanation():
+    ledger = coverage.Ledger()
+    ledger.inconclusive("cross-identity", "the second identity is the same caller")
+    ledger.complete("cross-identity")
+    entry = next(item for item in ledger.entries() if item.check == "cross-identity")
+    assert entry.state == "inconclusive"
+    assert entry.reason == "the second identity is the same caller"
+
+
+@pytest.mark.parametrize("first,second,expected", [
+    ("attempted", "completed", "completed"),
+    ("completed", "skipped", "completed"),
+    ("skipped", "not-applicable", "not-applicable"),
+    ("not-applicable", "inconclusive", "inconclusive"),
+    ("inconclusive", "blocked", "blocked"),
+    ("blocked", "inconclusive", "blocked"),
+])
+def test_each_pair_of_states_settles_the_same_way_whichever_arrives_first(
+        first, second, expected):
+    call = {"attempted": lambda led, name: led.attempt(name),
+            "completed": lambda led, name: led.complete(name),
+            "skipped": lambda led, name: led.skip(name, "r"),
+            "not-applicable": lambda led, name: led.not_applicable(name, "r"),
+            "inconclusive": lambda led, name: led.inconclusive(name, "r"),
+            "blocked": lambda led, name: led.block(name, "r")}
+    ledger = coverage.Ledger()
+    call[first](ledger, "posture")
+    call[second](ledger, "posture")
+    assert ledger.state("posture") == expected
+
+
+def test_every_check_the_engine_can_run_is_declared():
+    """A family the engine records but the table does not know renders with no
+    title and no description, so a reader cannot tell what did not run."""
+    import re
+    from pathlib import Path
+    source = Path("namazu/audit/engine.py").read_text(encoding="utf-8")
+    named = set(re.findall(r'(?:family|ledger\.(?:complete|block|skip|inconclusive|'
+                           r'not_applicable|attempt))\(\s*"([a-z-]+)"', source))
+    unknown = sorted(named - set(coverage.CHECKS))
+    assert not unknown, f"engine.py records checks coverage.py does not declare: {unknown}"
