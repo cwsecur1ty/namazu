@@ -269,7 +269,11 @@ def _tokens(exchange: Exchange, endpoint: str) -> list:
         if serious:
             out.append(finding(
                 "jwt.forgeable-in-response", "Response body returns a forgeable JWT",
-                "critical", "confirmed", owasp="API2:2023 Broken Authentication", endpoint=endpoint,
+                "critical", "confirmed", verification="observed",
+            confirmed_claim=(
+                "A token in the response body was decoded and shown to be forgeable offline. No forged token "
+                "was sent, so this does not establish that the server would accept one."),
+            owasp="API2:2023 Broken Authentication", endpoint=endpoint,
                 detail="A JWT returned in the response body can be forged offline: "
                        + "; ".join(w["detail"] for w in serious),
                 impact="Anyone who can read this response can mint tokens for any user.",

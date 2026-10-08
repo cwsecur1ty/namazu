@@ -424,7 +424,11 @@ def probe_authorization_server(*, authorization_endpoint: str, client_id: str, r
         if probe.status in (301, 302, 303, 307, 308) and evil_host in location:
             findings.append(finding(
                 "oauth.redirect-not-validated", "Authorization server redirects to an unregistered URI",
-                "critical", "confirmed", owasp="API2:2023 Broken Authentication",
+                "critical", "confirmed", verification="impact-demonstrated",
+            confirmed_claim=(
+                "The authorization endpoint answered with a Location header pointing at a host that cannot "
+                "have been registered for this client."),
+            owasp="API2:2023 Broken Authentication",
                 endpoint=f"GET {authorization_endpoint}", parameter="redirect_uri",
                 method=("Sent one authorization request with redirect_uri set to a host that cannot be "
                         "registered, and read the Location header without following it."),

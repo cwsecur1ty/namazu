@@ -38,6 +38,48 @@ _VOLATILE = [
 ]
 
 
+# JavaScript has one number type and it is a double, so JSON.parse silently
+# rounds any integer past 2**53-1. A schemathesis seed is 128 bits wide, and a
+# real export carried 2.315194611349191e+38 where the seed had been
+# 231519461134919091197611956279382553858: still a number, no longer the seed,
+# and useless for reproducing anything. Anything outside the safe range is
+# therefore exported as a decimal string, which survives Python, JavaScript,
+# JSON and a round trip through a file exactly.
+JS_MAX_SAFE_INTEGER = 2 ** 53 - 1
+
+
+def json_safe(value):
+    """``value`` with every integer JavaScript cannot hold exactly turned into a string."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and abs(value) > JS_MAX_SAFE_INTEGER:
+        return str(value)
+    if isinstance(value, dict):
+        return {key: json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_safe(item) for item in value]
+    return value
+
+
+def big_int(value) -> int | None:
+    """An integer read back from an export, whether it arrived as a string or a number.
+
+    A float is refused rather than truncated. By the time a wide integer has
+    been through a double it is a different number, and quietly accepting it
+    would reproduce the bug this pair of functions exists to prevent.
+    """
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value) if value.is_integer() and abs(value) <= JS_MAX_SAFE_INTEGER else None
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
 def normalize_body(body: str, limit: int = 4000) -> str:
     """Strip volatile tokens and collapse whitespace so two bodies compare stably."""
     text = (body or "")[:limit]
@@ -243,12 +285,35 @@ class Finding:
     # whole origin (headers, TLS, CORS middleware) and must not be re-reported
     # once per endpoint.
     scope: str = "operation"
+    # What kind of defect this is, where the evidence came from, how far it was
+    # taken, and which rule settled the severity. See audit/evidence.py.
+    assessment: object | None = None
+    # Captured cases behind this finding: a failing exchange and everything
+    # needed to send it again. See audit/capture.py.
+    cases: list = field(default_factory=list)
+    # Where this finding came from when several sources were merged into it.
+    provenance: list = field(default_factory=list)
+    # Set when correlation judged two findings the same, or possibly the same.
+    duplicate_of: str = ""
+    duplicate_confidence: str = ""
 
     def sort_key(self) -> tuple:
         return (SEVERITY_RANK.get(self.severity, 9), CONFIDENCE_RANK.get(self.confidence, 9), self.id)
 
+    @property
+    def category(self) -> str:
+        return getattr(self.assessment, "category", "") or ""
+
+    @property
+    def origin(self) -> str:
+        return getattr(self.assessment, "origin", "") or ""
+
+    @property
+    def verification(self) -> str:
+        return getattr(self.assessment, "verification", "") or ""
+
     def to_dict(self) -> dict:
-        return {
+        out = {
             "id": self.id,
             "title": self.title,
             "severity": self.severity,
@@ -268,18 +333,36 @@ class Finding:
             "highlights": self.highlights,
             "commands": self.commands,
             "scope": self.scope,
-            "evidence": self.evidence,
+            "evidence": json_safe(self.evidence),
             "proof": [exchange.to_dict() for exchange in self.exchanges],
             "mutating": self.mutating,
         }
+        if self.assessment is not None:
+            out["assessment"] = self.assessment.to_dict()
+        if self.cases:
+            out["cases"] = [case.to_dict() if hasattr(case, "to_dict") else case
+                            for case in self.cases]
+        if self.provenance:
+            out["provenance"] = list(self.provenance)
+        if self.duplicate_of:
+            out["duplicate_of"] = self.duplicate_of
+            out["duplicate_confidence"] = self.duplicate_confidence or "possible"
+        return out
 
 
-def finding(id: str, title: str, severity: str, confidence: str, **kwargs) -> Finding:
+def finding(id: str, title: str, severity: str, confidence: str, *, category: str = "",
+            origin: str = "", verification: str = "", confirmed_claim: str = "",
+            mapping_basis: str = "", source_severity=None, **kwargs) -> Finding:
     """Build a finding, filling CWE, references and the default method from the catalogue.
 
     A probe that can describe its own procedure more precisely passes ``method=``
     and keeps it; otherwise the catalogue's default sentence is used.
+
+    ``severity`` is what the probe assesses. The severity the finding ends up
+    with is what :mod:`evidence` rules permit for the kind of evidence behind
+    it, which can be lower; the finding records both and names the rule.
     """
+    from . import evidence as ev
     from .catalogue import decorate
 
     if severity not in SEVERITIES:
@@ -302,7 +385,17 @@ def finding(id: str, title: str, severity: str, confidence: str, **kwargs) -> Fi
     kwargs.setdefault("references", reference["references"])
     if not kwargs.get("method"):
         kwargs["method"] = reference["method"]
-    return Finding(id=id, title=title, severity=severity, confidence=confidence, **kwargs)
+
+    assessment, settled = ev.build(
+        id, severity=severity, confidence=confidence, category=category, origin=origin,
+        verification=verification, confirmed_claim=confirmed_claim,
+        mapping_basis=mapping_basis or reference.get("mapping_basis") or "",
+        source_severity=source_severity,
+        has_exchanges=bool(kwargs.get("exchanges") or kwargs.get("cases")),
+        has_cwe=bool(kwargs.get("cwe")), has_owasp=bool(kwargs.get("owasp")),
+    )
+    return Finding(id=id, title=title, severity=settled, confidence=confidence,
+                   assessment=assessment, **kwargs)
 
 
 def mark(text, kind: str = "weak", note: str = "") -> dict:

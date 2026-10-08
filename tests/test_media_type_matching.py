@@ -170,9 +170,21 @@ def test_the_audit_calls_a_suffix_mismatch_information_not_a_defect():
 
 
 def test_the_audit_still_calls_a_real_mismatch_a_defect():
+    """Still reported, and still a defect, but a documentation one.
+
+    An undocumented media type is a real disagreement between an
+    implementation and its contract, and the severity now says which kind of
+    defect that is: the finding is categorised as a contract defect and its
+    security severity is informational. The reason it is worth fixing is that a
+    client written to the contract will not handle it, which is not a security
+    consequence, so a security severity would be borrowed authority.
+    """
     hit = next(item for item in _audit(["application/json"], content_type="text/csv", body="a,b")
                if item.id == "contract.content-type-mismatch")
-    assert hit.severity == "low"
+    assert hit.assessment.category == "contract"
+    assert hit.severity == "info"
+    assert hit.assessment.severity_rule == "contract-defect-is-informational"
+    assert hit.assessment.proposed_severity == "low"
     assert "match" not in hit.evidence
 
 

@@ -136,24 +136,69 @@ CHEAT = {
 STATIC = "Read from the imported contract. No request was sent for this finding."
 BASELINE = "Observed in the operation's baseline response. No extra request was sent."
 
-# id -> cwe, references, default method sentence.
+# The relationship a static finding's CWE claims, stated so a reader can judge
+# the mapping rather than trust it. Required for every statically derived check
+# that carries one, because that is where a mapping asserts a mechanism nobody
+# observed. See namazu/audit/evidence.py.
+DECLARES = "The document declares it; this maps what the declaration describes, not observed behaviour."
+
+# id -> cwe, references, default method sentence, and the mapping's basis.
 CATALOGUE: dict[str, dict] = {
     # ── contract analysis ────────────────────────────────────────────────
-    "spec.unauthenticated-write": {"cwe": 306, "refs": [CHEAT["authz"], RFC["oas"]], "method": STATIC},
-    "spec.deprecated-operation": {"cwe": 1059, "refs": [RFC["oas"]], "method": STATIC},
-    "spec.mass-assignment-surface": {"cwe": 915, "refs": [CHEAT["massassign"]], "method": STATIC},
-    "spec.ssrf-surface": {"cwe": 918, "refs": [CHEAT["ssrf"]], "method": STATIC},
-    "spec.unbounded-pagination": {"cwe": 770, "refs": [CHEAT["ratelimit"]], "method": STATIC},
-    "spec.sensitive-response-field": {"cwe": 200, "refs": [CHEAT["rest"]], "method": STATIC},
-    "spec.apikey-in-query": {"cwe": 598, "refs": [CHEAT["rest"]], "method": STATIC},
-    "spec.basic-auth": {"cwe": 522, "refs": [CHEAT["rest"]], "method": STATIC},
-    "spec.oauth-implicit-flow": {"cwe": 598, "refs": [RFC["oauth-bcp"], RFC["oauth21"], RFC["pkce"]],
+    "spec.unauthenticated-write": {"cwe": 306, "refs": [CHEAT["authz"], RFC["oas"]], "method": STATIC,
+                                   "basis": "The operation declares a state-changing method with no "
+                                            "security requirement, which is what CWE-306 describes. "
+                                            "Whether the server enforces one anyway was not tested."},
+    "spec.deprecated-operation": {"cwe": 1059, "refs": [RFC["oas"]], "method": STATIC, "basis": DECLARES},
+    "spec.mass-assignment-surface": {"cwe": 915, "refs": [CHEAT["massassign"]], "method": STATIC,
+                                     "basis": "The request schema accepts a property that names a "
+                                              "privilege or an owner, which is the surface CWE-915 "
+                                              "describes. No request was sent, so nothing establishes "
+                                              "that the server honours it."},
+    "spec.ssrf-surface": {"cwe": 918, "refs": [CHEAT["ssrf"]], "method": STATIC,
+                          "basis": "A declared parameter takes a URL the server would fetch, which is "
+                                   "the surface CWE-918 describes, not a demonstrated fetch."},
+    "spec.unbounded-pagination": {"cwe": 770, "refs": [CHEAT["ratelimit"]], "method": STATIC,
+                                  "basis": "The collection declares no maximum page size, which is the "
+                                           "allocation-without-limit shape of CWE-770. No request "
+                                           "tested what the server actually returns."},
+    "spec.sensitive-response-field": {"cwe": 200, "refs": [CHEAT["rest"]], "method": STATIC,
+                                      "basis": "A response schema names a field whose contents would be "
+                                               "sensitive if populated. CWE-200 describes the exposure; "
+                                               "no response was read to confirm one."},
+    "spec.apikey-in-query": {"cwe": 598, "refs": [CHEAT["rest"]], "method": STATIC,
+                             "basis": "The scheme places the credential in the query string, which is "
+                                      "exactly the mechanism CWE-598 names. The location is declared "
+                                      "in the document, so the mapping does not depend on behaviour."},
+    "spec.basic-auth": {"cwe": 522, "refs": [CHEAT["rest"]], "method": STATIC,
+                        "basis": "HTTP Basic transmits a reusable password on every request, which is "
+                                 "the protection failure CWE-522 describes."},
+    # No CWE. The implicit grant returns its token in a URL fragment, and the
+    # fragment is not sent to a server: CWE-598, "sensitive information in a
+    # query string", names a mechanism that applies only if this implementation
+    # uses the query string instead, which a static read cannot determine. That
+    # contradiction shipped in a real report, and the finding's own limitations
+    # said so. Leaving it unmapped is the honest answer until the authorization
+    # server is tested.
+    "spec.oauth-implicit-flow": {"cwe": None, "refs": [RFC["oauth-bcp"], RFC["oauth21"], RFC["pkce"]],
                                  "method": STATIC},
-    "spec.oauth-password-flow": {"cwe": 522, "refs": [RFC["oauth-bcp"], RFC["oauth21"]], "method": STATIC},
-    "spec.oauth-no-pkce": {"cwe": 287, "refs": [RFC["pkce"], RFC["oauth-bcp"]], "method": STATIC},
-    "spec.oauth-broad-scope": {"cwe": 285, "refs": [RFC["oauth-bcp"]], "method": STATIC},
-    "spec.no-auth-defined": {"cwe": 306, "refs": [RFC["oas"], CHEAT["rest"]], "method": STATIC},
-    "spec.cleartext-server": {"cwe": 319, "refs": [CHEAT["tls"]], "method": STATIC},
+    "spec.oauth-password-flow": {"cwe": 522, "refs": [RFC["oauth-bcp"], RFC["oauth21"]], "method": STATIC,
+                                 "basis": "The grant requires the client to handle the end user's "
+                                          "password directly, which is the handling CWE-522 describes."},
+    "spec.oauth-no-pkce": {"cwe": 287, "refs": [RFC["pkce"], RFC["oauth-bcp"]], "method": STATIC,
+                           "basis": "An authorization code flow without PKCE lets an intercepted code "
+                                    "be redeemed by whoever holds it. CWE-287 covers the authentication "
+                                    "weakness; the declaration is what was read, not an interception."},
+    "spec.oauth-broad-scope": {"cwe": 285, "refs": [RFC["oauth-bcp"]], "method": STATIC,
+                               "basis": "The declared scopes do not separate read from write, which is "
+                                        "the authorization granularity CWE-285 describes."},
+    "spec.no-auth-defined": {"cwe": 306, "refs": [RFC["oas"], CHEAT["rest"]], "method": STATIC,
+                             "basis": "The document defines no security scheme at all, which is the "
+                                      "missing-authentication shape of CWE-306 as documented. The "
+                                      "server may still require credentials."},
+    "spec.cleartext-server": {"cwe": 319, "refs": [CHEAT["tls"]], "method": STATIC,
+                              "basis": "A declared server URL uses http://, so anything sent to it "
+                                       "travels in cleartext, which is what CWE-319 describes."},
 
     # ── transport and headers ────────────────────────────────────────────
     "transport.cleartext": {"cwe": 319, "refs": [CHEAT["tls"]], "method": BASELINE},
@@ -280,6 +325,7 @@ def decorate(finding_id: str) -> dict:
         "cwe": f"CWE-{cwe}: {CWE_NAMES.get(cwe, '')}".rstrip(": ") if cwe else None,
         "references": list(entry.get("refs") or []),
         "method": entry.get("method") or "",
+        "mapping_basis": entry.get("basis") or "",
         **extra,
     }
 

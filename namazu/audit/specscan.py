@@ -313,8 +313,22 @@ def _oauth_scheme(name: str, scheme: dict) -> list:
         authorize = implicit.get("authorizationUrl") or "(no authorizationUrl declared)"
         scopes = _scope_names(implicit)
         out.append(finding(
-            "spec.oauth-implicit-flow", "OAuth2 implicit flow is offered",
+            "spec.oauth-implicit-flow", "OAuth2 implicit flow is advertised in the specification",
             "medium", "confirmed", owasp="API2:2023 Broken Authentication", parameter=name,
+            # A hardening concern, not a weakness: the deprecated grant is
+            # advertised, and nothing here establishes that the authorization
+            # server offers it. The severity rules lower this to low on the
+            # static origin, which is the honest ceiling for a declaration.
+            category="hardening", origin="static-declaration", verification="unverified",
+            confirmed_claim=(
+                f"What is confirmed is the declaration: {pointer}/implicit exists in the imported "
+                "document. Not confirmed, and not tested: that the authorization server offers the "
+                "implicit grant, that it would issue a token through it, or that any client uses it."),
+            mapping_basis=(
+                "API2:2023 names the area of concern, which is the choice of authentication flow. It "
+                "is not a claim that authentication was bypassed. No CWE is attached: the mechanism "
+                "depends on whether a token would come back in the URL fragment or the query string, "
+                "and a static read cannot tell which."),
             method=(f"Read {pointer}/implicit in the imported document. The presence of the implicit "
                     "object is the finding; no request was sent to the authorization server."),
             detail=(

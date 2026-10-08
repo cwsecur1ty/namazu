@@ -517,7 +517,13 @@ def test_implicit_and_password_flows_are_separate_detailed_findings():
     }, BASE)
     findings = {f.id: f for f in specscan.review_document(spec)}
     implicit = findings["spec.oauth-implicit-flow"]
-    assert implicit.cwe.startswith("CWE-598")
+    # No CWE. CWE-598 names a query-string mechanism this finding cannot
+    # establish, and the mapping used to contradict the finding's own
+    # limitations. See the catalogue entry.
+    assert implicit.cwe is None
+    assert implicit.assessment.category == "hardening"
+    assert implicit.assessment.origin == "static-declaration"
+    assert "declaration" in implicit.assessment.confirmed_claim
     assert implicit.evidence["json_pointer"].endswith("/flows/implicit")
     assert implicit.evidence["authorization_url"] == "https://id.example.test/authorize"
     assert "code_challenge" in implicit.remediation
@@ -1050,10 +1056,17 @@ def test_schemathesis_failures_become_findings():
     findings = _schemathesis_findings(report)
     assert len(findings) == 3  # one per operation
     auth = next(f for f in findings if f.id == "schemathesis.ignored-auth")
-    assert auth.severity == "high"            # schemathesis critical maps down
+    # schemathesis called it critical; Namazu maps that to high for its own
+    # scale, and then the evidence rules lower it to medium because nothing
+    # here was reproduced. The tool's own rating is preserved separately.
+    assert auth.severity == "medium"
+    assert auth.assessment.severity_rule == "unreproduced-external-report-is-medium"
+    assert auth.assessment.proposed_severity == "high"
+    assert auth.assessment.source_severity[0].to_dict() == {
+        "tool": "schemathesis", "severity": "critical"}
     assert auth.confidence == "probable"      # Namazu did not verify it
     assert "did not re-verify" in auth.limitations or "not re-verified" in auth.limitations
-    assert auth.evidence["seed"] == 42
+    assert auth.evidence["seed"] == "42"
     assert "--seed 42" in auth.evidence["reproduce"]
     assert auth.endpoint == "GET /orders/{id}"
 
@@ -1077,7 +1090,12 @@ def test_nuclei_matches_become_findings_and_repeat_matchers_merge():
     merged = next(f for f in findings if f.id == "nuclei.missing-headers")
     assert merged.evidence["matchers"] == ["x-frame-options", "content-security-policy"]
     cve = next(f for f in findings if f.id == "nuclei.cve-2021-1234")
-    assert cve.severity == "high"
+    # The template author rated it high. Namazu has not re-sent the request,
+    # so it reports medium and keeps the template's rating as source metadata.
+    assert cve.severity == "medium"
+    assert cve.assessment.source_severity[0].to_dict() == {
+        "tool": "nuclei", "severity": "high"}
+    assert cve.assessment.mapping_basis.startswith("The CWE and severity are the template")
     assert cve.confidence == "probable"
     assert cve.evidence["cve"] == "CVE-2021-1234"
     assert cve.cwe == "CWE-89"
@@ -1361,7 +1379,8 @@ def test_server_error_on_a_contract_valid_request_is_reported():
     with _client(lambda r: httpx.Response(500, text="boom")) as client:
         result = audit_operation(spec, "GET /thing", base_url=BASE, client=client)
     hit = next(f for f in result["findings"] if f["id"] == "contract.server-error")
-    assert hit["severity"] == "medium"
+    assert hit["severity"] == "low"
+    assert hit["assessment"]["category"] == "reliability"
     assert "contract.undocumented-status" not in _ids(result)  # the 500 is the better finding
 
 

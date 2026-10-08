@@ -638,7 +638,11 @@ def _template_injection(executor, baseline, endpoint, field, base_headers) -> li
             continue
         return [finding(
             "input.template-injection", "Parameter is evaluated by a template engine",
-            "critical", "confirmed", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
+            "critical", "confirmed", verification="impact-demonstrated",
+            confirmed_claim=(
+                "Two different arithmetic expressions were each evaluated by the server and their results "
+                "returned in the response, so the parameter reaches a template engine."),
+            owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
             parameter=field,
             method=(f"Sent {first_payload} and {second_payload} in turn, requiring 217 and 369 in the "
                     "responses with the expressions themselves absent. Two independent products rule "
@@ -730,7 +734,10 @@ def _traversal(executor, baseline, endpoint, field, base_headers) -> list:
         return []
     return [finding(
         "input.path-traversal", "Parameter reads a file outside the intended directory",
-        "critical", "confirmed", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
+        "critical", "confirmed", verification="impact-demonstrated",
+            confirmed_claim=(
+                "A relative path escaping the expected directory returned the contents of a file outside it."),
+            owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
         parameter=field,
         method=("Sent a relative path escaping the expected directory and matched the response "
                 "against a known system-file signature."),
@@ -808,7 +815,11 @@ def mass_assignment(executor: Executor, *, built: dict, endpoint: str, base_head
     if confirmed:
         return [finding(
             "input.mass-assignment-confirmed", "Privileged property supplied by the client was stored",
-            "critical", "confirmed", owasp="API3:2023 Broken Object Property Level Authorization",
+            "critical", "confirmed", verification="impact-demonstrated",
+            confirmed_claim=(
+                "A privileged property supplied by the client was stored and read back from the object "
+                "afterwards."),
+            owasp="API3:2023 Broken Object Property Level Authorization",
             endpoint=endpoint, parameter=", ".join(confirmed), mutating=True,
             method=("Added privileged properties to an otherwise valid request body, then read the object "
                     "back in a separate request and confirmed the supplied values had been stored."),
@@ -913,7 +924,11 @@ def write_authorization(executor: Executor, *, built: dict, endpoint: str, base_
         return []
     return [finding(
         "authz.write-bfla", "Second identity completed a write on another identity's resource",
-        "critical", "confirmed", owasp="API5:2023 Broken Function Level Authorization",
+        "critical", "confirmed", verification="impact-demonstrated",
+            confirmed_claim=(
+                "The second identity's credential completed a write against a resource belonging to the first "
+                "identity."),
+            owasp="API5:2023 Broken Function Level Authorization",
         endpoint=endpoint, mutating=True,
         method=("Repeated the write with the second identity's credentials against a resource "
                 "addressed for the first identity, and checked whether it succeeded."),
@@ -1012,7 +1027,11 @@ def _sql_boolean(executor, baseline, endpoint, field, base_headers, documented=N
         return []
     return [finding(
         "input.sql-boolean", "Parameter is evaluated as a SQL predicate",
-        "critical", "confirmed", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
+        "critical", "confirmed", verification="impact-demonstrated",
+            confirmed_claim=(
+                "A true and a false SQL predicate produced two different responses while inert controls of "
+                "the same shape did not, so the parameter is evaluated as SQL."),
+            owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
         parameter=field,
         method=("Sent the parameter four times and compared the bodies: the plain value, then "
                 "`AND 1=1`, `AND 1=2` and `AND 7=7` appended to it. Both true predicates matched the "

@@ -230,7 +230,11 @@ def _cross_identity(executor, baseline, endpoint, identity_b, base_headers, decl
     if same or match >= 0.95:
         return [finding(
             "authz.bola-confirmed", "Another user's credentials return the same object",
-            "critical", "confirmed", owasp="API1:2023 Broken Object Level Authorization",
+            "critical", "confirmed", verification="impact-demonstrated",
+            confirmed_claim=(
+                "The second identity's credential returned the first identity's object. What was confirmed is "
+                "that the two requests, differing only in credential, returned the same resource body."),
+            owasp="API1:2023 Broken Object Level Authorization",
             endpoint=endpoint,
             method=("Sent the first identity's exact request a second time, changing only the credentials "
                     "to the second identity's, and compared the two bodies by normalised signature. "
@@ -460,7 +464,11 @@ def _jwt_replay(executor, baseline, endpoint, identity_a, base_headers,
     if none_probe.ok and 200 <= none_probe.status < 300 and similarity(baseline.body, none_probe.body) >= 0.9:
         out.append(finding(
             "jwt.signature-not-verified", "Server accepts an unsigned JWT",
-            "critical", "confirmed", owasp="API2:2023 Broken Authentication", endpoint=endpoint,
+            "critical", "confirmed", verification="impact-demonstrated",
+            confirmed_claim=(
+                "A token re-encoded with alg:none and an empty signature was accepted on a request that the "
+                "genuine token also satisfied, so the server did not verify the signature."),
+            owasp="API2:2023 Broken Authentication", endpoint=endpoint,
             method=("Re-encoded the supplied token's own claims with alg:none and an empty signature, "
                     "replayed the read-only request with it, and compared the body with the genuine "
                     "token’s response."),
@@ -488,7 +496,11 @@ def _jwt_replay(executor, baseline, endpoint, identity_a, base_headers,
         if probe_exchange.ok and 200 <= probe_exchange.status < 300:
             out.append(finding(
                 "jwt.forged-token-accepted", "A token signed with the recovered secret was accepted",
-                "critical", "confirmed", owasp="API2:2023 Broken Authentication", endpoint=endpoint,
+                "critical", "confirmed", verification="impact-demonstrated",
+            confirmed_claim=(
+                "A token signed offline with a secret recovered from a wordlist, carrying raised privilege "
+                "claims, was accepted by the server."),
+            owasp="API2:2023 Broken Authentication", endpoint=endpoint,
                 method=("Recovered the signing secret offline from a wordlist, re-signed the claims with "
                         "raised privilege values, and replayed the read-only request with the forged token."),
                 detail=(f"The signing secret “{secret or '(empty)'}” was recovered offline, used to sign a "
@@ -613,7 +625,11 @@ def _jwt_alg_confusion(executor, baseline, endpoint, report, header_name, scheme
                 continue
             return [finding(
                 "jwt.alg-confusion", "An RSA-signed token is accepted when re-signed as HS256",
-                "critical", "confirmed", owasp="API2:2023 Broken Authentication",
+                "critical", "confirmed", verification="impact-demonstrated",
+            confirmed_claim=(
+                "A token re-signed as HS256 using the issuer's public key as the HMAC secret was accepted, "
+                "while a control token signed with an unrelated secret was refused."),
+            owasp="API2:2023 Broken Authentication",
                 endpoint=endpoint,
                 method=(f"Fetched the issuer's public signing key from {jwks_uri}, re-encoded the "
                         f"supplied token's own claims with alg:HS256, signed them with that public "

@@ -196,7 +196,11 @@ def invalid_credentials(executor: Executor, *, baseline: Exchange, endpoint: str
         return []
     return [finding(
         "authz.invalid-credentials-accepted", "A deliberately invalid credential was accepted",
-        "critical", "confirmed", owasp="API2:2023 Broken Authentication", endpoint=endpoint,
+        "critical", "confirmed", verification="impact-demonstrated",
+            confirmed_claim=(
+                "A request carrying a credential value that cannot be valid received the same authenticated "
+                "response as the genuine credential."),
+            owasp="API2:2023 Broken Authentication", endpoint=endpoint,
         method=("Replaced the credential value with a string that cannot be a valid token, kept every "
                 "other header identical, and compared the two response bodies. The header was present "
                 "and well-formed, so this is not a missing-credential test."),
