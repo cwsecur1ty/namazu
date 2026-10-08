@@ -82,6 +82,10 @@
       <span>Audit</span>
       <span class="rail-badge" id="rail-findings" hidden>0</span>
     </button>
+    <button type="button" class="rail-btn" data-section="access" title="Access testing">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="16" r="3"/><path d="M8 11v3.5a2 2 0 0 0 2 2h3M16 13V9.5a2 2 0 0 0-2-2h-3"/></svg>
+      <span>Access</span>
+    </button>
     <div class="rail-gap"></div>
     <button type="button" class="rail-btn" data-section="source" title="Contract source">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7.5z"/><path d="M13.5 3v4.5H18M9.5 13h5M9.5 16.5h3.5"/></svg>
@@ -683,6 +687,54 @@
     </section>
 
     <!-- audit report -->
+    <!-- access testing: the permission matrix and the sequence runner -->
+    <section class="view scroll-view" id="view-access" hidden>
+      <div class="op-bar">
+        <h2 class="finding-title" tabindex="-1">Access testing</h2>
+        <div class="op-actions">
+          <button type="button" class="link" id="matrix-template">Fill from contract</button>
+          <button type="button" class="btn" id="run-matrix">Run matrix</button>
+        </div>
+      </div>
+      <div class="report" id="access-body">
+        <section class="report-card">
+          <h3>Permission matrix</h3>
+          <p class="hint">Who should be able to do what. A row names an identity, the resource it is aimed at, and whether access is expected to be <strong>allow</strong> or <strong>deny</strong>. Writing it down is what turns a 403 from an obstacle into a result.</p>
+          <p class="hint"><strong>A row is only concluded once that identity's own positive control has passed.</strong> An API that refuses everybody looks exactly like an API with a working boundary, and an API that is down looks like both. Give each identity one <strong>allow</strong> row for something it does own, and a denial elsewhere becomes evidence rather than a guess.</p>
+          <p class="hint"><strong>The marker is what decides access</strong>, not the status code. It is a string that appears in that one resource and in no other. A 200 that does not carry it has not shown the resource was reached, which is how a tool comes to report a bypass against an API that returns an empty list to everyone.</p>
+          <div class="matrix-head">
+            <span>Identity</span><span>Role or tenant</span><span>Method</span><span>URL</span>
+            <span>Resource</span><span>Marker</span><span>Expect</span><span></span>
+          </div>
+          <div id="matrix-rows" class="matrix-list"></div>
+          <div class="row-actions">
+            <button type="button" class="link" id="add-matrix-row">+ Add row</button>
+            <button type="button" class="link" id="clear-matrix">Clear</button>
+          </div>
+          <p class="hint">Identities come from the credentials on the top bar (<code>primary</code>) and the second identity in the Audit panel (<code>secondary</code>). Name either one in the Identity column.</p>
+        </section>
+        <div id="matrix-result"></div>
+
+        <section class="report-card">
+          <h3>Request sequence</h3>
+          <p class="hint">Most authorization tests cannot be written as one request: an identifier has to come from somewhere, and the honest place to get one is the API. Steps run in order, each can take values out of its response, and later steps substitute them as <code>${name}</code>.</p>
+          <p class="hint">Deliberately not a workflow language. There are no conditionals, loops or expressions, because none of them is needed to get an identifier into a path and each would need its own safety argument. An undefined variable stops the sequence rather than sending a request with the placeholder left in: <code>/reports/</code> is a different request from <code>/reports/r-100</code>.</p>
+          <div class="seq-head">
+            <span>Step</span><span>Identity</span><span>Method</span><span>URL</span>
+            <span>Body</span><span>Extract</span><span>Expect</span><span>Creates</span><span></span>
+          </div>
+          <div id="sequence-rows" class="matrix-list"></div>
+          <div class="row-actions">
+            <button type="button" class="link" id="add-sequence-row">+ Add step</button>
+            <button type="button" class="link" id="clear-sequence">Clear</button>
+            <button type="button" class="btn" id="run-sequence">Run sequence</button>
+          </div>
+          <p class="hint"><strong>Extract</strong> takes <code>name=/json/pointer</code>, one per line, for example <code>session=/session_id</code>. <strong>Expect</strong> takes a status. <strong>Creates</strong> marks a step that makes something: the result then records it as created, possibly created, or merely attempted, and nothing is ever deleted without a cleanup step you configure.</p>
+        </section>
+        <div id="sequence-result"></div>
+      </div>
+    </section>
+
     <section class="view scroll-view" id="view-audit-report" hidden>
       <div class="op-bar">
         <h2 class="view-title">Audit report</h2>

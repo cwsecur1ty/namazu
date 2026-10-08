@@ -96,14 +96,35 @@ def available() -> dict:
         "install": "pip install schemathesis",
         "role": "Property-based contract testing from the same OpenAPI document.",
     }
+    tools["schemathesis"]["capabilities"] = SCHEMATHESIS_CAPABILITIES
     nuclei = shutil.which("nuclei")
     tools["nuclei"] = {
         "available": bool(nuclei), "path": nuclei,
         "version": _version([nuclei, "-version"]) if nuclei else None,
         "install": "go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest",
         "role": "Template signatures for known CVEs, exposed panels and misconfigurations.",
+        "capabilities": NUCLEI_CAPABILITIES,
     }
     return tools
+
+
+NUCLEI_CAPABILITIES = {
+    "generates_inputs": False,
+    "captures_exchanges": False,
+    "reproducible_by_seed": False,
+    "mutating_by_default": True,
+    "write_policy":
+        "Destructive, fuzzing and brute-force tags are excluded always, not only in read-only "
+        "mode, and the callback service is off. A template's tag is not treated as a guarantee "
+        "that it is non-mutating: the tag taxonomy describes the subject of a template, not its "
+        "side effects, so a cve template is included for the signature match it performs and not "
+        "because the tag makes it safe. Review the template set before pointing this at "
+        "production.",
+    "scope": "The target host, not only the documented operations. nuclei probes paths of its "
+             "own choosing under that origin.",
+    "evidence": "nuclei reports the matcher that fired and the URL it matched, not the request "
+                "and response, so its findings carry no replayable case.",
+}
 
 
 def _version(command: list) -> str | None:
@@ -677,9 +698,14 @@ def run_nuclei(*, target: str, headers: dict | None = None, severities: str = "i
             command += ["-insecure"]
 
         code, out, err, failure = _run(command, timeout)
-        if failure:
-            return _failed("nuclei", failure, command)
+        # A timeout is not a reason to throw away what nuclei already wrote.
+        # It streams matches to the output file as it finds them, so a run
+        # stopped at the limit usually has real results on disk; discarding
+        # them turns a partial result into no result, which reads as a clean
+        # one. The findings are kept and the gap is stated.
         lines = output.read_text(encoding="utf-8").splitlines() if output.exists() else []
+        if failure and not lines:
+            return _failed("nuclei", failure, command)
 
     records = []
     for line in lines:
@@ -689,11 +715,18 @@ def run_nuclei(*, target: str, headers: dict | None = None, severities: str = "i
             continue
     findings = _nuclei_findings(records)
     notes = []
+    if failure:
+        notes.append(
+            f"{failure} {len(records)} match(es) had already been written and are reported "
+            "here. The rest of the template set did not run, so this is a partial result.")
     if not records and code not in (0,):
         notes.append((err or out).strip().splitlines()[-1] if (err or out).strip() else
                      f"nuclei exited with code {code}.")
     return {"tool": "nuclei", "ran": True, "exit_code": code,
+            "version": _version([binary, "-version"]),
             "command": _redact(command, headers),
+            "capabilities": NUCLEI_CAPABILITIES,
+            "complete": not failure,
             "summary": {"matches": len(records)},
             "findings": [item.to_dict() for item in findings[:MAX_FINDINGS]],
             "truncated": len(findings) > MAX_FINDINGS, "notes": notes}

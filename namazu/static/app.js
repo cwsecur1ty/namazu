@@ -370,11 +370,12 @@
     runner: { panel: "panel-runner", view: "view-runner" },
     history: { panel: "panel-history" },
     audit: { panel: "panel-audit" },
+    access: { view: "view-access" },
     source: { view: "view-source" },
     settings: { view: "view-settings" },
   };
   const VIEWS = ["view-empty", "view-operation", "view-schema", "view-runner", "view-source",
-    "view-settings", "view-audit-report", "view-finding", "view-audit-log"];
+    "view-settings", "view-audit-report", "view-finding", "view-audit-log", "view-access"];
 
 
 
@@ -650,6 +651,7 @@
 
       state.operation = null;
       loadExamples();
+      loadAccess();
       state.schema = null;
       state.savedEntry = null;
       state.selected.clear();
@@ -3065,6 +3067,373 @@
       : `${item.id}|${item.endpoint}|${item.parameter || ""}`;
   }
 
+  /* ───────────────────── access testing ───────────────────── */
+
+  const MATRIX_FIELDS = [
+    ["identity", "primary", "text"],
+    ["tenant", "", "text"],
+    ["method", "GET", "method"],
+    ["url", "", "text"],
+    ["resource", "", "text"],
+    ["marker", "", "text"],
+    ["expect", "allow", "expect"],
+  ];
+  const SEQUENCE_FIELDS = [
+    ["name", "", "text"],
+    ["identity", "primary", "text"],
+    ["method", "GET", "method"],
+    ["url", "", "text"],
+    ["body", "", "text"],
+    ["extract", "", "text"],
+    ["expect", "", "text"],
+  ];
+  const MATRIX_OUTCOME_LABEL = {
+    "as-expected": "As expected",
+    "unexpected-allow": "Reached it",
+    "unexpected-deny": "Refused",
+    inconclusive: "Inconclusive",
+    blocked: "Blocked",
+    error: "Error",
+  };
+
+  function renderAccess() {
+    renderRowList("matrix-rows", state.matrix.rows, MATRIX_FIELDS, renderAccess);
+    renderRowList("sequence-rows", state.sequence.steps, SEQUENCE_FIELDS, renderAccess, true);
+  }
+
+  // One row builder for both tables. They differ only in their columns and in
+  // whether a step can be marked as creating something.
+  function renderRowList(target, rows, fields, rerender, withCreates = false) {
+    const host = $(target);
+    host.replaceChildren();
+    if (!rows.length) {
+      host.append(el("p", "pane-empty", "No rows yet."));
+      return;
+    }
+    rows.forEach((row, index) => {
+      const line = el("div", withCreates ? "seq-row" : "matrix-row");
+      for (const [name, fallback, kind] of fields) {
+        if (kind === "method") {
+          const select = el("select", "mini");
+          select.setAttribute("aria-label", `${name} for row ${index + 1}`);
+          for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]) {
+            const option = el("option", "", method);
+            option.value = method;
+            if ((row[name] || fallback) === method) option.selected = true;
+            select.append(option);
+          }
+          select.addEventListener("change", () => { row[name] = select.value; saveAccess(); });
+          line.append(select);
+          continue;
+        }
+        if (kind === "expect") {
+          const select = el("select", "mini");
+          select.setAttribute("aria-label", `expected access for row ${index + 1}`);
+          for (const value of ["allow", "deny"]) {
+            const option = el("option", "", value);
+            option.value = value;
+            if ((row[name] || fallback) === value) option.selected = true;
+            select.append(option);
+          }
+          select.addEventListener("change", () => { row[name] = select.value; saveAccess(); });
+          line.append(select);
+          continue;
+        }
+        const input = el("input", "mini-input");
+        input.type = "text";
+        input.spellcheck = false;
+        input.setAttribute("aria-label", `${name} for row ${index + 1}`);
+        input.value = row[name] === undefined ? fallback : row[name];
+        input.addEventListener("input", () => { row[name] = input.value; saveAccess(); });
+        line.append(input);
+      }
+      if (withCreates) {
+        const box = el("input");
+        box.type = "checkbox";
+        box.checked = Boolean(row.creates);
+        box.setAttribute("aria-label", `step ${index + 1} creates something`);
+        box.addEventListener("change", () => { row.creates = box.checked; saveAccess(); });
+        line.append(box);
+      }
+      const remove = el("button", "link", "Remove");
+      remove.type = "button";
+      remove.addEventListener("click", () => {
+        rows.splice(index, 1);
+        saveAccess();
+        rerender();
+      });
+      line.append(remove);
+      host.append(line);
+    });
+  }
+
+  function accessKey() {
+    return `access:${state.spec?.title || "api"}:${$("base-url").value || ""}`;
+  }
+
+  function saveAccess() {
+    try {
+      prefs.write(accessKey(), JSON.stringify({
+        matrix: state.matrix.rows, sequence: state.sequence.steps,
+      }));
+    } catch { /* a saved matrix is a convenience */ }
+  }
+
+  function loadAccess() {
+    try {
+      const raw = prefs.read(accessKey(), "");
+      const held = raw ? JSON.parse(raw) : {};
+      state.matrix.rows = Array.isArray(held.matrix) ? held.matrix : [];
+      state.sequence.steps = Array.isArray(held.sequence) ? held.sequence : [];
+    } catch {
+      state.matrix.rows = [];
+      state.sequence.steps = [];
+    }
+    renderAccess();
+  }
+
+  // A starting point rather than a guess at the answer: one allow row per
+  // identity, which is the positive control, and one deny row aimed at the
+  // same resource from the other identity. The URLs and markers are left for
+  // the operator, because only they know which object belongs to whom.
+  function matrixTemplate() {
+    const operation = state.operation;
+    if (!operation) {
+      toast("Select an operation first, so the rows have something to aim at.");
+      return;
+    }
+    const base = ($("base-url").value || state.spec?.base_url || "").replace(/\/$/, "");
+    const url = `${base}${operation.path}`;
+    const second = Object.keys(identityB()).length ? "secondary" : "";
+    state.matrix.rows = [
+      { identity: "primary", tenant: "", method: operation.method, url,
+        resource: "an object this identity owns", marker: "", expect: "allow" },
+      ...(second ? [{ identity: "secondary", tenant: "", method: operation.method, url,
+                      resource: "an object this identity owns", marker: "", expect: "allow" }]
+                 : []),
+      ...(second ? [{ identity: "secondary", tenant: "", method: operation.method, url,
+                      resource: "the first identity's object", marker: "", expect: "deny" }]
+                 : []),
+    ];
+    saveAccess();
+    renderAccess();
+    toast(second
+      ? "Three rows added. Fill in each URL and the marker that identifies its resource."
+      : "One row added. Set a second identity in the Audit panel to test a boundary.");
+  }
+
+  function accessIdentities(connection) {
+    // Named so a row or a step can address either, and the names match what
+    // the report shows.
+    const primary = renewableIdentity(connection.headers);
+    const secondary = identityB();
+    return {
+      primary, secondary,
+      ...(Object.keys(primary).length ? { "identity a": primary } : {}),
+      ...(Object.keys(secondary).length ? { "identity b": secondary } : {}),
+    };
+  }
+
+  async function runMatrix() {
+    const rows = state.matrix.rows.filter((row) => (row.url || "").trim());
+    if (!rows.length) { toast("Add a row with a URL first."); return; }
+    let connection;
+    try { connection = connectionPayload(); }
+    catch (error) { toast(errorText(error)); return; }
+    const button = $("run-matrix");
+    button.disabled = true;
+    button.textContent = "Running…";
+    try {
+      const result = await api("/api/matrix", {
+        rows,
+        identities: accessIdentities(connection),
+        allow_mutating: connection.allow_mutating,
+        ...routePayload(),
+        timeout: connection.timeout,
+      });
+      state.matrix.result = result;
+      renderMatrixResult();
+      announce(`Permission matrix finished: ${result.summary?.rows || 0} rows.`);
+    } catch (error) {
+      toast(errorText(error));
+    } finally {
+      button.disabled = false;
+      button.textContent = "Run matrix";
+    }
+  }
+
+  function renderMatrixResult() {
+    const host = $("matrix-result");
+    host.replaceChildren();
+    const result = state.matrix.result;
+    if (!result) return;
+    const parts = [];
+    const problems = result.summary?.problems || [];
+    if (problems.length) {
+      parts.push(el("p", "prose caution",
+        `${problems.length} row(s) did not match the expectation.`));
+    }
+    const list = el("div", "cov-list");
+    for (const row of result.rows || []) {
+      const entry = el("div", "cov-row");
+      entry.dataset.state = row.outcome === "as-expected" ? "completed"
+        : row.outcome === "inconclusive" || row.outcome === "blocked" ? "inconclusive"
+        : "blocked";
+      const label = el("div", "cov-name");
+      label.append(el("span", "t",
+        `${row.identity} ${row.expect} ${row.resource || row.operation || row.url}`));
+      label.append(el("span", "w", row.reason || ""));
+      entry.append(label);
+      const right = el("div", "cov-right");
+      const chip = el("span", "chip");
+      chip.dataset.cov = entry.dataset.state;
+      chip.textContent = MATRIX_OUTCOME_LABEL[row.outcome] || row.outcome;
+      right.append(chip);
+      if (row.status) right.append(el("span", "n", String(row.status)));
+      if (row.marker_seen === true) right.append(el("span", "n", "marker seen"));
+      if (row.marker_seen === false) right.append(el("span", "n", "no marker"));
+      entry.append(right);
+      list.append(entry);
+    }
+    parts.push(list);
+    if (result.controls) {
+      const controls = Object.entries(result.controls)
+        .map(([name, outcome]) => `${name}: ${outcome}`).join(", ");
+      parts.push(el("p", "hint", `Positive controls: ${controls || "none"}.`));
+    }
+    if (result.note) parts.push(el("p", "hint", result.note));
+    host.append(reportCard("Matrix result", parts));
+  }
+
+  function parseExtract(text) {
+    const out = {};
+    for (const line of String(text || "").split(/[\n,]/)) {
+      const [name, pointer] = line.split("=");
+      if (name?.trim() && pointer?.trim()) out[name.trim()] = pointer.trim();
+    }
+    return out;
+  }
+
+  async function runSequence() {
+    const steps = state.sequence.steps
+      .filter((step) => (step.url || "").trim())
+      .map((step, index) => ({
+        name: step.name || `step ${index + 1}`,
+        method: step.method || "GET",
+        url: step.url,
+        identity: step.identity || "primary",
+        ...(step.body ? { body: step.body } : {}),
+        ...(Object.keys(parseExtract(step.extract)).length
+          ? { extract: parseExtract(step.extract) } : {}),
+        ...(step.expect ? { expect: { status: String(step.expect) } } : {}),
+        creates: Boolean(step.creates),
+      }));
+    if (!steps.length) { toast("Add a step with a URL first."); return; }
+    let connection;
+    try { connection = connectionPayload(); }
+    catch (error) { toast(errorText(error)); return; }
+    const writes = steps.some((step) => !["GET", "HEAD", "OPTIONS"].includes(step.method));
+    if (writes && !connection.allow_mutating) {
+      toast("This sequence sends a state-changing request. Turn on Allow writes first.");
+      return;
+    }
+    const button = $("run-sequence");
+    button.disabled = true;
+    button.textContent = "Running…";
+    try {
+      const result = await api("/api/sequence", {
+        steps,
+        identities: accessIdentities(connection),
+        allow_mutating: connection.allow_mutating,
+        ...routePayload(),
+        timeout: connection.timeout,
+      });
+      state.sequence.result = result;
+      renderSequenceResult();
+      announce(`Sequence ${result.outcome}.`);
+    } catch (error) {
+      toast(errorText(error));
+    } finally {
+      button.disabled = false;
+      button.textContent = "Run sequence";
+    }
+  }
+
+  function renderSequenceResult() {
+    const host = $("sequence-result");
+    host.replaceChildren();
+    const result = state.sequence.result;
+    if (!result) return;
+    const parts = [];
+    if (result.reason) parts.push(el("p", "prose caution", result.reason));
+    const list = el("div", "cov-list");
+    for (const step of result.steps || []) {
+      const entry = el("div", "cov-row");
+      entry.dataset.state = step.outcome === "ok" ? "completed" : "blocked";
+      const label = el("div", "cov-name");
+      label.append(el("span", "t", step.name));
+      if (step.detail) label.append(el("span", "w", step.detail));
+      entry.append(label);
+      const right = el("div", "cov-right");
+      const chip = el("span", "chip");
+      chip.dataset.cov = entry.dataset.state;
+      chip.textContent = step.outcome;
+      right.append(chip);
+      if (step.status) right.append(el("span", "n", String(step.status)));
+      if (step.extracted?.length) {
+        right.append(el("span", "n", `took ${step.extracted.join(", ")}`));
+      }
+      entry.append(right);
+      list.append(entry);
+    }
+    parts.push(list);
+    if (result.variables?.length) {
+      // Names only. An extracted value is frequently a session token, and the
+      // server does not send the values back for that reason.
+      parts.push(el("p", "hint", `Variables carried forward: ${result.variables.join(", ")}. `
+        + "Their values are not shown, because an extracted value is often a credential."));
+    }
+    if (result.created?.length) {
+      const created = el("ul", "note-list");
+      for (const item of result.created) {
+        created.append(el("li", "", `${item.step}: ${item.state} at ${item.url}. ${item.why}`));
+      }
+      parts.push(el("div", "case-missing-label", "What this run left behind"), created);
+    }
+    if (result.cleanup) parts.push(el("p", "prose caution", result.cleanup));
+    host.append(reportCard("Sequence result", parts));
+  }
+
+  function wireAccess() {
+    $("add-matrix-row").addEventListener("click", () => {
+      state.matrix.rows.push({ identity: "primary", method: "GET", expect: "allow" });
+      saveAccess();
+      renderAccess();
+    });
+    $("clear-matrix").addEventListener("click", () => {
+      state.matrix.rows = [];
+      state.matrix.result = null;
+      saveAccess();
+      renderAccess();
+      $("matrix-result").replaceChildren();
+    });
+    $("add-sequence-row").addEventListener("click", () => {
+      state.sequence.steps.push({ identity: "primary", method: "GET" });
+      saveAccess();
+      renderAccess();
+    });
+    $("clear-sequence").addEventListener("click", () => {
+      state.sequence.steps = [];
+      state.sequence.result = null;
+      saveAccess();
+      renderAccess();
+      $("sequence-result").replaceChildren();
+    });
+    $("matrix-template").addEventListener("click", matrixTemplate);
+    $("run-matrix").addEventListener("click", runMatrix);
+    $("run-sequence").addEventListener("click", runSequence);
+  }
+
   /* ───────────────────── saved baselines and expectations ───────────────────── */
 
   // Persisted per operation id, keyed by the specification's own base URL so
@@ -4666,6 +5035,7 @@
     wireSplitters();
     wireEvents();
     wireAudit();
+    wireAccess();
     wireOauth();
     wireLog();
     $("spec-url").focus();

@@ -758,3 +758,22 @@ select.mini { height: 24px; padding: 0 5px; font-size: 11px; background: var(--i
 .chip[data-replay="reproduced"] { border-color: var(--bad); background: var(--bad-bg); color: var(--bad); }
 .chip[data-replay="not-reproduced"] { border-color: var(--ok); background: var(--ok-bg); color: var(--ok); }
 .chip[data-replay="intermittent"], .chip[data-replay="blocked"], .chip[data-replay="error"] { border-color: var(--warnc); background: var(--warn-bg); color: var(--warnc); }
+
+/* ── access testing ────────────────────────────────────────────────────── */
+
+.matrix-head, .seq-head { display: grid; gap: 5px; padding: 0 0 4px; font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--dim); }
+.matrix-head { grid-template-columns: 1fr 1fr .7fr 2fr 1fr 1fr .7fr auto; }
+.seq-head { grid-template-columns: 1fr .8fr .7fr 1.8fr 1.2fr 1.2fr .6fr .5fr auto; }
+.matrix-list { display: flex; flex-direction: column; gap: 4px; }
+.matrix-row, .seq-row { display: grid; gap: 5px; align-items: center; }
+.matrix-row { grid-template-columns: 1fr 1fr .7fr 2fr 1fr 1fr .7fr auto; }
+.seq-row { grid-template-columns: 1fr .8fr .7fr 1.8fr 1.2fr 1.2fr .6fr .5fr auto; }
+.matrix-row input, .seq-row input[type="text"], .matrix-row select, .seq-row select { width: 100%; min-width: 0; height: 24px; padding: 0 5px; font-size: 11px; background: var(--input); color: var(--ink); border: 1px solid var(--line); border-radius: 3px; }
+.matrix-row .mini-input, .seq-row .mini-input { max-width: none; }
+
+@media (max-width: 1100px) {
+  /* Eight columns do not fit a narrow window, and a horizontally scrolling
+     form is worse than a stacked one. */
+  .matrix-head, .seq-head { display: none; }
+  .matrix-row, .seq-row { grid-template-columns: 1fr 1fr; padding: 7px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); }
+}

@@ -295,3 +295,69 @@ def test_the_import_path_lists_the_keys_it_knows(source):
                 "summary", "notes", "scope"):
         assert key in known, f"the importer does not know about {key}"
     assert "evidence_levels" in written
+
+
+# ── the access testing view ─────────────────────────────────────────────────
+
+def test_the_matrix_and_sequence_calls_match_the_server_models(source):
+    from namazu.app import MatrixInput, SequenceInput
+    for route, model, fields in (
+        ("/api/matrix", MatrixInput, ["rows", "identities", "allow_mutating"]),
+        ("/api/sequence", SequenceInput, ["steps", "identities", "allow_mutating"]),
+    ):
+        block = re.search(rf'api\("{re.escape(route)}", \{{(.+?)\n      \}}\)', source, re.DOTALL)
+        assert block, f"the {route} call was not found"
+        for field in fields:
+            assert re.search(r"(^|[\s{,])" + re.escape(field) + r"\s*[:,]",
+                             block.group(1), re.MULTILINE), f"{route} no longer sends {field}"
+            assert field in model.model_fields
+
+
+def test_the_matrix_outcome_labels_cover_every_outcome(source):
+    from namazu.audit.matrix import MATRIX_OUTCOMES
+    assert _table(source, "MATRIX_OUTCOME_LABEL") == set(MATRIX_OUTCOMES)
+
+
+def test_the_sequence_view_never_shows_an_extracted_value(source):
+    """The server sends names only, and the page says why rather than looking
+    as though it lost the values."""
+    block = source[source.index("function renderSequenceResult()"):
+                   source.index("function wireAccess()")]
+    assert "result.variables.join" in block
+    assert "often a credential" in block
+    assert "result.values" not in block
+
+
+def test_a_write_sequence_is_refused_in_the_browser_before_it_is_sent(source):
+    """The server refuses it too. Checking here as well means the operator is
+    told why instead of watching a step come back blocked."""
+    block = source[source.index("async function runSequence()"):
+                   source.index("function renderSequenceResult()")]
+    assert 'connection.allow_mutating' in block
+    assert "Allow writes" in block
+
+
+def test_the_matrix_template_includes_a_positive_control_row(source):
+    """A template that produced only deny rows would hand the operator a matrix
+    that cannot conclude anything."""
+    block = source[source.index("function matrixTemplate()"):
+                   source.index("function accessIdentities(")]
+    assert block.count('expect: "allow"') >= 2
+    assert 'expect: "deny"' in block
+
+
+def test_the_access_view_explains_the_positive_control_and_the_marker(markup):
+    block = re.search(r'id="view-access"(.+?)\n    </section>', markup, re.DOTALL)
+    assert block, "the access view is not in the markup"
+    text = block.group(1)
+    assert "positive control has passed" in text
+    assert "refuses everybody looks exactly like" in text
+    assert "not the status code" in text
+    assert "not a workflow language" in text
+    assert "nothing is ever deleted" in text.lower()
+
+
+def test_the_access_view_is_registered_as_a_section_and_a_view(source, markup):
+    assert 'access: { view: "view-access" }' in source
+    assert '"view-access"' in source.split("const VIEWS")[1].split("]")[0]
+    assert 'data-section="access"' in markup
