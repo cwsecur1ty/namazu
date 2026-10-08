@@ -273,6 +273,21 @@ list and in the finding header, and marked `probable` with a limitation saying
 Namazu did not verify the match itself. A nuclei template match is never
 presented as something this tool established.
 
+Tick **Run these after the audit** and the Run audit button carries straight on
+into each installed tool once Namazu's own checks have finished, one at a time.
+A stopped audit does not start them.
+
+schemathesis is invoked as `python -m schemathesis.cli` using the interpreter
+running Namazu, not through the `st` console script. Where that generated script
+is built wrong it exits non-zero having written nothing at all, no report and no
+message, which leaves nothing to report; the module runs normally in the same
+environment. It also pins which installed copy runs instead of trusting PATH
+order. Install it into the same environment:
+
+```sh
+.venv/Scripts/python -m pip install schemathesis
+```
+
 Both are held read-only: destructive, fuzzing and brute-force templates are
 excluded, nuclei runs with `-no-interactsh` so there is no outbound callback,
 and schemathesis stays on safe methods unless Allow writes is on.
@@ -450,7 +465,7 @@ interpolated into a quoted string on an engine that has a sleep function.
 node --check namazu/static/app.js
 ```
 
-452 tests across 93 checks, about 90 seconds to run, most of which is the
+454 tests across 93 checks, about 90 seconds to run, most of which is the
 time-based SQL tests waiting for real delays. Detections are asserted in both
 directions: a check fires on the broken handler, and stays silent on the correct
 one. Where a check rests on a control, the test asserts the control is what

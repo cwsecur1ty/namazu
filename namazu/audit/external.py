@@ -21,6 +21,7 @@ service.
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import re
@@ -51,12 +52,25 @@ NUCLEI_SEVERITY_MAP = {"critical": "critical", "high": "high", "medium": "medium
                        "low": "low", "info": "info", "unknown": "info"}
 
 
-def _schemathesis_bin() -> str | None:
-    """The st executable beside the running interpreter, or on PATH."""
-    local = Path(sys.executable).parent / ("st.exe" if os.name == "nt" else "st")
-    if local.exists():
-        return str(local)
-    return shutil.which("st") or shutil.which("schemathesis")
+def _schemathesis_command() -> list[str] | None:
+    """How to invoke schemathesis, or None when it is not installed.
+
+    Through the interpreter, not the ``st`` console script. That script is a
+    generated wrapper, and where it is built wrong it fails in the worst
+    possible way: it exits non-zero having written nothing at all, no report
+    and no message, so the only thing the caller can report is that no report
+    appeared. ``-m schemathesis.cli`` runs normally in the same environment.
+
+    Going through the interpreter also pins which copy runs. The one installed
+    beside Namazu is the one tested against, rather than whichever ``st``
+    happens to come first on PATH.
+    """
+    try:
+        if importlib.util.find_spec("schemathesis") is None:
+            return None
+    except (ImportError, ValueError):
+        return None
+    return [sys.executable, "-m", "schemathesis.cli"]
 
 
 def _schemathesis_version() -> str | None:
@@ -71,10 +85,10 @@ def _schemathesis_version() -> str | None:
 def available() -> dict:
     """Which optional tools this machine can run."""
     tools = {}
-    binary = _schemathesis_bin()
+    launcher = _schemathesis_command()
     tools["schemathesis"] = {
-        "available": bool(binary), "path": binary,
-        "version": _schemathesis_version() if binary else None,
+        "available": bool(launcher), "path": " ".join(launcher) if launcher else None,
+        "version": _schemathesis_version() if launcher else None,
         "install": "pip install schemathesis",
         "role": "Property-based contract testing from the same OpenAPI document.",
     }
@@ -122,13 +136,13 @@ def run_schemathesis(*, schema: str, base_url: str, headers: dict | None = None,
                      allow_mutating: bool = False, max_examples: int = 20,
                      timeout: int = TOOL_TIMEOUT, verify_tls: bool = True) -> dict:
     """Property-based testing over the documented operations."""
-    binary = _schemathesis_bin()
-    if not binary:
+    launcher = _schemathesis_command()
+    if not launcher:
         return _missing("schemathesis", "pip install schemathesis")
 
     with tempfile.TemporaryDirectory(prefix="namazu-st-") as workspace:
         report = Path(workspace) / "report.json"
-        command = [binary, "run", schema, "--url", base_url,
+        command = [*launcher, "run", schema, "--url", base_url,
                    "--max-examples", str(max_examples),
                    "--report", "json", "--report-json-path", str(report),
                    "--no-color"]
@@ -144,8 +158,10 @@ def run_schemathesis(*, schema: str, base_url: str, headers: dict | None = None,
         if failure:
             return _failed("schemathesis", failure, command)
         if not report.exists():
-            detail = (err or out).strip().splitlines()[-3:]
-            return _failed("schemathesis", "No report was produced. " + " ".join(detail), command)
+            detail = " ".join((err or out).strip().splitlines()[-3:])
+            return _failed("schemathesis",
+                           f"No report was produced (exit code {code}). "
+                           f"{detail or 'The tool printed nothing.'}", command)
         try:
             document = json.loads(report.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:

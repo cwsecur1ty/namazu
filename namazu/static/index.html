@@ -233,6 +233,8 @@
           <div class="disclosure-body">
             <p class="hint">Runs an external scanner against the same target and folds what it reports into this findings list, tagged with the tool that found it. Namazu does not re-verify those matches, and says so on each one.</p>
             <div id="tool-list" class="tool-list"></div>
+            <label class="check"><input id="tools-after-audit" type="checkbox"><span>Run these after the audit</span></label>
+            <p class="hint">Run audit then runs each available tool in turn, once Namazu's own checks have finished, and folds what they report into the same list.</p>
             <p class="hint">Both are run read-only: destructive and brute-force templates are excluded, nuclei runs without its callback service, and schemathesis is held to safe methods unless Allow writes is on. nuclei includes CVE templates, so expect minutes rather than seconds.</p>
           </div>
         </details>

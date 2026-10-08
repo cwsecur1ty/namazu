@@ -2901,18 +2901,21 @@
     }
   }
 
-  async function runExternalTool(name, button) {
+  async function runExternalTool(name, button, chained = false) {
     if (!state.spec) { toast("Import a contract first."); return; }
-    if (state.audit.running) { toast("Wait for the audit to finish."); return; }
+    // The chained run is started from inside the audit's own completion, so the
+    // running flag is still the audit that asked for it.
+    if (state.audit.running && !chained) { toast("Wait for the audit to finish."); return; }
     let connection;
     try { connection = connectionPayload(); }
     catch (error) { toast(errorText(error)); return; }
     const target = connection.base_url || state.spec.base_url || $("base-url").value.trim();
     if (!target) { toast("Set a base URL before running an external tool."); return; }
 
-    button.disabled = true;
-    const label = button.textContent;
-    button.textContent = "Running…";
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Running…";
+    }
     announce(`${name} is running. This can take a few minutes.`);
     try {
       const result = await api("/api/tools/run", {
@@ -2943,8 +2946,30 @@
     } catch (error) {
       message("work-error", `${name}: ${errorText(error)}`);
     } finally {
-      button.disabled = false;
-      button.textContent = label;
+      if (button) {
+        button.disabled = false;
+        button.textContent = "Run";
+      }
+    }
+  }
+
+  /** Every installed tool, in turn, after Namazu's own checks have finished. */
+  async function runQueuedTools() {
+    if (!$("tools-after-audit").checked) return;
+    let tools;
+    try { tools = await api("/api/tools", null, "GET"); }
+    catch { return; }
+    const ready = Object.entries(tools).filter(([, info]) => info.available).map(([name]) => name);
+    if (!ready.length) {
+      state.audit.notes.push("Second opinion: no external tool is installed, so none ran.");
+      renderAuditReport();
+      return;
+    }
+    for (const name of ready) {
+      if (state.audit.cancelled) break;
+      // Sequentially: both are subprocesses pointed at the same target, and
+      // two of them at once is traffic the operator did not ask for.
+      await runExternalTool(name, null, true);
     }
   }
 
@@ -3066,6 +3091,9 @@
         ? `Audit stopped with ${state.audit.findings.length} findings.`
         : `Audit finished with ${state.audit.findings.length} findings.`);
     }
+    // After the finally block, so a tool failure cannot leave the audit itself
+    // looking as though it is still running.
+    if (!state.audit.cancelled) await runQueuedTools();
   }
 
 
@@ -3133,6 +3161,16 @@
       $("cancel-audit").disabled = true;
       $("cancel-audit").textContent = "Stopping…";
       announce("The audit will stop once the current endpoint finishes.");
+    });
+    $("tools-after-audit").checked = prefs.read("tools-after-audit", "") === "1";
+    $("tools-after-audit").addEventListener("change", () => {
+      prefs.write("tools-after-audit", $("tools-after-audit").checked ? "1" : "0");
+      // Opening the block is what normally loads the list; ticking the box
+      // without opening it would otherwise run tools never shown as available.
+      if ($("tools-after-audit").checked && !$("second-opinion-block").dataset.loaded) {
+        $("second-opinion-block").dataset.loaded = "1";
+        loadTools();
+      }
     });
     $("second-opinion-block").addEventListener("toggle", (event) => {
       if (event.target.open && !event.target.dataset.loaded) {

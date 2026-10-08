@@ -1025,7 +1025,7 @@ def test_tool_detection_reports_both_tools():
 def test_missing_tool_is_reported_not_swallowed(monkeypatch):
     """An absent tool is a stated gap, never a silent one."""
     from namazu.audit import external
-    monkeypatch.setattr(external, "_schemathesis_bin", lambda: None)
+    monkeypatch.setattr(external, "_schemathesis_command", lambda: None)
     monkeypatch.setattr(external.shutil, "which", lambda name: None)
 
     for result in (external.run_schemathesis(schema="x", base_url=BASE),
@@ -1126,12 +1126,50 @@ def test_nuclei_command_excludes_destructive_tags_and_callbacks(monkeypatch):
         assert tag not in included
 
 
+def test_schemathesis_runs_through_the_interpreter_not_the_console_script():
+    """The ``st`` wrapper is the one failure mode that cannot be reported.
+
+    Where that generated script is built wrong it exits non-zero having written
+    nothing at all: no report, no stdout, no stderr. The caller can then only
+    say that no report appeared, which is what it said, and the tool looked
+    broken rather than mis-invoked. Running the module through this
+    interpreter works in the same environment, and pins which installed copy
+    runs rather than trusting PATH order.
+    """
+    import sys
+
+    from namazu.audit import external
+
+    launcher = external._schemathesis_command()
+    if launcher is None:
+        pytest.skip("schemathesis is not installed in this environment")
+    assert launcher[0] == sys.executable, launcher
+    assert launcher[1:] == ["-m", "schemathesis.cli"], launcher
+    assert not any(str(part).endswith(("st", "st.exe")) for part in launcher), launcher
+
+
+def test_a_tool_that_produces_no_report_says_what_it_exited_with(monkeypatch):
+    """A failure with no detail is what made the console script undiagnosable."""
+    from namazu.audit import external
+
+    monkeypatch.setattr(external, "_schemathesis_command",
+                        lambda: ["/usr/bin/python", "-m", "schemathesis.cli"])
+    # Exactly the broken-wrapper signature: non-zero, and silent on both streams.
+    monkeypatch.setattr(external, "_run", lambda command, timeout: (1, "", "", ""))
+    result = external.run_schemathesis(schema="s", base_url=BASE)
+    assert result["ran"] is False
+    note = " ".join(result["notes"])
+    assert "exit code 1" in note, note
+    assert "printed nothing" in note, note
+
+
 def test_schemathesis_excludes_write_methods_unless_allowed(monkeypatch):
-    """Stubs the binary too, so the assertion holds without schemathesis installed."""
+    """Stubs the launcher too, so the assertion holds without schemathesis installed."""
     from namazu.audit import external
     captured = {}
 
-    monkeypatch.setattr(external, "_schemathesis_bin", lambda: "/usr/bin/st")
+    monkeypatch.setattr(external, "_schemathesis_command",
+                        lambda: ["/usr/bin/python", "-m", "schemathesis.cli"])
     monkeypatch.setattr(external, "_run", lambda command, timeout: (captured.update(command=command), (0, "", "", ""))[1])
     external.run_schemathesis(schema="s", base_url=BASE)
     read_only = captured["command"]
