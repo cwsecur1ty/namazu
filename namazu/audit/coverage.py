@@ -24,7 +24,7 @@ claim about the target and "completed" is a statement about the audit.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 STATES = ("completed", "blocked", "skipped", "inconclusive", "not-applicable", "attempted")
 
@@ -54,18 +54,31 @@ CHECKS: dict[str, dict] = {
         "needs_baseline": False},
     "authorization": {
         "title": "Object-level authorization",
-        "what": "Replays the request as a second identity and with no credential, and "
-                "compares what comes back.",
+        "what": "Replays the request with no credential and with a neighbouring object "
+                "identifier, and compares what comes back.",
+        "needs_baseline": True},
+    # Separate from the family above, because it is the only part that needs a
+    # second account. Blocking the whole family for want of one would lose the
+    # anonymous replay, the identifier swap and the token battery, all of which
+    # need a single identity and are where most real findings come from.
+    "cross-identity": {
+        "title": "Cross-identity access",
+        "what": "Sends the first identity's exact request as a second identity and compares "
+                "the resources that come back.",
         "needs_baseline": True,
-        "needs_positive_control": True},
+        "needs_second_identity": True},
     "credential-handling": {
         "title": "Credential verification",
         "what": "Sends a deliberately invalid credential and checks it is refused.",
         "needs_baseline": True},
+    # A denial-path test. It needs a baseline that was *refused*, because what
+    # it looks for is a trivially different form of the same request getting
+    # through where the original did not. A refused baseline is this check's
+    # input, so it must never be blocked for one.
     "access-bypass": {
         "title": "Access-control bypass",
         "what": "Header, path and method variations that sometimes reach a protected route.",
-        "needs_baseline": True},
+        "denial_path": True},
     "cache": {
         "title": "Cache deception",
         "what": "Whether a private response can be made publicly cacheable.",
@@ -86,10 +99,12 @@ CHECKS: dict[str, dict] = {
         "title": "Token handling",
         "what": "Offline analysis of the supplied token, and replay of forged variants.",
         "needs_baseline": True},
+    # Sends an inert twin of each payload as its own control and compares the
+    # two, so it concludes without reference to the baseline at all.
     "xml": {
         "title": "XML external entities",
         "what": "External entity resolution on an operation that accepts XML.",
-        "needs_baseline": True},
+        "needs_baseline": False},
     "mass-assignment": {
         "title": "Mass assignment",
         "what": "Whether a privileged property supplied by the client is stored.",
@@ -98,7 +113,7 @@ CHECKS: dict[str, dict] = {
         "title": "Write authorization",
         "what": "Whether a second identity can complete a write on another's resource.",
         "needs_baseline": True,
-        "needs_positive_control": True},
+        "needs_second_identity": True},
     "body-injection": {
         "title": "Request body injection",
         "what": "The injection battery over request body fields.",
@@ -210,16 +225,17 @@ class Ledger:
         refusal is still a response, and the passive review, the contract
         comparison and the transport checks are all still worth running on it.
         """
+        if not has_second_identity:
+            for check, meta in CHECKS.items():
+                if meta.get("needs_second_identity"):
+                    self.block(
+                        check,
+                        "No second identity is configured, so cross-identity access was not "
+                        "tested. Nothing in this result says the boundary holds.",
+                        "Add a second identity on the Auth tab, ideally one that owns a "
+                        "different object on the same operation, and record which object each "
+                        "identity owns so a read can be checked by content.")
         if verdict.usable:
-            if not has_second_identity:
-                for check in ("authorization", "write-authorization"):
-                    if CHECKS.get(check, {}).get("needs_positive_control"):
-                        self.block(
-                            check,
-                            "No second identity is configured, so cross-identity access could "
-                            "not be tested at all.",
-                            "Add a second identity on the Auth tab, ideally one that owns a "
-                            "different object on the same operation.")
             return
         reason = f"The baseline did not succeed ({verdict.outcome}). {verdict.reason}"
         for check, meta in CHECKS.items():

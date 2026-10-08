@@ -26,6 +26,7 @@ from . import (
     bypass,
     catalogue,
     contract,
+    coverage,
     inputs,
     inventory,
     jwtlab,
@@ -33,6 +34,9 @@ from . import (
     posture,
     specscan,
     xmllab,
+)
+from . import (
+    baseline as baseline_module,
 )
 from . import identity as identity_resolver
 from .model import Finding, finding
@@ -135,8 +139,20 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
                     identities: dict | None = None, profile: str = DEFAULT_PROFILE,
                     allow_mutating: bool = False, verify_tls: bool = True,
                     timeout: float = 15.0, concurrency: int | None = None,
-                    user_agent: str | None = None, connection=None, client=None) -> dict:
-    """Run the audit battery against one documented operation."""
+                    user_agent: str | None = None, connection=None, client=None,
+                    expectation: dict | None = None, example: dict | None = None) -> dict:
+    """Run the audit battery against one documented operation.
+
+    ``example`` is a saved request for this operation, which replaces the one
+    generated from the schema. A generated request carries the literal "string"
+    wherever the contract documents no example, which usually names nothing
+    that exists, and an audit whose baseline never reached a resource cannot
+    conclude anything about access to it.
+
+    ``expectation`` is what the operator says a successful response looks like
+    for this operation, including the case where the expected answer is a
+    refusal. See :mod:`namazu.audit.baseline`.
+    """
     parsed = normalize_spec(spec)
     operation = next((op for op in parsed["operations"] if op["id"] == operation_id), None)
     if operation is None:
@@ -158,9 +174,15 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
     credential_notes = [note for note in (note_a, note_b) if note]
     endpoint = f"{operation['method']} {operation['path']}"
 
+    ledger = coverage.Ledger()
     findings: list = list(specscan.review_operation(parsed, operation))
+    ledger.complete("contract-review", findings=len(findings))
 
     built = build_request(parsed, operation_id, base_url=base_url, headers=identity_a)
+    expected = baseline_module.Expectation.from_dict(expectation or {})
+    example_note = ""
+    if example:
+        built, example_note = _apply_example(built, example, identity_a)
     budget = Budget(settings["requests_per_operation"])
     owns_client = client is None
     http = client or build_client(connection=link)
@@ -179,6 +201,18 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
     # was ever shown.
     for warning in built.get("warnings") or []:
         notes.append(f"Building the documented request: {warning}")
+    if example_note:
+        notes.append(example_note)
+    if expected.asserted():
+        notes.append(f"Baseline assertions for this operation: {expected.describe()}.")
+    elif (invented := baseline_module.placeholder_inputs(operation)):
+        # Said before the run rather than after it, because this is the single
+        # most common reason an audit never reaches the resource it is pointed
+        # at, and it is fixable in the contract or with a saved example.
+        notes.append(
+            f"The contract documents no example for {', '.join(invented)}, so the baseline "
+            "request carries generated placeholder values for them. If the operation refuses "
+            "the request because of that, save a known-good example request for it instead.")
 
     try:
         baseline = executor.send(
@@ -191,32 +225,63 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
     except MutationRefused:
         if owns_client:
             http.close()
-        return _skipped(endpoint, operation, findings, budget, profile,
+        return _skipped(endpoint, operation, findings, budget, profile, ledger=ledger,
                         source_url=parsed.get("source_url") or "", executor=executor, reason=(
             f"{operation['method']} requests change server state, so this operation was reviewed from "
             "its contract only. Choose the write profile and enable Allow writes to probe it."))
     except BudgetExhausted as exc:
         if owns_client:
             http.close()
-        return _skipped(endpoint, operation, findings, budget, profile,
+        return _skipped(endpoint, operation, findings, budget, profile, ledger=ledger,
                         source_url=parsed.get("source_url") or "", executor=executor,
                         reason=str(exc))
 
+    verdict = baseline_module.classify(
+        baseline, operation=operation, expectation=expected,
+        identity="identity A" if identity_a else "an anonymous caller")
     if not baseline.ok:
+        ledger.block_dependents(verdict)
+        for name in ("response-contract", "passive-review", "methods", "posture", "transport"):
+            ledger.block(name, verdict.reason, verdict.remediation)
         result = _result(endpoint, operation, _dedupe(findings), budget, profile,
-                         notes=[f"The baseline request failed: {baseline.error}"], baseline=baseline,
+                         notes=[verdict.reason], baseline=baseline, verdict=verdict,
+                         ledger=ledger,
                          source_url=parsed.get("source_url") or "", executor=executor)
         if owns_client:
             http.close()
         return result
 
+    # The gate. Probes that conclude by comparing against a working baseline
+    # are blocked here, with the reason recorded, rather than running against
+    # a refusal and reporting nothing. Probes that read the one response
+    # already in hand, or that send their own independent requests, still run:
+    # a refusal is still a response, and its headers, media type and body are
+    # worth reviewing whatever it says.
+    ledger.block_dependents(verdict, has_second_identity=bool(identity_b))
+    if not verdict.usable:
+        notes.append(verdict.reason)
+        if verdict.remediation:
+            notes.append(f"To get coverage of this operation: {verdict.remediation}")
+
+    def family(name: str, run):
+        """Run one probe family, or record why it did not run."""
+        if ledger.state(name) == "blocked":
+            return []
+        ledger.attempt(name)
+        produced = list(run() or [])
+        ledger.complete(name, findings=len(produced))
+        return produced
+
     tls_findings = posture.inspect_tls(built["url"], timeout=min(timeout, 10.0))
     findings += tls_findings
+    ledger.complete("transport", findings=len(tls_findings))
     notes += _route_notes(link, url=built["url"], tls_inspected=bool(tls_findings))
-    findings += contract.review(parsed, operation, baseline, endpoint)
+    findings += family("response-contract",
+                       lambda: contract.review(parsed, operation, baseline, endpoint))
     findings += inventory.zombie_check(baseline, endpoint)
-    findings += passive.review(baseline, endpoint=endpoint, operation=operation,
-                               document=parsed.get("document") or {})
+    findings += family("passive-review",
+                       lambda: passive.review(baseline, endpoint=endpoint, operation=operation,
+                                              document=parsed.get("document") or {}))
 
     if identity_a:
         for weakness_finding in _supplied_token_findings(identity_a, endpoint):
@@ -224,29 +289,44 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
 
     try:
         if settings["authz"]:
-            findings += authz.probe(
+            findings += family("authorization", lambda: authz.probe(
                 executor, baseline=baseline, endpoint=endpoint, operation=operation,
                 identity_a=identity_a, identity_b=identity_b, base_headers=built["headers"],
                 notes=notes,
-            )
-            findings += contract.invalid_credentials(
+            ))
+            findings += family("credential-handling", lambda: contract.invalid_credentials(
                 executor, baseline=baseline, endpoint=endpoint, operation=operation,
-                identity=identity_a, headers=built["headers"])
-            findings += bypass.probe(executor, baseline=baseline, endpoint=endpoint,
-                                     headers=built["headers"])
-            findings += bypass.cache_deception(executor, baseline=baseline, endpoint=endpoint,
-                                               headers=built["headers"])
+                identity=identity_a, headers=built["headers"]))
+            if baseline.status in (401, 403):
+                findings += family("access-bypass", lambda: bypass.probe(
+                    executor, baseline=baseline, endpoint=endpoint, headers=built["headers"]))
+            else:
+                # It ran nothing, and saying "completed with no findings" would
+                # imply the route was tested for bypasses. There was nothing to
+                # bypass: the baseline was not refused.
+                ledger.not_applicable(
+                    "access-bypass",
+                    f"The baseline returned HTTP {baseline.status} rather than being refused, so "
+                    "there was no access decision for a bypass variant to get around.")
+            findings += family("cache", lambda: bypass.cache_deception(
+                executor, baseline=baseline, endpoint=endpoint, headers=built["headers"]))
             documented = {op["method"] for op in parsed["operations"] if op["path"] == operation["path"]}
-            findings += inventory.allowed_methods(
+            findings += family("methods", lambda: inventory.allowed_methods(
                 executor, url=built["url"], endpoint=endpoint,
                 headers=built["headers"], documented=documented,
-            )
+            ))
+        else:
+            for name in ("authorization", "credential-handling", "access-bypass", "cache",
+                         "methods"):
+                ledger.skip(name, f"The {profile} profile does not run this.")
         if settings.get("posture"):
-            findings += posture.review(
+            findings += family("posture", lambda: posture.review(
                 executor, baseline=baseline, endpoint=endpoint, headers=built["headers"],
                 operation=operation, base_url=built["url"],
                 do_rate_limit=settings.get("rate_limit", False),
-            )
+            ))
+        else:
+            ledger.skip("posture", f"The {profile} profile does not run this.")
         if settings["inputs"]:
             documented_query = [
                 {"name": p.get("name"),
@@ -256,21 +336,35 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
                 for p in (operation.get("parameters") or [])
                 if p.get("in") == "query" and p.get("name")
             ]
-            findings += inputs.probe(executor, baseline=baseline, endpoint=endpoint,
-                                     base_headers=built["headers"],
-                                     documented_query=documented_query,
-                                     documented_header=_declared(operation, "header"),
-                                     documented_cookie=_declared(operation, "cookie"),
-                                     documented_path=_declared(operation, "path"),
-                                     path_template=operation["path"],
-                                     max_fields=settings.get("max_fields", 3),
-                                     time_based=settings.get("time_based", False))
+            findings += family("input-handling", lambda: inputs.probe(
+                executor, baseline=baseline, endpoint=endpoint,
+                base_headers=built["headers"],
+                documented_query=documented_query,
+                documented_header=_declared(operation, "header"),
+                documented_cookie=_declared(operation, "cookie"),
+                documented_path=_declared(operation, "path"),
+                path_template=operation["path"],
+                max_fields=settings.get("max_fields", 3),
+                time_based=settings.get("time_based", False)))
+        else:
+            ledger.skip("input-handling", f"The {profile} profile does not run this.")
         if settings["writes"]:
             findings += _write_probes(executor, parsed, operation, built, endpoint,
                                       built["headers"], identity_b, notes, baseline,
-                                      settings.get("body_fields", 3))
+                                      settings.get("body_fields", 3), ledger)
+        else:
+            reason = (f"The {profile} profile sends no state-changing requests."
+                      if operation["method"] in ("GET", "HEAD", "OPTIONS", "TRACE")
+                      else "Write probes need the write profile and Allow writes.")
+            for name in ("mass-assignment", "write-authorization", "body-injection", "xml"):
+                ledger.skip(name, reason)
     except BudgetExhausted:
         notes.append(f"Request budget of {budget.limit} reached; some probes did not run.")
+        for name in coverage.CHECKS:
+            if not ledger.state(name):
+                ledger.block(name, f"The request budget of {budget.limit} was spent before this "
+                                   "check ran.",
+                             "Choose a profile with a larger budget, or audit fewer operations.")
     except MutationRefused as exc:
         notes.append(str(exc))
     finally:
@@ -284,8 +378,60 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
     if budget.declined or budget.refused:
         notes.append(f"The request budget of {budget.limit} was reached, so some probes did not run. "
                      "Choose a profile with a larger budget to finish this operation.")
+    if (gap := coverage.describe(ledger, verdict)):
+        notes.append(gap)
     return _result(endpoint, operation, _dedupe(findings), budget, profile, notes=notes,
-                   baseline=baseline, source_url=parsed.get("source_url") or "", executor=executor)
+                   baseline=baseline, verdict=verdict, ledger=ledger,
+                   source_url=parsed.get("source_url") or "", executor=executor)
+
+
+def _apply_example(built: dict, example: dict, identity_headers: dict) -> tuple[dict, str]:
+    """Replace a generated request with a saved one the operator knows works.
+
+    Only the parts a saved example is allowed to set are taken: the URL, the
+    body, the content type and non-credential headers. The identity's headers
+    are reapplied afterwards, so a saved example cannot smuggle in a stale
+    credential and cannot override the identity the run is auditing as.
+    """
+    from .identity import strip_credentials
+
+    out = dict(built)
+    changed = []
+    if isinstance(example.get("url"), str) and example["url"].strip():
+        out["url"] = example["url"].strip()
+        changed.append("URL")
+    if "body" in example:
+        body = example["body"]
+        out["body"] = body
+        out["has_body"] = body is not None
+        changed.append("body")
+    if isinstance(example.get("content_type"), str) and example["content_type"]:
+        out["content_type"] = example["content_type"]
+    headers = dict(built.get("headers") or {})
+    supplied = example.get("headers")
+    if isinstance(supplied, dict) and supplied:
+        safe = strip_credentials({str(k): str(v) for k, v in supplied.items()})
+        dropped = len(supplied) - len(safe)
+        headers.update(safe)
+        if dropped:
+            changed.append(f"headers (ignoring {dropped} credential header(s))")
+        else:
+            changed.append("headers")
+    # The audited identity always wins, whatever the example carried.
+    for name, value in (identity_headers or {}).items():
+        for existing in list(headers):
+            if existing.lower() == str(name).lower():
+                del headers[existing]
+        headers[str(name)] = str(value)
+    if out.get("content_type") and out.get("has_body"):
+        headers["Content-Type"] = out["content_type"]
+    out["headers"] = headers
+    if not changed:
+        return out, ""
+    label = example.get("label") or "a saved example"
+    return out, (f"The baseline used {label} rather than a request generated from the schema, "
+                 f"replacing its {', '.join(changed)}. The audited identity's credentials were "
+                 "applied over it.")
 
 
 def _body_text(built: dict):
@@ -332,7 +478,7 @@ def _supplied_token_findings(identity_a: dict, endpoint: str) -> list:
 
 
 def _write_probes(executor, parsed, operation, built, endpoint, headers, identity_b, notes,
-                  baseline=None, body_fields: int = 3) -> list:
+                  baseline=None, body_fields: int = 3, ledger=None) -> list:
     """The probes that change state, cheapest and most conclusive first.
 
     Mass assignment and write authorization go first because each is a couple
@@ -342,17 +488,30 @@ def _write_probes(executor, parsed, operation, built, endpoint, headers, identit
     """
     out: list = []
     method = operation["method"]
+    def blocked(name: str) -> bool:
+        return ledger is not None and ledger.state(name) == "blocked"
+
+    def record(name: str, found: int) -> None:
+        if ledger is not None:
+            ledger.complete(name, findings=found)
+
     if method not in ("POST", "PUT", "PATCH"):
+        if ledger is not None:
+            for name in ("mass-assignment", "write-authorization", "body-injection", "xml"):
+                ledger.not_applicable(name, f"{method} does not carry a request body to probe.")
         return out
 
     # An operation that takes XML gets the external entity probes. Three
     # requests, run before the injection battery because that one costs tens
     # and is the right thing to lose if the budget runs out.
     xml_media = xmllab.request_media(operation)
-    if xml_media and baseline is not None:
+    if not xml_media and ledger is not None:
+        ledger.not_applicable("xml", "The operation does not accept an XML request body.")
+    elif xml_media and baseline is not None and not blocked("xml"):
         probes = xmllab.probe(executor, baseline=baseline, operation=operation,
                               endpoint=endpoint, base_headers=headers, media=xml_media)
         out += probes
+        record("xml", len(probes))
         if not probes:
             notes.append(f"The XML body for this operation ({xml_media}) was probed for external "
                          "entity processing and nothing was found.")
@@ -361,18 +520,36 @@ def _write_probes(executor, parsed, operation, built, endpoint, headers, identit
         if item.id == "spec.mass-assignment-surface" and item.parameter
     ]
     properties = [name.strip() for entry in privileged for name in entry.split(",") if name.strip()]
-    if properties:
-        read_back = built["url"] if method in ("PUT", "PATCH") else None
-        out += inputs.mass_assignment(executor, built=built, endpoint=endpoint, base_headers=headers,
-                                      properties=properties, read_back_url=read_back)
-    else:
+    if not properties:
         notes.append("No privileged properties in the request schema, so no mass-assignment probe ran.")
-    if identity_b:
-        out += inputs.write_authorization(executor, built=built, endpoint=endpoint,
-                                          base_headers=headers, identity_b=identity_b,
-                                          notes=notes)
-    if baseline is not None:
-        out += _body_probes(executor, baseline, endpoint, headers, method, body_fields, notes)
+        if ledger is not None:
+            ledger.not_applicable("mass-assignment",
+                                  "The request schema declares no property that names a privilege "
+                                  "or an owner, so there was nothing to try to set.")
+    elif not blocked("mass-assignment"):
+        read_back = built["url"] if method in ("PUT", "PATCH") else None
+        probes = inputs.mass_assignment(executor, built=built, endpoint=endpoint,
+                                        base_headers=headers, properties=properties,
+                                        read_back_url=read_back)
+        out += probes
+        record("mass-assignment", len(probes))
+    if not identity_b:
+        if ledger is not None and ledger.state("write-authorization") != "blocked":
+            ledger.block("write-authorization",
+                         "No second identity is configured, so there was nothing to attempt the "
+                         "write as.",
+                         "Add a second identity on the Auth tab that owns a different object on "
+                         "this operation.")
+    elif not blocked("write-authorization"):
+        probes = inputs.write_authorization(executor, built=built, endpoint=endpoint,
+                                            base_headers=headers, identity_b=identity_b,
+                                            notes=notes)
+        out += probes
+        record("write-authorization", len(probes))
+    if baseline is not None and not blocked("body-injection"):
+        probes = _body_probes(executor, baseline, endpoint, headers, method, body_fields, notes)
+        out += probes
+        record("body-injection", len(probes))
     return out
 
 
@@ -397,9 +574,14 @@ def _body_probes(executor, baseline, endpoint, headers, method, body_fields, not
 
 
 def _skipped(endpoint, operation, findings, budget, profile, *, reason: str,
-             source_url: str = "", executor=None) -> dict:
+             source_url: str = "", executor=None, ledger=None) -> dict:
+    """No baseline was sent at all, so every active check is blocked, not clean."""
+    if ledger is not None:
+        for name in coverage.CHECKS:
+            if not ledger.state(name):
+                ledger.block(name, reason)
     return _result(endpoint, operation, _dedupe(findings), budget, profile, notes=[reason],
-                   source_url=source_url, executor=executor)
+                   source_url=source_url, executor=executor, ledger=ledger)
 
 
 MAX_LOG_ENTRIES = 200
@@ -442,12 +624,19 @@ def _route_notes(link, *, url: str = "", tls_inspected: bool = False) -> list[st
 
 
 def _result(endpoint, operation, findings, budget, profile, *, notes=None, baseline=None,
-            source_url: str = "", executor=None) -> dict:
+            source_url: str = "", executor=None, verdict=None, ledger=None) -> dict:
     _attach_commands(findings, source_url)
     log = _log(executor, endpoint)
     if executor is not None and len(executor.exchanges) > MAX_LOG_ENTRIES:
         (notes := list(notes or [])).append(
             f"The request log keeps the first {MAX_LOG_ENTRIES} of {len(executor.exchanges)} requests.")
+    if ledger is not None:
+        # Anything never reached gets a state too. A check with no state at all
+        # is indistinguishable from one that ran clean, which is the whole
+        # failure this ledger exists to prevent.
+        for name in coverage.CHECKS:
+            if not ledger.state(name):
+                ledger.skip(name, "This check did not run in this profile.")
     return {
         "endpoint": endpoint,
         "operation_id": operation["id"],
@@ -458,6 +647,9 @@ def _result(endpoint, operation, findings, budget, profile, *, notes=None, basel
         "request_budget": budget.limit,
         "concurrency": executor.concurrency if executor is not None else 1,
         "baseline_status": baseline.status if baseline is not None else None,
+        "baseline_outcome": verdict.outcome if verdict is not None else None,
+        "baseline_verdict": verdict.to_dict() if verdict is not None else None,
+        "coverage": ledger.to_dict() if ledger is not None else None,
         "notes": [note for note in (notes or []) if note],
         "baseline": baseline.to_dict() if baseline is not None else None,
         "log": log,

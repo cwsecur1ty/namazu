@@ -350,6 +350,68 @@ class Finding:
         return out
 
 
+def finding_from_dict(data) -> Finding:
+    """Rehydrate a finding from an export, however old the export is.
+
+    Used for two things: correlating findings that arrived from different
+    sources in separate calls, and reading a report written by an earlier
+    version. Neither can assume the shape it gets, so unknown fields are kept
+    aside rather than dropped and missing ones take their defaults. An export
+    that cannot be read at all is a worse failure than one that loses a field
+    this version does not understand.
+    """
+    from . import evidence as ev
+    from .capture import CapturedCase
+
+    if not isinstance(data, dict):
+        raise ValueError("A finding must be an object")
+    known = set(Finding.__dataclass_fields__)
+    values = {key: value for key, value in data.items()
+              if key in known and key not in ("assessment", "cases", "exchanges")}
+    values.setdefault("id", "unknown")
+    values.setdefault("title", str(data.get("title") or data.get("id") or "Finding"))
+    # A severity or confidence this version does not know becomes the weakest
+    # one it does, rather than raising. A report is for reading.
+    if values.get("severity") not in SEVERITIES:
+        values["severity"] = "info"
+    if values.get("confidence") not in CONFIDENCES:
+        values["confidence"] = "possible"
+    item = Finding(**values)
+    item.cases = [CapturedCase.from_dict(case) for case in (data.get("cases") or [])
+                  if isinstance(case, dict)]
+    raw = data.get("assessment")
+    if isinstance(raw, dict):
+        item.assessment = ev.Assessment(
+            category=raw.get("category") or ev.default_category(item.id),
+            origin=raw.get("origin") or ev.default_origin(item.id),
+            verification=(raw.get("verification")
+                          if raw.get("verification") in ev.VERIFICATION_RANK else "unverified"),
+            confirmed_claim=raw.get("confirmed_claim") or "",
+            severity_rule=raw.get("severity_rule") or "as-assessed",
+            severity_reason=raw.get("severity_reason") or "",
+            proposed_severity=raw.get("proposed_severity") or "",
+            mapping_basis=raw.get("mapping_basis") or "",
+            source_severity=[entry for entry in (raw.get("source_severity") or [])
+                             if isinstance(entry, dict)],
+        )
+    else:
+        # An export from before the axes existed. Classify it from its id
+        # rather than leaving it unclassified, and say the verification is
+        # unknown instead of inventing one.
+        origin = ev.default_origin(item.id)
+        item.assessment = ev.Assessment(
+            category=ev.default_category(item.id), origin=origin,
+            verification=ev.default_verification(origin, has_exchanges=bool(data.get("proof"))),
+            confirmed_claim=(ev.CLAIM_BY_ORIGIN[origin]
+                             if item.confidence == "confirmed" else ""),
+            severity_reason="This finding was read from an export written before severity rules "
+                            "were recorded, so its severity is the one that export carried.")
+    unknown = sorted(set(data) - known - {"proof", "assessment"})
+    if unknown:
+        item.evidence = {**(item.evidence or {}), "unrecognised_fields": unknown}
+    return item
+
+
 def finding(id: str, title: str, severity: str, confidence: str, *, category: str = "",
             origin: str = "", verification: str = "", confirmed_claim: str = "",
             mapping_basis: str = "", source_severity=None, **kwargs) -> Finding:

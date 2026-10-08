@@ -542,10 +542,6 @@ ST_CHECKS = {
         "unsupported-method", "low", "API9:2023 Improper Inventory Management",
         "The route answered a method the contract does not document for it, without a 405.",
         "contract", _CONTRACT_BASIS),
-    "MalformedMediaType": StCheck(
-        "content-type", "low", "API9:2023 Improper Inventory Management",
-        "A response declared a media type that could not be parsed.",
-        "contract", _CONTRACT_BASIS),
     "ContentTypeServerError": StCheck(
         "server-error", "medium", "API8:2023 Security Misconfiguration",
         "The operation returned a 5xx response when sent a media type it documents.",

@@ -12,10 +12,21 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import __version__, oauth
-from .audit import audit_inventory, audit_operation, external
+from .audit import (
+    audit_inventory,
+    audit_operation,
+    capture,
+    correlate,
+    external,
+    matrix,
+    transport,
+    zap,
+)
+from .audit.model import finding_from_dict
 from .discovery import Connection, fetch_document
 from .runner import execute_request, prepare_request
-from .spec import parse_spec
+from .signature import Signature
+from .spec import parse_spec, spec_hash
 
 STATIC = Path(__file__).parent / "static"
 app = FastAPI(title="Namazu", version="0.1.0", description="Standalone API testing by K9", docs_url=None, redoc_url=None)
@@ -133,6 +144,62 @@ class AuditInput(ConnectionInput):
     budget: int = Field(default=60, ge=1, le=200)
     # None lets the profile choose. The engine caps the top end.
     concurrency: int | None = Field(default=None, ge=1, le=16)
+    # What a successful response looks like for this operation, including the
+    # case where the correct answer is a refusal. See audit/baseline.py.
+    expectation: dict | None = None
+    # A saved request to use as the baseline instead of one generated from the
+    # schema, which carries the literal "string" wherever the contract
+    # documents no example.
+    example: dict | None = None
+
+
+class ToolInput(ConnectionInput):
+    """Running one external tool. Separate from AuditInput, which used to carry
+    the tool name in its ``profile`` field, so a request could not say both
+    which tool to run and what traffic policy to run it under."""
+
+    tool: str
+    spec: dict = Field(default_factory=dict)
+    base_url: str | None = None
+    identities: dict[str, dict] = Field(default_factory=dict)
+    allow_mutating: bool = False
+    max_examples: int = Field(default=20, ge=1, le=500)
+    # nuclei knobs, previously unreachable from the UI.
+    severities: str = "info,low,medium,high,critical"
+    tags: str | None = None
+    rate_limit: int = Field(default=50, ge=1, le=500)
+    duration_minutes: int = Field(default=5, ge=1, le=60)
+
+
+class ReplayInput(ConnectionInput):
+    """Replaying one captured case. Credentials come from ``identities`` here
+    and never from the case, which carries only an identity reference."""
+
+    case: dict
+    identities: dict[str, dict] = Field(default_factory=dict)
+    attempts: int = Field(default=2, ge=1, le=5)
+    allow_mutating: bool = False
+    budget: int = Field(default=10, ge=1, le=50)
+
+
+class SequenceInput(ConnectionInput):
+    steps: list[dict]
+    identities: dict[str, dict] = Field(default_factory=dict)
+    variables: dict[str, str] = Field(default_factory=dict)
+    allow_mutating: bool = False
+    budget: int = Field(default=30, ge=1, le=120)
+
+
+class MatrixInput(ConnectionInput):
+    rows: list[dict]
+    identities: dict[str, dict] = Field(default_factory=dict)
+    allow_mutating: bool = False
+    budget: int = Field(default=60, ge=1, le=200)
+
+
+class CorrelateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    findings: list[dict]
 
 
 @app.exception_handler(ValueError)
@@ -184,7 +251,84 @@ def audit(body: AuditInput):
     return audit_operation(body.spec, body.operation_id, base_url=body.base_url,
                            identities=body.identities, profile=body.profile,
                            allow_mutating=body.allow_mutating, timeout=body.timeout,
-                           concurrency=body.concurrency, connection=body.connection())
+                           concurrency=body.concurrency, connection=body.connection(),
+                           expectation=body.expectation, example=body.example)
+
+
+@app.post("/api/replay")
+def replay(body: ReplayInput):
+    """Send a captured case again, up to ``attempts`` times.
+
+    Subject to the same write policy and request budget a probe is: the
+    executor is the only way out of this tool, and replay does not get a
+    private one.
+    """
+    case = capture.CapturedCase.from_dict(body.case)
+    link = body.connection()
+    http = transport.build_client(connection=link)
+    executor = transport.Executor(http, transport.Budget(body.budget), timeout=body.timeout,
+                                  allow_mutating=body.allow_mutating,
+                                  signature=Signature(quiet=link.quiet))
+    try:
+        result = capture.replay(case, executor=executor, identities=body.identities,
+                                attempts=body.attempts, allow_mutating=body.allow_mutating)
+    finally:
+        http.close()
+    return {**result.to_dict(), "case": case.to_dict(),
+            "requests_sent": executor.budget.spent}
+
+
+@app.post("/api/sequence")
+def sequence(body: SequenceInput):
+    """Run a user-defined request sequence, extracting values as it goes."""
+    if not body.steps:
+        raise ValueError("Add at least one step to the sequence")
+    link = body.connection()
+    http = transport.build_client(connection=link)
+    executor = transport.Executor(http, transport.Budget(body.budget), timeout=body.timeout,
+                                  allow_mutating=body.allow_mutating,
+                                  signature=Signature(quiet=link.quiet))
+    try:
+        result = matrix.run_sequence(body.steps, executor=executor,
+                                     identities=body.identities, variables=body.variables,
+                                     allow_mutating=body.allow_mutating)
+    finally:
+        http.close()
+    return {**result.to_dict(), "requests_sent": executor.budget.spent,
+            "log": [item.to_dict() for item in executor.exchanges]}
+
+
+@app.post("/api/matrix")
+def permission_matrix(body: MatrixInput):
+    """Run a permission matrix, after each identity's own positive control."""
+    if not body.rows:
+        raise ValueError("Add at least one row to the permission matrix")
+    link = body.connection()
+    http = transport.build_client(connection=link)
+    executor = transport.Executor(http, transport.Budget(body.budget), timeout=body.timeout,
+                                  allow_mutating=body.allow_mutating,
+                                  signature=Signature(quiet=link.quiet))
+    try:
+        result = matrix.evaluate(body.rows, executor=executor, identities=body.identities,
+                                 allow_mutating=body.allow_mutating)
+    finally:
+        http.close()
+    return {**result, "requests_sent": executor.budget.spent,
+            "log": [item.to_dict() for item in executor.exchanges]}
+
+
+@app.post("/api/correlate")
+def correlate_findings(body: CorrelateInput):
+    """Merge duplicates across Namazu's own findings and the external tools'.
+
+    Done here rather than in the browser because the decision needs the
+    captured exchanges, and because "are these the same defect" is a judgement
+    that should be testable.
+    """
+    items = [finding_from_dict(item) for item in body.findings]
+    kept, notes = correlate.correlate(items)
+    return {"findings": [item.to_dict() for item in kept], "notes": notes,
+            "merged": len(items) - len(kept), "received": len(items)}
 
 
 @app.post("/api/audit/inventory")
@@ -317,27 +461,40 @@ def oauth_callback(request: Request):
 
 @app.get("/api/tools")
 def tools():
-    """Which optional second-opinion tools this machine can run."""
-    return external.available()
+    """Which optional second-opinion tools this machine can run, and what each can do."""
+    return {**external.available(), "zap": zap.available()}
 
 
 @app.post("/api/tools/run")
-def run_tool(body: AuditInput):
-    name = (body.profile or "").strip()
+def run_tool(body: ToolInput):
+    name = (body.tool or "").strip().lower()
     target = body.base_url or ""
     if not target:
         raise ValueError("Set a base URL before running an external tool")
     headers = (body.identities or {}).get("primary") or {}
+    source = (body.spec or {}).get("source_url") or ""
+    schema_hash = spec_hash(body.spec) if body.spec else ""
     if name == "nuclei":
-        return external.run_nuclei(target=target, headers=headers, verify_tls=body.verify_tls)
+        return external.run_nuclei(target=target, headers=headers, verify_tls=body.verify_tls,
+                                   severities=body.severities,
+                                   tags=body.tags if body.tags is not None
+                                   else external.DEFAULT_NUCLEI_TAGS,
+                                   rate_limit=body.rate_limit)
     if name == "schemathesis":
-        source = (body.spec or {}).get("source_url") or ""
         if not source:
             raise ValueError("schemathesis needs the specification URL; import by URL to use it")
         return external.run_schemathesis(schema=source, base_url=target, headers=headers,
                                          allow_mutating=body.allow_mutating,
-                                         verify_tls=body.verify_tls)
-    raise ValueError("Unknown tool; use schemathesis or nuclei")
+                                         max_examples=body.max_examples,
+                                         verify_tls=body.verify_tls, schema_hash=schema_hash)
+    if name == "zap":
+        if not source:
+            raise ValueError("ZAP imports the specification by URL; import by URL to use it")
+        return zap.run(target=target, schema=source, headers=headers,
+                       allow_mutating=body.allow_mutating,
+                       requests_per_second=body.rate_limit,
+                       duration_minutes=body.duration_minutes, schema_hash=schema_hash)
+    raise ValueError("Unknown tool; use schemathesis, nuclei or zap")
 
 
 @app.get("/")

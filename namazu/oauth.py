@@ -28,7 +28,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import httpx
 
-from .audit import jwtlab
+from .audit import jwtlab, oauthladder
 from .discovery import Connection, check_url, connection_for, describe_block
 from .signature import Signature
 
@@ -445,30 +445,57 @@ def probe_authorization_server(*, authorization_endpoint: str, client_id: str, r
                 exchanges=[probe],
             ))
 
-        # 2. implicit grant still enabled
+        # 2. implicit grant: how far does the evidence actually reach?
         probe = send({"response_type": "token", "client_id": client_id, "redirect_uri": redirect_uri,
                       "state": secrets.token_urlsafe(8), "scope": "openid"},
                      "authorize with response_type=token")
-        location = probe.header("location")
-        unsupported = "unsupported_response_type" in (location + probe.body).lower()
-        if probe.status in (301, 302, 303, 307, 308) and redirect_uri.split("://", 1)[-1] in location \
-                and not unsupported:
+        evidence = oauthladder.from_probe(
+            "the configured client", flow="implicit", client_id=client_id,
+            authorization_url=authorization_endpoint, exchange=probe)
+        rung = oauthladder.assess(evidence)
+        if rung.rung in ("server-accepts", "token-issued"):
+            issued = rung.rung == "token-issued"
             findings.append(finding(
-                "oauth.implicit-enabled", "Authorization server still accepts the implicit grant",
-                "medium", "probable", owasp="API2:2023 Broken Authentication",
+                "oauth.implicit-enabled",
+                ("Authorization server issued a token through the implicit grant" if issued else
+                 "Authorization server did not reject the implicit grant"),
+                rung.severity, "confirmed" if issued else "probable",
+                owasp="API2:2023 Broken Authentication",
                 endpoint=f"GET {authorization_endpoint}", parameter="response_type",
-                method=("Sent one authorization request with response_type=token and checked whether the "
-                        "server rejected it with unsupported_response_type."),
-                detail=(f"response_type=token produced HTTP {probe.status} towards the registered redirect "
-                        "URI rather than an unsupported_response_type error, so the implicit grant appears "
-                        "to still be enabled for this client."),
-                impact=("Access tokens can be obtained in a URL fragment, where they reach browser history, "
-                        "Referer headers and logs. Removing implicit from the contract does not disable it "
-                        "at the server."),
+                category=rung.category, origin="runtime-observation",
+                verification=rung.verification,
+                confirmed_claim=rung.claim if issued else "",
+                mapping_basis=(
+                    "API2:2023 is the authentication category and this is an observation about "
+                    "the authorization server's own grant handling, made by sending one "
+                    "authorization request and reading the response without following it."),
+                method=("Sent one authorization request with response_type=token, read the Location "
+                        "header without following it, and checked whether it carries access_token "
+                        "in the fragment or the query string."),
+                detail=f"{rung.claim} {rung.why}",
+                impact=(
+                    "A token delivered to the browser is immediately usable by anything with access "
+                    "to that browser context for the token's scopes and remaining lifetime."
+                    if issued else
+                    "None established. The server answered the request; nothing here shows a token "
+                    "is obtainable through it."),
+                limitations=(
+                    ("This establishes that a token was returned and where. It does not establish "
+                     "that anyone other than the legitimate user can obtain one."
+                     if issued else
+                     "This establishes only that the request was not rejected. An authorization "
+                     "server renders a sign-in page to an unauthenticated browser whether or not "
+                     "it would ever issue a token through this grant, so a redirect or an HTTP 200 "
+                     "here is not evidence of token issuance.")
+                    + f" Next step: {rung.missing}"),
                 remediation=("Restrict this client's allowed response types to `code` in the authorization "
                              "server configuration, and disable the implicit grant tenant-wide once all "
                              "clients have migrated to authorization code + PKCE."),
-                evidence={"response_type": "token", "status": probe.status, "location": location},
+                evidence={"response_type": "token", "status": probe.status,
+                          "location": evidence.probe_location,
+                          "token_present": evidence.token_present,
+                          "token_location": evidence.token_location,
+                          "ladder": rung.to_dict()},
                 exchanges=[probe],
             ))
 
@@ -495,8 +522,27 @@ def probe_authorization_server(*, authorization_endpoint: str, client_id: str, r
                 remediation=("Configure the authorization server to require PKCE with S256 for this client "
                              "and reject any authorization request lacking code_challenge. RFC 9700 §2.1.1 "
                              "requires PKCE for all clients, confidential ones included."),
+                limitations=(
+                    "Both the advertised support and the accepted request are for the same client "
+                    f"({client_id or 'the configured client'}) and the same authorization code "
+                    "flow, which is what makes this a statement about an optional protection "
+                    "rather than a difference between two clients. A server may require PKCE for "
+                    "one client and not another, and that would be a configuration difference, "
+                    "not a downgrade.\n\n"
+                    "What this does not establish: that an authorization code would actually be "
+                    "issued to this request. The server answered without an error; completing the "
+                    "flow needs a consenting user in a browser."),
+                mapping_basis=(
+                    "API2:2023 is the authentication category, and this observation is about the "
+                    "authorization server's handling of a protection on its own code flow."),
+                origin="runtime-observation", verification="observed",
                 evidence={"code_challenge_methods_supported": supported, "status": probe.status,
-                          "location": location},
+                          "location": location,
+                          # Recorded so the comparison can be shown to be
+                          # within one client and one flow. See
+                          # oauthladder.pkce_comparable.
+                          "client_id": client_id, "flow": "authorization_code",
+                          "authorization_endpoint": authorization_endpoint},
                 exchanges=[probe],
             ))
     finally:

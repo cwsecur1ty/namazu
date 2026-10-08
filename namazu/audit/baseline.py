@@ -336,7 +336,7 @@ def _heuristic(exchange, operation: dict, who: str) -> Verdict:
     if status == 401:
         return Verdict(
             "authentication-failure",
-            f"The baseline returned HTTP 401"
+            "The baseline returned HTTP 401"
             + (f" with a {challenge.split(' ', 1)[0]} challenge" if challenge else "")
             + f", so the credential for {who} was not accepted. Every probe that needs an "
               "authenticated request is comparing against a rejection.",

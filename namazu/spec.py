@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import hashlib
 import json
 import math
 import re
@@ -830,3 +831,22 @@ def build_request(spec: dict, operation_id: str, *, base_url: str | None = None,
         url += "?" + urlencode(query)
     valid = False if False in validation_states else None if None in validation_states else True
     return {"method": operation["method"], "url": url, "headers": request_headers, "body": _bounded_json(body_value), "content_type": content_type, "has_body": has_body, "warnings": list(dict.fromkeys(warnings)), "request_validation": {"valid": valid, "errors": validation_errors, "warnings": list(dict.fromkeys(validation_warnings))}}
+
+
+def spec_hash(spec: dict) -> str:
+    """A stable identity for the contract a case was generated from.
+
+    Recorded with every captured case so a case can be recognised as stale:
+    an input generated against one version of a specification may not even be
+    valid against the next, and a replay that fails for that reason is not the
+    same thing as a defect that was fixed. The hash covers the document only,
+    not the derived view Namazu builds from it.
+    """
+    document = spec.get("document") if isinstance(spec, dict) else None
+    if document is None:
+        document = spec
+    try:
+        material = json.dumps(document, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        return ""
+    return hashlib.sha256(material.encode("utf-8", "replace")).hexdigest()[:16]
