@@ -290,6 +290,21 @@ remembered.
 This is the record of what the tool actually did, which is what you need when a
 finding is disputed or when something on the target breaks mid-test.
 
+## Media types
+
+A response whose media type carries a structured syntax suffix (RFC 6839) is
+matched against a declared media type of the same syntax. An operation that
+documents `application/json` and returns `application/problem+json` for its
+errors, which is what RFC 9457 problem details look like, is validated against
+the schema declared for `application/json`.
+
+That is a warning, not a pass and not a failure: the contract really does not
+document the media type, and a client that registers a deserializer for the
+exact string will not handle the response. But the body is the syntax the
+schema was written for, so refusing to look at it loses the useful finding to
+keep the cosmetic one. The audit reports this as `info`; a media type that
+matches nothing at all is still `low`.
+
 ## Safety
 
 - Read-only HTTP methods unless you explicitly enable writes, refused at the transport.
@@ -393,7 +408,7 @@ interpolated into a quoted string on an engine that has a sleep function.
 node --check namazu/static/app.js
 ```
 
-414 tests across 93 checks, about 90 seconds to run, most of which is the
+431 tests across 93 checks, about 90 seconds to run, most of which is the
 time-based SQL tests waiting for real delays. Detections are asserted in both
 directions: a check fires on the broken handler, and stays silent on the correct
 one. Where a check rests on a control, the test asserts the control is what

@@ -34,6 +34,36 @@ def prepare_request(spec: dict, operation_id: str, **options) -> dict:
     return build_request(parsed, operation_id, **options)
 
 
+# RFC 6839 structured syntax suffixes. A media type ending in one of these is
+# that syntax, whatever else it also is: application/problem+json is JSON.
+STRUCTURED_SUFFIXES = {
+    "+json": ("application/json", "text/json"),
+    "+xml": ("application/xml", "text/xml"),
+}
+
+
+def _suffix_media(actual: str, content: dict) -> str | None:
+    """A declared media type of the same syntax as ``actual``, if there is one.
+
+    The common case is an error response arriving as application/problem+json
+    (RFC 9457) from an operation whose contract documents only application/json.
+    Those are two different media types, so this is not a clean match and the
+    caller reports it as neither a pass nor a failure. But the body is the
+    syntax the declared schema was written for, and validating it against that
+    schema is worth more than refusing to look at it: before this existed, the
+    media type mismatch returned early and the response body was never checked
+    at all, which lost the substantive finding to keep the cosmetic one.
+    """
+    for suffix, bases in STRUCTURED_SUFFIXES.items():
+        if not actual.endswith(suffix):
+            continue
+        for key in content:
+            normalized = key.lower()
+            if normalized in bases or normalized.endswith(suffix):
+                return key
+    return None
+
+
 def _matching_media(actual: str, content: dict) -> str | None:
     actual = actual.lower().split(";", 1)[0].strip()
     if not actual:
@@ -79,10 +109,21 @@ def review_response(spec: dict, operation: dict, status: int, headers: dict, bod
         return {"valid": None, "errors": [], "warnings": ["Status is documented, but no response body schema is provided"], "checks": checks}
     actual_media = headers.get("content-type", "").split(";", 1)[0].strip().lower()
     media_key = _matching_media(actual_media, content)
-    checks.append({"name": "Documented Content-Type", "valid": media_key is not None})
-    if media_key is None:
+    # Three outcomes, not two: the declared type, the same syntax under another
+    # type, or nothing. The middle one reports None, which is this module's
+    # existing spelling for neither validated nor failed.
+    suffix_key = None if media_key else _suffix_media(actual_media, content)
+    checks.append({"name": "Documented Content-Type",
+                   "valid": True if media_key else (None if suffix_key else False)})
+    if media_key is None and suffix_key is None:
         errors.append({"path": "$.headers.content-type", "message": f"Content-Type {actual_media or '(missing)'} does not match {', '.join(content)}"})
         return {"valid": False, "errors": errors, "warnings": warnings, "checks": checks}
+    if suffix_key is not None:
+        media_key = suffix_key
+        warnings.append(
+            f"Content-Type {actual_media} is not documented for HTTP {status}. It is the same "
+            f"syntax as {suffix_key}, which is declared, so the body was validated against that "
+            "schema. Add the media type to the response content map.")
     media = content[media_key]
     schema = media.get("schema") if isinstance(media, dict) else None
     value = body
@@ -97,7 +138,10 @@ def review_response(spec: dict, operation: dict, status: int, headers: dict, bod
         return {"valid": None, "errors": [], "warnings": ["Body schema validation supports JSON and text responses; this media type is not decoded"], "checks": checks}
     report = validate_schema(value, schema, spec["document"], direction="response")
     checks.append({"name": "Response schema", "valid": report["valid"]})
-    return {**report, "checks": checks}
+    # The spread would otherwise drop anything appended to warnings above, since
+    # the schema report carries a warnings key of its own.
+    return {**report, "warnings": warnings + list(report.get("warnings") or []),
+            "checks": checks}
 
 
 def _form_value(value):

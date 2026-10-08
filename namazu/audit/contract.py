@@ -70,7 +70,31 @@ def review(spec: dict, operation: dict, baseline: Exchange, endpoint: str) -> li
             exchanges=[baseline],
         ))
 
-    if checks.get("Documented Content-Type") is False:
+    # True, or absent because an earlier step returned first, means nothing to
+    # report. None means the response was the declared syntax under a media type
+    # the contract does not list, which is a weaker claim than a mismatch.
+    media_match = checks.get("Documented Content-Type", True)
+    if media_match is None:
+        actual = baseline.content_type or "(none)"
+        findings.append(finding(
+            "contract.content-type-mismatch", "Response media type is not documented",
+            "info", "confirmed", owasp="API9:2023 Improper Inventory Management", endpoint=endpoint,
+            method=("Compared the response Content-Type against the media types the matched response "
+                    "object declares, allowing a structured syntax suffix to match the syntax it "
+                    "names."),
+            detail=(f"The response arrived as {actual}, which the operation does not document for "
+                    f"HTTP {baseline.status}. It carries a structured syntax suffix matching a media "
+                    "type the contract does declare, so the body was still validated against that "
+                    "schema."),
+            impact=("A client that registers a deserializer for the exact documented media type, or "
+                    "negotiates strictly on it, will not handle this response. One that reads the "
+                    "suffix will."),
+            remediation=(f"Add {actual} to the response content map for HTTP {baseline.status}."),
+            highlights=[mark(actual, "weak", "The media type that is not in the contract.")],
+            evidence={"content_type": actual, "status": baseline.status, "match": "syntax suffix"},
+            exchanges=[baseline],
+        ))
+    elif media_match is False:
         actual = baseline.content_type or "(none)"
         findings.append(finding(
             "contract.content-type-mismatch", "Response media type is not documented",
