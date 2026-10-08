@@ -19,13 +19,15 @@ from .transport import BudgetExhausted, Executor
 
 # Path rewrites that some servers, proxies and frameworks normalise differently
 # from the component that made the authorization decision.
+# Each takes the path and the run's signature; only the one that has to send a
+# recognisable name uses the second argument.
 PATH_VARIANTS = (
-    ("trailing slash", lambda path: path + "/" if not path.endswith("/") else path.rstrip("/")),
-    ("duplicated separator", lambda path: "/" + path.lstrip("/").replace("/", "//", 1)),
-    ("current-directory segment", lambda path: _insert_before_last(path, ".")),
-    ("encoded separator", lambda path: path.replace("/", "%2f", 1) if path.count("/") > 1 else path),
-    ("matrix parameter", lambda path: path + ";namazu=1"),
-    ("case change", lambda path: _swap_case_last(path)),
+    ("trailing slash", lambda path, _s: path + "/" if not path.endswith("/") else path.rstrip("/")),
+    ("duplicated separator", lambda path, _s: "/" + path.lstrip("/").replace("/", "//", 1)),
+    ("current-directory segment", lambda path, _s: _insert_before_last(path, ".")),
+    ("encoded separator", lambda path, _s: path.replace("/", "%2f", 1) if path.count("/") > 1 else path),
+    ("matrix parameter", lambda path, signature: f"{path};{signature.slug()}=1"),
+    ("case change", lambda path, _s: _swap_case_last(path)),
 )
 # Headers a reverse proxy may set, which an application sometimes trusts.
 HEADER_VARIANTS = (
@@ -78,9 +80,9 @@ def probe(executor: Executor, *, baseline: Exchange, endpoint: str, headers: dic
     return findings
 
 
-def _rewrite(build, path: str) -> str | None:
+def _rewrite(build, path: str, signature) -> str | None:
     try:
-        variant = build(path)
+        variant = build(path, signature)
     except (IndexError, ValueError):
         return None
     return variant if variant and variant != path else None
@@ -90,7 +92,7 @@ def _path_variants(executor, baseline, endpoint, headers, path) -> list:
     """Six rewrites of the same refused path, each a single independent GET."""
     def one(branch, item):
         label, build = item
-        variant = _rewrite(build, path)
+        variant = _rewrite(build, path, executor.signature)
         if variant is None or not branch.affordable(1):
             return None
         return branch.send(
@@ -103,7 +105,7 @@ def _path_variants(executor, baseline, endpoint, headers, path) -> list:
                                               strict=True):
         if probe_exchange is None or not _is_data(probe_exchange):
             continue
-        variant = _rewrite(build, path)
+        variant = _rewrite(build, path, executor.signature)
         return [finding(
             "authz.path-bypass", f"Refused route is reachable with a {label}",
             "high", "confirmed", owasp="API5:2023 Broken Function Level Authorization",
@@ -190,8 +192,9 @@ def cache_deception(executor: Executor, *, baseline: Exchange, endpoint: str, he
     if not any(name.lower() in ("authorization", "cookie") for name in headers):
         return []
     path = urlsplit(baseline.url).path.rstrip("/")
+    suffix = f"/{executor.signature.slug('probe')}.css"
     probe_exchange = executor.send(
-        "GET", _with_path(baseline.url, f"{path}/namazu-probe.css"),
+        "GET", _with_path(baseline.url, f"{path}{suffix}"),
         label="cache deception: static suffix", headers=headers, identity="identity A",
     )
     if not _is_data(probe_exchange):
@@ -205,9 +208,9 @@ def cache_deception(executor: Executor, *, baseline: Exchange, endpoint: str, he
     return [finding(
         "cache.deception", "Authenticated response is served under a static-looking path",
         "medium", "probable", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
-        method=(f"Requested {path}/namazu-probe.css with the same credentials, then compared the body "
+        method=(f"Requested {path}{suffix} with the same credentials, then compared the body "
                 "with the baseline and read the Cache-Control header of the response."),
-        detail=(f"Appending /namazu-probe.css to the path still returned the authenticated body "
+        detail=(f"Appending {suffix} to the path still returned the authenticated body "
                 f"(HTTP {probe_exchange.status}, {int(similarity(baseline.body, probe_exchange.body) * 100)}% "
                 f"similar) with Cache-Control: {cache or '(absent)'}. The server ignored the extra "
                 "segment but a cache keying on the extension would not."),
@@ -226,8 +229,8 @@ def cache_deception(executor: Executor, *, baseline: Exchange, endpoint: str, he
                      "segments, send Cache-Control: no-store on authenticated responses, and configure "
                      "caches to key on the full path and to never store responses to credentialed "
                      "requests."),
-        highlights=[mark("/namazu-probe.css", "attacker", "The suffix Namazu appended; the server ignored it.")],
-        evidence={"probe_path": f"{path}/namazu-probe.css", "status": probe_exchange.status,
+        highlights=[mark(suffix, "attacker", "The suffix Namazu appended; the server ignored it.")],
+        evidence={"probe_path": f"{path}{suffix}", "status": probe_exchange.status,
                   "body_similarity": similarity(baseline.body, probe_exchange.body),
                   "cache_control": cache or None},
         exchanges=[baseline, probe_exchange],

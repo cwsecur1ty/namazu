@@ -1,6 +1,7 @@
 """Tests for the second batch of checks and for OAuth 2 support."""
 import json
 import time
+from urllib.parse import urlsplit
 
 import httpx
 import pytest
@@ -79,8 +80,11 @@ def test_ssrf_confirmed_from_a_server_side_fetch_error():
 
     def handler(request):
         target = request.url.params.get("url", "")
-        if "namazu-probe-does-not-resolve.invalid" in target:
-            return _json({"error": "getaddrinfo ENOTFOUND namazu-probe-does-not-resolve.invalid"}, 502)
+        # Matched on the suffix rather than the whole host: the probe host now
+        # comes from the run's signature, and is random in quiet mode.
+        if ".invalid" in target:
+            host = urlsplit(target).hostname or ""
+            return _json({"error": f"getaddrinfo ENOTFOUND {host}"}, 502)
         if "127.0.0.1:9" in target:
             return _json({"error": "connect ECONNREFUSED 127.0.0.1:9"}, 502)
         return _json({"hits": 1})

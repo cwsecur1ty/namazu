@@ -2361,6 +2361,24 @@
     return value || null;
   }
 
+  /** Whether requests should avoid naming the tool. See namazu/signature.py. */
+  function quietMode() { return $("outbound-mode").value === "quiet"; }
+
+  const OUTBOUND_NOTES = {
+    announced: "The user agent names Namazu, and every probe marker, header and path says so too. "
+      + "Both sides of the engagement can pick the test out of a log afterwards.",
+    quiet: "The user agent becomes an ordinary browser string and every probe marker is derived from "
+      + "a random token the report names, so the traffic cannot be attributed to this tool. The "
+      + "probes themselves do not change: an injection payload still looks like one. Use it to test "
+      + "whether monitoring notices a scan, or when a WAF refuses an unfamiliar client by name.",
+  };
+
+  function renderOutboundMode() {
+    const mode = $("outbound-mode").value;
+    $("outbound-note").textContent = OUTBOUND_NOTES[mode] || "";
+    prefs.write("outbound-mode", mode);
+  }
+
   /** How requests leave the machine: the same route for every endpoint.
    *
    * One builder on purpose. These fields were listed by hand at each call
@@ -2373,6 +2391,7 @@
     return {
       verify_tls: $("verify-tls").checked,
       user_agent: userAgent(),
+      quiet: quietMode(),
       proxy: text("proxy-url"),
       ca_bundle: text("ca-bundle"),
       client_cert: text("client-cert"),
@@ -2989,6 +3008,7 @@
       prefs.write("oauth-redirect-uri", $("oauth-redirect-uri").value.trim());
       oauthVisible();
     });
+    $("outbound-mode").addEventListener("change", renderOutboundMode);
     $("user-agent").addEventListener("change", () => {
       prefs.write("user-agent", $("user-agent").value.trim());
     });
@@ -3687,6 +3707,9 @@
     $("audit-profile").value = prefs.read("audit-profile", "readonly");
     $("audit-concurrency").value = prefs.read("audit-concurrency", "");
     $("user-agent").value = prefs.read("user-agent", "");
+    $("outbound-mode").value = prefs.read("outbound-mode", "announced") === "quiet"
+      ? "quiet" : "announced";
+    renderOutboundMode();
     $("oauth-redirect-uri").value = prefs.read("oauth-redirect-uri", "");
     describeConcurrency();
 

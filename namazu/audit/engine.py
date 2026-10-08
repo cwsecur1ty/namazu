@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 
 from ..discovery import connection_for
 from ..runner import normalize_spec
+from ..signature import Signature
 from ..spec import build_request
 from . import (
     authz,
@@ -170,8 +171,12 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
     http = client or build_client(connection=link)
     workers = _workers(settings, concurrency)
     executor = Executor(http, budget, timeout=timeout, allow_mutating=allow_mutating,
-                        concurrency=workers)
+                        concurrency=workers, signature=Signature(quiet=link.quiet))
     notes: list[str] = list(credential_notes)
+    # Said before anything else, because a run whose requests do not name the
+    # tool has to be attributable from the report instead.
+    if (quiet_note := executor.signature.describe()):
+        notes.insert(0, quiet_note)
 
     try:
         baseline = executor.send(
@@ -424,9 +429,7 @@ def _route_notes(link, *, url: str = "", tls_inspected: bool = False) -> list[st
     tells the reader nothing.
     """
     described = link.describe()
-    if not described:
-        return []
-    notes = [described]
+    notes = [described] if described else []
     # The certificate inspection opens its own TLS socket rather than going
     # through the proxy, on purpose: a proxy that intercepts TLS presents its
     # own certificate, so routing this would inspect the proxy, not the target.
@@ -474,17 +477,20 @@ def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict
     if urlsplit(target).scheme not in ("http", "https"):
         raise ValueError("The base URL must begin with http:// or https://.")
 
+    link = connection_for(connection, verify_tls, user_agent)
     identity_a, _token, credential_note = identity_resolver.resolve(
         identities, "primary", verify_tls=verify_tls, timeout=timeout, user_agent=user_agent,
-        connection=connection_for(connection, verify_tls, user_agent))
+        connection=link)
     findings = list(specscan.review_document(parsed))
     documented_paths = {op["path"] for op in parsed["operations"]}
 
     tracker = Budget(budget)
     owns_client = client is None
-    http = client or build_client(connection=connection_for(connection, verify_tls, user_agent))
+    http = client or build_client(connection=link)
+    signature = Signature(quiet=link.quiet)
     executor = Executor(http, tracker, timeout=timeout, allow_mutating=False,
-                        concurrency=_workers(PROFILES["readonly"], concurrency))
+                        concurrency=_workers(PROFILES["readonly"], concurrency),
+                        signature=signature)
     try:
         probe_findings, summary = inventory.run(
             executor, spec=parsed, base_url=target, headers=identity_a,
@@ -506,7 +512,8 @@ def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict
         "discovery": summary,
         "log": _log(executor, "surface sweep"),
         "notes": ([credential_note] if credential_note else [])
-                 + _route_notes(connection_for(connection, verify_tls, user_agent))
+                 + ([signature.describe()] if signature.describe() else [])
+                 + _route_notes(link)
                  + (["Request budget reached; the sweep stopped early."] if summary.get("budget_exhausted") else []),
         "findings": [item.to_dict() for item in deduped],
         "summary": summarize(deduped),

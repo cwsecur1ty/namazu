@@ -752,6 +752,14 @@
               <p class="hint">Sent on every request Namazu makes, including contract import and the OAuth token exchange. Left empty it announces itself as Namazu. Set a value when a WAF in front of the target refuses an unfamiliar client.</p>
             </div>
             <div class="field">
+              <label for="outbound-mode">Outbound identity</label>
+              <select id="outbound-mode">
+                <option value="announced" selected>Announce Namazu</option>
+                <option value="quiet">Do not name the tool</option>
+              </select>
+              <p class="hint" id="outbound-note"></p>
+            </div>
+            <div class="field">
               <label for="proxy-url">Upstream proxy</label>
               <input id="proxy-url" type="text" autocomplete="off" spellcheck="false" placeholder="http://127.0.0.1:8080">
               <p class="hint">Sends every request through an intercepting proxy, so each probe lands in your Burp or ZAP history and can be replayed from Repeater. Leave empty to connect directly. The certificate inspection always connects directly, so that it reads the target's own certificate rather than the proxy's.</p>

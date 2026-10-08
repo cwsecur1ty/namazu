@@ -32,6 +32,7 @@ from ..discovery import (
     connection_for,
     read_bounded,
 )
+from ..signature import Signature
 from .model import Exchange
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
@@ -90,12 +91,18 @@ class Executor:
     """Sends audit probes over one httpx client with a shared budget."""
 
     def __init__(self, client: httpx.Client, budget: Budget, *, timeout: float = 15.0,
-                 allow_mutating: bool = False, concurrency: int = 1) -> None:
+                 allow_mutating: bool = False, concurrency: int = 1,
+                 signature: Signature | None = None) -> None:
         self.client = client
         self.budget = budget
         self.timeout = timeout
         self.allow_mutating = allow_mutating
         self.concurrency = max(1, min(int(concurrency or 1), MAX_CONCURRENCY))
+        # What the probes put their name on. Every probe already receives the
+        # executor, so this is how one decision reaches all of them, and why a
+        # branch shares the instance rather than making its own: a control and
+        # its probe have to carry the same marker.
+        self.signature = signature or Signature()
         self.exchanges: list[Exchange] = []
 
     def affordable(self, count: int = 1) -> bool:
@@ -110,7 +117,7 @@ class Executor:
         flight no matter how deeply the probes nest.
         """
         return Executor(self.client, self.budget, timeout=self.timeout,
-                        allow_mutating=False, concurrency=1)
+                        allow_mutating=False, concurrency=1, signature=self.signature)
 
     def fan_out(self, items, worker):
         """Run ``worker(executor, item)`` over independent items, in parallel.

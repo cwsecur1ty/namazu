@@ -17,9 +17,9 @@ from .identity import CREDENTIAL_HEADERS
 from .model import Exchange, finding, mark, similarity
 from .transport import Executor
 
-# Tokens that make a bearer credential structurally wrong rather than merely
-# unknown, so a server that parses before it verifies will reject them.
-INVALID_TOKEN = "namazu.invalid.credential"
+# A value that makes a bearer credential structurally wrong rather than merely
+# unknown, so a server that parses before it verifies will reject it. It names
+# the tool, so it comes from the run's signature rather than being a constant.
 SERVER_ERROR = range(500, 600)
 
 
@@ -115,7 +115,7 @@ def review(spec: dict, operation: dict, baseline: Exchange, endpoint: str) -> li
     return findings
 
 
-def _corrupt_cookies(value: str) -> str:
+def _corrupt_cookies(value: str, invalid_token: str) -> str:
     """Every cookie value replaced, every cookie name kept.
 
     Replacing the whole header would send a cookie with no name, which a
@@ -125,7 +125,7 @@ def _corrupt_cookies(value: str) -> str:
     out = []
     for item in (value or "").split(";"):
         name, separator, _ = item.strip().partition("=")
-        out.append(f"{name}={INVALID_TOKEN}" if separator and name else item.strip())
+        out.append(f"{name}={invalid_token}" if separator and name else item.strip())
     return "; ".join(part for part in out if part)
 
 
@@ -146,16 +146,17 @@ def invalid_credentials(executor: Executor, *, baseline: Exchange, endpoint: str
     if not (baseline.ok and 200 <= baseline.status < 300 and len(baseline.body.strip()) > 2):
         return []
 
+    invalid_token = executor.signature.invalid_token
     corrupted = {}
     for name, value in headers.items():
         lowered = str(name).lower()
         if lowered == "authorization":
             scheme = value.split(" ", 1)[0] if " " in value else "Bearer"
-            corrupted[name] = f"{scheme} {INVALID_TOKEN}"
+            corrupted[name] = f"{scheme} {invalid_token}"
         elif lowered == "cookie":
-            corrupted[name] = _corrupt_cookies(value)
+            corrupted[name] = _corrupt_cookies(value, invalid_token)
         elif lowered in CREDENTIAL_HEADERS:
-            corrupted[name] = INVALID_TOKEN
+            corrupted[name] = invalid_token
         else:
             corrupted[name] = value
     if corrupted == headers:
@@ -175,7 +176,7 @@ def invalid_credentials(executor: Executor, *, baseline: Exchange, endpoint: str
         method=("Replaced the credential value with a string that cannot be a valid token, kept every "
                 "other header identical, and compared the two response bodies. The header was present "
                 "and well-formed, so this is not a missing-credential test."),
-        detail=(f"Sending the credential as “{INVALID_TOKEN}” returned HTTP {probe.status} with a "
+        detail=(f"Sending the credential as “{invalid_token}” returned HTTP {probe.status} with a "
                 f"body {int(match * 100)}% similar to the authenticated response. The server accepts "
                 "the request without verifying the credential it was given."),
         background=(
@@ -190,12 +191,12 @@ def invalid_credentials(executor: Executor, *, baseline: Exchange, endpoint: str
                      "validate. Make verification the thing that grants access, rather than the "
                      "presence of a header."),
         highlights=[
-            mark(INVALID_TOKEN, "attacker", "The worthless value Namazu sent in place of the token."),
+            mark(invalid_token, "attacker", "The worthless value Namazu sent in place of the token."),
             mark("without verifying the credential", "weak",
                  "Presence of the header was enough; the value was never checked."),
         ],
         evidence={"authenticated_status": baseline.status, "invalid_credential_status": probe.status,
-                  "body_similarity": match, "sent_value": INVALID_TOKEN,
+                  "body_similarity": match, "sent_value": invalid_token,
                   "declared_security": operation.get("security")},
         exchanges=[baseline, probe],
     )]

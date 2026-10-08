@@ -35,7 +35,6 @@ MAX_FIELDS = 4
 # Header and cookie parameters are capped separately: a contract that declares
 # a dozen of them is usually declaring plumbing, not inputs worth probing.
 NAMED_FIELDS = 2
-REDIRECT_HOST = "namazu-probe.invalid"
 
 SQL_ERRORS = re.compile(
     r"(?i)(SQL syntax.{0,40}MySQL|Warning.{0,20}\bmysqli?_|valid MySQL result|"
@@ -372,18 +371,22 @@ INTERESTING = re.compile(
     r"name|sort|order|order_?by|where|id)$")
 
 
-def _documented_value(field: str, documented: list | None):
-    """The example or default the contract gives for a query parameter."""
+def _documented_value(field: str, documented: list | None, filler: str = "namazu"):
+    """The example or default the contract gives for a query parameter.
+
+    ``filler`` is what a string parameter gets when the contract names no
+    example; it goes on the wire, so the caller passes the run's own.
+    """
     for entry in documented or []:
         if isinstance(entry, dict) and entry.get("name") == field:
             for key in ("example", "default"):
                 if entry.get(key) is not None:
                     return str(entry[key])
-            return "1" if entry.get("type") in ("integer", "number") else "namazu"
+            return "1" if entry.get("type") in ("integer", "number") else filler
     return None
 
 
-def _seed_value(baseline: Exchange, field, documented: list | None):
+def _seed_value(baseline: Exchange, field, documented: list | None, filler: str = "namazu"):
     """A plausible value for this point: what the request carried, else the contract's."""
     if isinstance(field, Point):
         current = field.current(baseline)
@@ -397,7 +400,7 @@ def _seed_value(baseline: Exchange, field, documented: list | None):
         present = dict(parse_qsl(urlsplit(baseline.url).query, keep_blank_values=True))
         if present.get(field):
             return present[field]
-    return _documented_value(str(field), documented)
+    return _documented_value(str(field), documented, filler)
 
 
 def _names_of(documented: list | None) -> list[str]:
@@ -405,7 +408,8 @@ def _names_of(documented: list | None) -> list[str]:
             if isinstance(entry, dict) and entry.get("name")]
 
 
-def _query_fields(url: str, documented: list | None = None, limit: int = MAX_FIELDS) -> list[str]:
+def _query_fields(url: str, documented: list | None = None, limit: int = MAX_FIELDS,
+                  filler: str = "namazu") -> list[str]:
     """Query parameters to probe: those in the request, plus documented optional ones.
 
     An optional parameter the generated request omitted is exactly where a
@@ -422,7 +426,7 @@ def _query_fields(url: str, documented: list | None = None, limit: int = MAX_FIE
                                       0 if name in present else 1))
     for name in candidates:
         if name not in out:
-            out.append(Point(name, example=_documented_value(name, documented)))
+            out.append(Point(name, example=_documented_value(name, documented, filler)))
     return out[:limit]
 
 
@@ -454,7 +458,7 @@ def battery(executor: Executor, *, baseline: Exchange, endpoint: str, field,
 def points(baseline: Exchange, *, documented_query: list | None = None,
            documented_header: list | None = None, documented_path: list | None = None,
            documented_cookie: list | None = None, path_template: str = "",
-           max_fields: int = MAX_FIELDS) -> list:
+           max_fields: int = MAX_FIELDS, filler: str = "namazu") -> list:
     """Every injection point this operation documents, highest signal first.
 
     Path parameters carry identifiers and reach the same sinks as query
@@ -463,7 +467,7 @@ def points(baseline: Exchange, *, documented_query: list | None = None,
     contract rarely declares an interesting number of them.
     """
     fields = _path_points(baseline, path_template, documented_path)
-    fields += _query_fields(baseline.url, documented_query, max_fields)
+    fields += _query_fields(baseline.url, documented_query, max_fields, filler)
     fields = fields[:max_fields + 2]
     fields += _named_points(documented_header, "header", NAMED_FIELDS)
     fields += _named_points(documented_cookie, "cookie", NAMED_FIELDS)
@@ -484,7 +488,7 @@ def probe(executor: Executor, *, baseline: Exchange, endpoint: str, base_headers
     fields = points(baseline, documented_query=documented_query,
                     documented_header=documented_header, documented_path=documented_path,
                     documented_cookie=documented_cookie, path_template=path_template,
-                    max_fields=max_fields)
+                    max_fields=max_fields, filler=executor.signature.marker())
 
     def one(branch, field):
         # Points are independent of each other, so they are the unit of
@@ -690,12 +694,12 @@ def _open_redirect(executor, baseline, endpoint, field, base_headers) -> list:
         return []
     if not executor.affordable(1):
         return []
-    target = f"https://{REDIRECT_HOST}/namazu"
+    target = f"https://{executor.signature.host}/{executor.signature.slug()}"
     probe_exchange = _send(executor, baseline, field, target, f"{field}=external URL", base_headers)
     if not probe_exchange.ok or probe_exchange.status not in (301, 302, 303, 307, 308):
         return []
     location = probe_exchange.header("location")
-    if REDIRECT_HOST not in location:
+    if executor.signature.host not in location:
         return []
     return [finding(
         "input.open-redirect", "Parameter controls the redirect destination",
@@ -778,7 +782,7 @@ def mass_assignment(executor: Executor, *, built: dict, endpoint: str, base_head
         value = True if re.match(r"(?i)^(is_|has_)|^(admin|verified|active|enabled|approved)$", leaf) else "admin"
         injected[leaf] = value
         chosen[leaf] = value
-    injected.setdefault("namazu_probe_marker", nonce)
+    injected.setdefault(executor.signature.field_name, nonce)
 
     written = executor.send(
         built["method"], built["url"], label=f"body with {', '.join(chosen)} added",
@@ -941,8 +945,8 @@ SSRF_NAMES = re.compile(
     r"(?i)^(url|uri|href|link|callback|callback_?url|webhook|webhook_?url|endpoint|host|"
     r"proxy|source|src|image_?url|avatar_?url|document_?url|feed|fetch|load|import|remote)$"
 )
-# A host that resolves nowhere, and a port on the loopback interface that nothing serves.
-UNRESOLVABLE = "http://namazu-probe-does-not-resolve.invalid/probe"
+# A port on the loopback interface that nothing serves. The host that resolves
+# nowhere comes from the run's signature, because it carries a name.
 CLOSED_PORT = "http://127.0.0.1:9/probe"
 
 
@@ -953,7 +957,8 @@ def _ldap_error(executor, baseline, endpoint, field, base_headers) -> list:
                    base_headers)
     if not broken.ok or not LDAP_ERRORS.search(broken.body or ""):
         return []
-    control = _send(executor, baseline, field, "namazuprobe", f"{field}= inert control", base_headers)
+    inert = executor.signature.marker("probe")
+    control = _send(executor, baseline, field, inert, f"{field}= inert control", base_headers)
     if control.ok and LDAP_ERRORS.search(control.body or ""):
         return []
     match = LDAP_ERRORS.search(broken.body)
@@ -969,7 +974,7 @@ def _ldap_error(executor, baseline, endpoint, field, base_headers) -> list:
                 "authentication filters it can turn into a login bypass."),
         remediation=("Escape the input per RFC 4515 before placing it in a filter, or bind parameters "
                      "through your directory library instead of concatenating."),
-        evidence={"parameter": field, "payload": "*)(|(objectClass=*", "control": "namazuprobe",
+        evidence={"parameter": field, "payload": "*)(|(objectClass=*", "control": inert,
                   "error_excerpt": broken.body[max(0, match.start() - 60):match.end() + 120]},
         exchanges=[baseline, broken, control],
     )]
@@ -982,7 +987,7 @@ def _sql_boolean(executor, baseline, endpoint, field, base_headers, documented=N
     than the operation baseline, so the probe works whether or not the generated
     request happened to carry the parameter.
     """
-    original = _seed_value(baseline, field, documented)
+    original = _seed_value(baseline, field, documented, executor.signature.marker())
     if not original or not str(original).isdigit() or not executor.affordable(4):
         return []
     local = _send(executor, baseline, field, original, f"{field}={original} (local baseline)", base_headers)
@@ -1039,7 +1044,7 @@ def _sql_time_based(executor, baseline, endpoint, field, base_headers,
     # out, and a timeout proves nothing either way.
     if executor.timeout < SCALE_SECONDS + 2 or not executor.affordable(len(SLEEP_PAYLOADS) + 2):
         return []
-    seed = _seed_value(baseline, field, documented)
+    seed = _seed_value(baseline, field, documented, executor.signature.marker())
     seed = "" if seed is None else str(seed)
 
     def attempt(engine, template, seconds, label):
@@ -1121,7 +1126,8 @@ def _ssrf(executor, baseline, endpoint, field, base_headers) -> list:
         return []
     if FETCH_ERRORS.search(baseline.body or ""):
         return []
-    unresolvable = _send(executor, baseline, field, UNRESOLVABLE,
+    unreachable = f"http://{executor.signature.host}/probe"
+    unresolvable = _send(executor, baseline, field, unreachable,
                          f"{field}= host that cannot resolve", base_headers)
     if not unresolvable.ok:
         return []
@@ -1141,7 +1147,7 @@ def _ssrf(executor, baseline, endpoint, field, base_headers) -> list:
                    "connection error from there too." if reached_loopback else ".")),
         highlights=[mark("proves the parameter controls a server-side fetch", "proof",
                      "Only the server attempting the request can produce this network error.")],
-        detail=(f"Setting “{field}” to {UNRESOLVABLE} made the application return a network-level error "
+        detail=(f"Setting “{field}” to {unreachable} made the application return a network-level error "
                 f"(“{hit.group(0)}”). The error can only come from the server attempting the request, "
                 "which proves the parameter controls a server-side fetch."
                 + (f" A follow-up pointing at {CLOSED_PORT} also produced a connection error, so the "
@@ -1153,7 +1159,7 @@ def _ssrf(executor, baseline, endpoint, field, base_headers) -> list:
                      "addresses, re-checking after resolution to defeat DNS rebinding. Allow-list the "
                      "destinations the feature genuinely needs, disable redirect following, and make the "
                      "fetch from a network segment with no access to internal services."),
-        evidence={"parameter": field, "unresolvable_payload": UNRESOLVABLE,
+        evidence={"parameter": field, "unresolvable_payload": unreachable,
                   "error_signature": hit.group(0), "status": unresolvable.status,
                   "loopback_payload": CLOSED_PORT if reached_loopback else None,
                   "reached_loopback": bool(reached_loopback)},
@@ -1171,12 +1177,13 @@ def _crlf(executor, baseline, endpoint, field, base_headers) -> list:
     if not executor.affordable(2):
         return []
     nonce = _nonce()
-    header_name = f"X-Namazu-{nonce}"
-    control = _send(executor, baseline, field, f"namazu{nonce}", f"{field}= control without newlines",
+    header_name = executor.signature.header(nonce)
+    stem = executor.signature.marker(nonce)
+    control = _send(executor, baseline, field, stem, f"{field}= control without newlines",
                     base_headers)
     if not control.ok or control.header(header_name):
         return []
-    payload = f"namazu{nonce}\r\n{header_name}: injected"
+    payload = f"{stem}\r\n{header_name}: injected"
     probe = _send(executor, baseline, field, payload, f"{field}= value containing CRLF", base_headers)
     if not probe.ok or probe.header(header_name).strip() != "injected":
         return []
@@ -1206,7 +1213,7 @@ def _parameter_pollution(executor, baseline, endpoint, field, base_headers, docu
         # Repeating a path segment changes the route, and a header or cookie
         # supplied twice is a different question from a duplicated query key.
         return []
-    seed = _seed_value(baseline, field, documented)
+    seed = _seed_value(baseline, field, documented, executor.signature.marker())
     if not seed or not executor.affordable(2):
         return []
     nonce = _nonce()
@@ -1250,7 +1257,7 @@ def header_reflection(executor: Executor, *, baseline: Exchange, endpoint: str,
     """Does the application build URLs from a client-supplied host header?"""
     if baseline.method not in ("GET", "HEAD") or not executor.affordable(1):
         return []
-    probe_host = "namazu-probe.invalid"
+    probe_host = executor.signature.host
     probe = executor.send(
         baseline.method, baseline.url, label=f"X-Forwarded-Host: {probe_host}",
         headers={**base_headers, "X-Forwarded-Host": probe_host, "X-Forwarded-Proto": "http"},

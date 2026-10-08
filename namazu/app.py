@@ -72,6 +72,10 @@ class ConnectionInput(BaseModel):
     # httpx would otherwise announce itself as python-httpx, which a WAF in
     # front of the target often refuses outright.
     user_agent: str | None = Field(default=None, max_length=512)
+    # Whether the requests name this tool at all: the user agent, and every
+    # probe marker, header and path. See namazu/signature.py. A user agent set
+    # above still wins over the browser string this would otherwise send.
+    quiet: bool = False
     # http://127.0.0.1:8080 is Burp's default listener.
     proxy: str | None = Field(default=None, max_length=512)
     # An intercepting proxy presents its own certificate, so trusting it needs
@@ -84,7 +88,8 @@ class ConnectionInput(BaseModel):
 
     def connection(self) -> Connection:
         link = Connection.build(
-            verify_tls=self.verify_tls, user_agent=self.user_agent, proxy=self.proxy,
+            verify_tls=self.verify_tls, user_agent=self.user_agent, quiet=self.quiet,
+            proxy=self.proxy,
             ca_bundle=self.ca_bundle, client_cert=self.client_cert,
             client_key=self.client_key, client_key_password=self.client_key_password)
         # Fail here, where the message reaches the operator as a 400, rather

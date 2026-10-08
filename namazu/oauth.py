@@ -30,6 +30,7 @@ import httpx
 
 from .audit import jwtlab
 from .discovery import Connection, check_url, connection_for, describe_block
+from .signature import Signature
 
 SESSION_TTL = 600  # seconds a pending authorization stays collectable
 MAX_SESSIONS = 16
@@ -393,7 +394,12 @@ def probe_authorization_server(*, authorization_endpoint: str, client_id: str, r
     link = connection_for(connection, verify_tls, user_agent)
     http = client or link.open()
     findings: list = []
-    evil = "https://namazu-probe.invalid/callback"
+    # The destination the server must refuse. It names this tool, so it comes
+    # from the run's signature; quiet mode uses a random host in .invalid, which
+    # still cannot be registered and still resolves nowhere.
+    signature = Signature(quiet=link.quiet)
+    evil_host = signature.host
+    evil = f"https://{evil_host}/callback"
 
     def send(query: dict, label: str):
         parts = urlsplit(authorization_endpoint)
@@ -415,7 +421,7 @@ def probe_authorization_server(*, authorization_endpoint: str, client_id: str, r
                       "state": secrets.token_urlsafe(8), "scope": "openid"},
                      "authorize with an unregistered redirect_uri")
         location = probe.header("location")
-        if probe.status in (301, 302, 303, 307, 308) and "namazu-probe.invalid" in location:
+        if probe.status in (301, 302, 303, 307, 308) and evil_host in location:
             findings.append(finding(
                 "oauth.redirect-not-validated", "Authorization server redirects to an unregistered URI",
                 "critical", "confirmed", owasp="API2:2023 Broken Authentication",

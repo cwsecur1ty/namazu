@@ -90,7 +90,8 @@ CALIBRATION_SAMPLE = 8000
 
 def _calibrate(executor: Executor, origin: str, headers: dict) -> dict:
     """Learn how the host answers a path that certainly does not exist."""
-    probe = executor.send("GET", _join(origin, "/namazu-does-not-exist-9d2f41"),
+    absent = f"/{executor.signature.slug('does-not-exist-9d2f41')}"
+    probe = executor.send("GET", _join(origin, absent),
                           label="404 calibration", headers=headers)
     return {"status": probe.status, "length": len(probe.body), "ok": probe.ok,
             "body": (probe.body or "")[:CALIBRATION_SAMPLE],
@@ -428,7 +429,7 @@ def _graphql_suggestions(executor, origin, headers, calibration, summary) -> lis
     probe sends one deliberately wrong field name and looks for that response.
     """
     out = []
-    probe_field = "namazuProbeFieldZz"
+    probe_field = executor.signature.marker("ProbeFieldZz")
     query = json.dumps({"query": "{ " + probe_field + " }"})
     def one(branch, path):
         if not branch.affordable(1):

@@ -318,9 +318,8 @@ finding is disputed or when something on the target breaks mid-test.
   server process only. Theme and layout are the only things stored locally.
 - Exports mask recognised credential headers and query values. Response bodies
   are **not** masked; review before sharing.
-- Namazu identifies itself by name on every request. Set a different **User
-  agent** under Settings when a WAF in front of the target refuses an
-  unfamiliar client.
+- Namazu identifies itself by name on every request, by default. See
+  **Outbound identity** below.
 - Every request can go through your proxy, so the engagement record is the one
   you already keep. Set **Upstream proxy** under Settings to
   `http://127.0.0.1:8080` and each probe lands in Burp or ZAP, replayable from
@@ -333,6 +332,37 @@ finding is disputed or when something on the target breaks mid-test.
   TLS; both are paths read by the Namazu server, which keeps the private key
   off the wire.
 - Loopback by default. With `--host 0.0.0.0` you supply your own access control.
+
+## Outbound identity
+
+By default the traffic says what it is. The user agent names Namazu and its
+repository, and so does every probe marker: the Origin the CORS check sends,
+the header the TRACE check looks for, the path the cache-deception check
+appends, the body property the mass-assignment check adds, the host the SSRF
+check cannot resolve. Both sides of an engagement can then pick the test out of
+a log afterwards, and a marker left in a database says where it came from.
+
+**Settings → Outbound identity → Do not name the tool** removes all of it. The
+user agent becomes an ordinary browser string, and every marker, header name
+and path segment is derived instead from a token drawn fresh for the run. Two
+reasons to want it: testing whether the target's own monitoring notices a scan,
+and a WAF that refuses an unfamiliar client by name before the test can start.
+A user agent you set yourself still wins over both defaults.
+
+The quiet markers are random rather than a second fixed set on purpose. A fixed
+alternative would be a Namazu fingerprint of its own as soon as anyone wrote it
+down.
+
+Two things it does not do. It changes what the traffic is called, not what it
+is: the same probes run in the same order, an injection payload still looks
+exactly like an injection payload, and a hundred requests to one endpoint still
+look like a hundred requests to one endpoint. It defeats attribution to this
+tool, not detection of testing. And it does not reach the external scanners,
+which announce themselves on their own terms.
+
+Because a quiet run signs nothing, the report names the token it used. Search
+the target's logs and stored data for that value to attribute the run during
+cleanup.
 
 ## Limits
 
@@ -363,7 +393,7 @@ interpolated into a quoted string on an engine that has a sleep function.
 node --check namazu/static/app.js
 ```
 
-400 tests across 93 checks, about 90 seconds to run, most of which is the
+414 tests across 93 checks, about 90 seconds to run, most of which is the
 time-based SQL tests waiting for real delays. Detections are asserted in both
 directions: a check fires on the broken handler, and stays silent on the correct
 one. Where a check rests on a control, the test asserts the control is what

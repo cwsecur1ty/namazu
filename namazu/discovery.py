@@ -17,6 +17,7 @@ import httpx
 import yaml
 
 from . import __version__
+from .signature import BROWSER_USER_AGENT
 
 MAX_DOCUMENT_BYTES = 8 * 1024 * 1024
 MAX_FETCHES = 24
@@ -83,9 +84,15 @@ def describe_block(status: int, headers: dict, body: str) -> str:
     return " ".join(parts)
 
 
-def client_headers(user_agent: str | None = None) -> dict:
-    """Default headers for any client Namazu builds."""
-    chosen = str(user_agent or "").strip() or DEFAULT_USER_AGENT
+def client_headers(user_agent: str | None = None, *, quiet: bool = False) -> dict:
+    """Default headers for any client Namazu builds.
+
+    A user agent the operator typed always wins. ``quiet`` only changes what is
+    sent when they typed nothing, so turning the mode on never overrides a
+    value chosen for the engagement.
+    """
+    fallback = BROWSER_USER_AGENT if quiet else DEFAULT_USER_AGENT
+    chosen = str(user_agent or "").strip() or fallback
     if "\r" in chosen or "\n" in chosen:
         raise ValueError("The user agent cannot contain line breaks")
     return {"User-Agent": chosen}
@@ -112,6 +119,10 @@ class Connection:
 
     verify_tls: bool = True
     user_agent: str | None = None
+    # Whether the requests name this tool. See namazu/signature.py; it travels
+    # on the connection because the spec fetch and the token exchange have to
+    # be as quiet as the probes, or the first request gives the run away.
+    quiet: bool = False
     proxy: str | None = None
     ca_bundle: str | None = None
     client_cert: str | None = None
@@ -122,7 +133,7 @@ class Connection:
 
     @classmethod
     def build(cls, *, verify_tls: bool = True, user_agent: str | None = None,
-              proxy: str | None = None, ca_bundle: str | None = None,
+              quiet: bool = False, proxy: str | None = None, ca_bundle: str | None = None,
               client_cert: str | None = None, client_key: str | None = None,
               client_key_password: str | None = None) -> Connection:
         """Construct from operator input, where a blank field means unset."""
@@ -130,7 +141,8 @@ class Connection:
             return (str(value).strip() or None) if value is not None else None
 
         return cls(
-            verify_tls=bool(verify_tls), user_agent=clean(user_agent), proxy=clean(proxy),
+            verify_tls=bool(verify_tls), user_agent=clean(user_agent), quiet=bool(quiet),
+            proxy=clean(proxy),
             ca_bundle=clean(ca_bundle), client_cert=clean(client_cert),
             client_key=clean(client_key),
             # Not stripped: whitespace can be part of a passphrase.
@@ -194,7 +206,7 @@ class Connection:
                 cert = (self.client_cert, self.client_key, self.client_key_password)
         try:
             return httpx.Client(verify=verify, cert=cert, proxy=self.proxy, trust_env=False,
-                                headers=client_headers(self.user_agent))
+                                headers=client_headers(self.user_agent, quiet=self.quiet))
         except ImportError as exc:
             raise ValueError(
                 "Routing through a socks5 proxy needs the socksio package: "
@@ -202,14 +214,14 @@ class Connection:
 
 
 def connection_for(connection: Connection | None, verify_tls: bool = True,
-                   user_agent: str | None = None) -> Connection:
+                   user_agent: str | None = None, quiet: bool = False) -> Connection:
     """The connection to use, from an explicit one or the older two arguments.
 
     Every entry point still accepts ``verify_tls`` and ``user_agent`` directly,
     so this keeps one meaning for both spellings instead of two code paths.
     """
     if connection is None:
-        return Connection(verify_tls=verify_tls, user_agent=user_agent)
+        return Connection(verify_tls=verify_tls, user_agent=user_agent, quiet=quiet)
     if user_agent and not connection.user_agent:
         return replace(connection, user_agent=user_agent)
     return connection

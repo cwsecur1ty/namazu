@@ -164,9 +164,10 @@ def trace_enabled(executor: Executor, *, base_url: str, endpoint: str, headers: 
     """TRACE echoes the request back, including headers a client never meant to reveal."""
     if not executor.affordable(1):
         return []
-    marker = "NamazuProbe"
+    marker = executor.signature.marker("probe")
+    probe_header = executor.signature.header("Probe")
     probe = executor.send("TRACE", base_url, label="TRACE request",
-                          headers={**headers, "X-Namazu-Probe": marker}, identity="identity A")
+                          headers={**headers, probe_header: marker}, identity="identity A")
     if not probe.ok or probe.status != 200:
         return []
     if marker not in (probe.body or ""):
@@ -177,11 +178,11 @@ def trace_enabled(executor: Executor, *, base_url: str, endpoint: str, headers: 
         method=("Sent a TRACE request carrying a unique header value and confirmed the server echoed "
                 "that value back in the response body."),
         detail=(f"TRACE returned HTTP 200 and the response body contained the probe header "
-                f"(X-Namazu-Probe: {marker}), so the server reflects the request it received."),
+                f"({probe_header}: {marker}), so the server reflects the request it received."),
         impact=("Reflects headers the client sent, including cookies and Authorization, which historically "
                 "enabled Cross-Site Tracing. It also serves no purpose in production."),
         remediation="Disable TRACE (and TRACK) at the web server, load balancer and application framework.",
-        evidence={"status": probe.status, "echoed_header": f"X-Namazu-Probe: {marker}"},
+        evidence={"status": probe.status, "echoed_header": f"{probe_header}: {marker}"},
         exchanges=[probe], scope="host",
     )]
 

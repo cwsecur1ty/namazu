@@ -25,7 +25,6 @@ ADMIN_PATH = re.compile(r"(?i)/(admin|administrator|manage|management|internal|p
                         r"superuser|console|backoffice|ops|system|config|settings/all)(/|$)")
 ID_PARAM = re.compile(r"(?i)^(id|.*_id|.*Id|uid|uuid|guid|key|ref|no|num|number|code|slug|account|user|customer|order|invoice|document|file)$")
 UUID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
-PROBE_ORIGIN = "https://namazu-probe.invalid"
 
 
 # RFC 8414: where an authorization server publishes what it signs with.
@@ -303,15 +302,16 @@ def _cors_reflection(executor, baseline, endpoint, base_headers) -> list:
     """Does the server echo whatever Origin it is handed?"""
     if not executor.affordable(1):
         return []
+    probe_origin = executor.signature.origin
     probe_exchange = executor.send(
-        baseline.method, baseline.url, label=f"Origin: {PROBE_ORIGIN}",
-        headers={**base_headers, "Origin": PROBE_ORIGIN}, identity="identity A",
+        baseline.method, baseline.url, label=f"Origin: {probe_origin}",
+        headers={**base_headers, "Origin": probe_origin}, identity="identity A",
     )
     if not probe_exchange.ok:
         return []
     allowed = probe_exchange.header("access-control-allow-origin")
     credentials = probe_exchange.header("access-control-allow-credentials").lower() == "true"
-    if allowed == PROBE_ORIGIN:
+    if allowed == probe_origin:
         return [finding(
             "cors.origin-reflected", "CORS reflects any Origin it is sent",
             "high" if credentials else "medium", "confirmed",
@@ -319,14 +319,14 @@ def _cors_reflection(executor, baseline, endpoint, base_headers) -> list:
             method=("Repeated the baseline request with an Origin header for a host that cannot be "
                     "registered, then read Access-Control-Allow-Origin and "
                     "Access-Control-Allow-Credentials from the response."),
-            detail=(f"Sending Origin: {PROBE_ORIGIN} came back as Access-Control-Allow-Origin: "
+            detail=(f"Sending Origin: {probe_origin} came back as Access-Control-Allow-Origin: "
                     f"{allowed}"
                     + (" together with Access-Control-Allow-Credentials: true." if credentials
                        else ", so the allow-list is not actually checked.")),
             impact=("Any website a victim visits can read this API's authenticated responses."
                     if credentials else "Any website can read this response cross-origin."),
             remediation="Compare the Origin against a fixed allow-list and echo it only on a match.",
-            evidence={"sent_origin": PROBE_ORIGIN, "allow_origin": allowed,
+            evidence={"sent_origin": probe_origin, "allow_origin": allowed,
                       "allow_credentials": credentials},
             scope="host", exchanges=[probe_exchange],
         )]

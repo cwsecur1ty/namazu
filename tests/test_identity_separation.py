@@ -24,6 +24,7 @@ from namazu.audit.identity import (
     strip_credentials,
     subject,
 )
+from namazu.signature import Signature
 from namazu.spec import parse_spec
 
 BASE = "https://api.example.test"
@@ -344,10 +345,11 @@ def test_report_redaction_covers_every_credential_that_gets_stripped():
 
 def test_an_invalid_credential_is_still_formed_for_cookie_authentication():
     """The corruption list knew five names, so cookie auth skipped the check."""
-    from namazu.audit.contract import INVALID_TOKEN, _corrupt_cookies
+    from namazu.audit.contract import _corrupt_cookies
 
-    corrupted = _corrupt_cookies("session=abc123; theme=dark")
-    assert corrupted == f"session={INVALID_TOKEN}; theme={INVALID_TOKEN}"
+    invalid = Signature().invalid_token
+    corrupted = _corrupt_cookies("session=abc123; theme=dark", invalid)
+    assert corrupted == f"session={invalid}; theme={invalid}"
     # Still a syntactically valid cookie header, or the server discards it and
     # the probe becomes the anonymous replay it is meant to differ from.
     assert all("=" in part for part in corrupted.split("; "))

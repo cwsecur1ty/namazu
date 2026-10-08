@@ -128,7 +128,7 @@ def probe(executor, *, baseline, operation, endpoint, base_headers, media: str) 
     # any kind. What it establishes is whether this endpoint puts a field's
     # parsed value in its response, which is what an expanded entity would
     # ride back on, and it costs one request to know rather than guess.
-    marker = f"namazu{nonce}plain"
+    marker = executor.signature.marker(f"{nonce}plain")
     control = send("control: well-formed XML with no document type declaration", marker)
     if not control.ok:
         return []
@@ -137,7 +137,7 @@ def probe(executor, *, baseline, operation, endpoint, base_headers, media: str) 
         # The parser announced DTD processing is off before being asked.
         return []
 
-    expanded = f"namazu{nonce}value"
+    expanded = executor.signature.marker(f"{nonce}value")
     internal = send("probe an internal entity: does the parser expand a declared entity",
                     "&ns;", internal_doctype(root, expanded))
     if not internal.ok:
@@ -194,13 +194,14 @@ def probe(executor, *, baseline, operation, endpoint, base_headers, media: str) 
 
     # A path that cannot exist, so the only thing the probe can learn is
     # whether the parser tried to open it. Nothing on the target is read.
-    absent = f"file:///namazu-{nonce}-not-a-real-path"
+    missing_path = executor.signature.slug(f"{nonce}-not-a-real-path")
+    absent = f"file:///{missing_path}"
     external = send("probe an external entity pointed at a path that does not exist",
                     "&ns;", external_doctype(root, absent))
     if not external.ok:
         return out
     external_body = external.body or ""
-    leaked = f"namazu-{nonce}-not-a-real-path" in external_body
+    leaked = missing_path in external_body
     if REFUSED.search(external_body) or not leaked or ECHOED.search(external_body):
         return out
 
