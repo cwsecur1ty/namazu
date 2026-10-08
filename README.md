@@ -122,7 +122,7 @@ of independent points rather than the number of workers, because the probes
 within a point run in sequence, and the per-endpoint single-request checks and
 the rate-limit burst are still serial.
 
-### Coverage
+### Checks by category
 
 <details open>
 <summary><b>OWASP API Security Top 10 (2023)</b></summary>
@@ -265,6 +265,33 @@ required; when one is absent the run says so rather than leaving a silent gap.
 |---|---|---|
 | [**schemathesis**](https://github.com/schemathesis/schemathesis) | Property-based testing from the same OpenAPI document: undeclared 500s, schema violations, ignored authentication. | `pip install schemathesis` |
 | [**nuclei**](https://github.com/projectdiscovery/nuclei) | Community templates for known CVEs, exposed panels, default credentials and misconfigurations. | `go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest` |
+| [**ZAP**](https://www.zaproxy.org/) | An Automation Framework plan with an OpenAPI import and the OWASP active-scan rule set. | [Download ZAP](https://www.zaproxy.org/download/), or set `NAMAZU_ZAP_DOCKER_IMAGE` |
+
+Each reports its version, what it can do, where its policy comes from, and what
+it did not cover. A tool that times out, exits early or tests fewer operations
+than it was given says so in the run notes rather than leaving a short result
+to speak for itself.
+
+The ZAP adapter inherits the run's scope, credentials, write policy and traffic
+limit through the plan it writes, which is a file an operator can read rather
+than something to take on trust. Four things it will not do:
+
+- **Widen the write policy to make itself useful.** ZAP's active rules send
+  payloads with state-changing methods, and restricting a *running* active scan
+  to safe methods is not something the framework guarantees. With writes
+  disabled the plan contains no `activeScan` job at all, the passive rules read
+  the traffic from the OpenAPI import, and the run reports active-rule coverage
+  as a gap rather than a clean result.
+- **Treat GET as harmless.** A GET can delete. The policy is an explicit
+  method allow-list, written into the plan.
+- **Trust a tag or a rule category as a safety property.** The same reasoning
+  as a nuclei `cve` tag: the taxonomy describes the subject, not the side
+  effects.
+- **Fold its coverage into Namazu's.** ZAP's idea of what it covered is not
+  Namazu's, so it is reported separately.
+
+The credential goes in the plan file, not on the command line, so it does not
+appear in a process list.
 
 **Audit → Second opinion** lists whichever of them this machine can run, with
 its version. Running one folds what it reports into the same findings list,
@@ -298,6 +325,257 @@ API is the thing it is here to find, but it costs minutes rather than seconds.
 Several template matches at the same URL collapse into one finding listing the
 matchers that fired, so the finding count is lower than nuclei's own match
 count.
+
+## What a finding claims
+
+A severity and a confidence cannot describe a finding honestly on their own.
+Reading an OpenAPI document can establish beyond doubt that the document
+declares an implicit OAuth flow, so "confirmed" is accurate. What it must not
+be allowed to mean is that a confirmed authentication vulnerability was found.
+Those two claims differ in kind, not in certainty, and one field cannot carry
+both.
+
+So every finding carries four independent axes.
+
+**Category** is what kind of defect this is.
+
+| Category | Means |
+|---|---|
+| **Security weakness** | Something an attacker could use, or the surface of it. |
+| **Hardening concern** | A control absent or weaker than current guidance, with no demonstrated route to abuse it here. |
+| **Contract defect** | The implementation and its published specification disagree. |
+| **Reliability defect** | The implementation fails or errors on input it accepts. |
+| **Informational** | An observation recorded for the reader, asserting no defect. |
+
+**Origin** is where the evidence came from: `static-declaration` (read from the
+specification, nothing sent), `runtime-observation` (seen in a response during
+this run), or `external-report` (another tool said so and Namazu normalised it).
+Origin is not quality. A runtime observation of a 403 is a fact about one
+request; it is not a fact about authorization.
+
+**Verification** is how far the behaviour was taken.
+
+| Rung | Means |
+|---|---|
+| `unverified` | Nothing beyond the evidence shown was established. |
+| `observed` | The behaviour appears in a response captured during this run. |
+| `reproduced` | It was replayed and happened again. |
+| `impact-demonstrated` | A security consequence was demonstrated, not inferred. |
+
+**Confidence** keeps its old meaning, with one addition: a `confirmed` finding
+now has to say *what* was confirmed. That sentence appears in the finding under
+**What this establishes**, because "confirmed" with no object is the failure
+this structure exists to prevent. The implicit-flow finding now reads:
+
+> What is confirmed is the declaration:
+> `#/components/securitySchemes/Oauth2/flows/implicit` exists in the imported
+> document. Not confirmed, and not tested: that the authorization server offers
+> the implicit grant, that it would issue a token through it, or that any
+> client uses it.
+
+### How severity is decided
+
+A probe proposes a severity. The severity a finding ends up with is the one
+these rules permit for the kind of evidence behind it, and the finding records
+which rule decided it, so an operator can argue a number with a client instead
+of defending it.
+
+| Rule | Ceiling | Why |
+|---|---|---|
+| `informational-is-info` | info | An observation that asserts no defect is not a severity. |
+| `contract-defect-is-informational` | info | A disagreement between an implementation and its own specification is a documentation defect. It becomes a security severity when a security consequence is demonstrated, not because a client might mishandle it. |
+| `reliability-defect-is-low` | low | An unhandled path is a bug until something is shown to come of it. |
+| `hardening-without-impact-is-medium` | medium | A missing control with no demonstrated route to abuse cannot outrank a weakness that was shown. |
+| `static-declaration-is-low` | low | A specification states an intention, not behaviour. |
+| `unreproduced-external-report-is-medium` | medium | Another tool's unreproduced report is a lead. Namazu has not re-sent the request. |
+| `critical-needs-demonstrated-impact` | high | Critical is reserved for a weakness whose consequence was demonstrated. |
+
+Each rule lifts once the evidence reaches the rung it names, so replaying an
+external tool's finding or demonstrating a consequence moves it up.
+
+A severity another tool assigned is **preserved, not overwritten**. A nuclei
+template rated high appears as medium with `nuclei rated it: high` beside it.
+
+CWE and OWASP mappings now need a stated basis whenever the finding did not
+observe the behaviour itself, and a mapping with no defensible relationship is
+dropped rather than softened. The implicit-flow finding used to carry CWE-598,
+"sensitive information in a query string", for a grant that returns its token
+in a URL fragment; the finding's own limitations text said it had not
+determined which of the two applied. It now carries no CWE and says why.
+
+## Coverage: what a run actually tested
+
+A report's most dangerous sentence is the one it does not contain. An audit
+that ran forty probes against a denied baseline produces no findings for them,
+and nothing distinguishes that from forty probes that ran and found the target
+sound.
+
+So the first request of each operation is classified, and the result decides
+what may follow.
+
+| Baseline outcome | Means |
+|---|---|
+| `success` | The operation answered with something the probes can compare against. Not the same as 2xx: see below. |
+| `authentication-failure` | The credential was not accepted at all. |
+| `permission-denied` | The request was refused. A 403 does not say whether the credential was rejected or whether this caller is not allowed this resource, and Namazu does not claim to know which. |
+| `invalid-data` | The request never named anything real, usually because the identifier was generated from the schema. |
+| `unexpected` | Neither a success nor a refusal this tool can interpret, including a 5xx. |
+| `transport-failure` | The request did not complete. |
+
+Then every probe family ends the run in one state:
+
+| State | Means |
+|---|---|
+| **Ran** | It ran and reached a conclusion. |
+| **Blocked** | A prerequisite was not met, with the reason and what would unblock it. |
+| **Inconclusive** | It ran, and the evidence supports no conclusion either way. |
+| **Not in this profile** | Deliberately not run. |
+| **Nothing to test** | The operation has nothing for it to look at. |
+
+There is deliberately no **passed**. A check that ran and found nothing is
+shown as **Ran**, because "passed" is a claim about the target and "ran" is a
+statement about the audit. **Audit → What was tested** lists every family with
+its state, and the export carries the same structure.
+
+Two families are treated specially, and both would have cost real coverage if
+they were not. The **access-control bypass** battery needs a baseline that was
+*refused*, since what it looks for is a trivially different form of the same
+request getting through; a refusal is its input. And a missing second identity
+blocks the **cross-identity read** alone, not the whole authorization family,
+which also holds the anonymous replay, the identifier swap and the token
+battery.
+
+### Getting a usable baseline
+
+Where a contract documents no example, the generated request carries the
+literal `string` for a path parameter and `0` for an integer. A request for
+`/reports/string` is not a request for a report, so the audit says so before
+the run as well as after.
+
+**Audit → Baseline for this operation** takes three things, saved per operation
+and per base URL:
+
+- **A request URL and body** known to work. **From last run** takes the one the
+  Request tab just sent. Credential headers in a saved example are ignored and
+  the audited identity is applied over it, so an example cannot change who the
+  audit runs as.
+- **Assertions**: the status that counts as success, and a string the response
+  must contain. A 2xx alone is not always success.
+- **A negative flag**, for an operation whose correct answer is a refusal. With
+  it, a 403 is a baseline that worked and a passing negative test, rather than
+  a reported gap.
+
+## Evidence and replay
+
+A finding that says another tool found something and carries a seed is not
+evidence. The seed reproduces the input only if the tool, its version, the
+schema and the generator all line up, and a reader holding the report has none
+of those.
+
+Namazu now captures a **case** for each failing exchange: the request as sent,
+the response as received, which identity sent it, when, the correlation ids the
+response carried, the expected outcome, the prerequisite steps, the tool and
+version, the schema hash, and an explicit list of what is *not* in the capture.
+schemathesis findings are built from its NDJSON scenario record rather than its
+summary, which is where the actual requests and responses live.
+
+**Replay** sends a case again, up to five attempts, and reports `reproduced`,
+`not-reproduced`, `intermittent`, `blocked` or `error` with the attempt counts.
+Three things it will not do:
+
+- **Send a redaction placeholder as a credential.** Credentials never enter a
+  case; the case records an *identity reference* and replay resolves it from
+  local configuration. A case whose identity is not configured is `blocked`,
+  because replaying it anonymously answers a different question and would read
+  as "not reproduced".
+- **Repeat a mutating request to raise confidence.** A case that changes state
+  is `blocked` unless writes are enabled for the run, and Namazu will not
+  re-send one on its own initiative.
+- **Claim more than it showed.** Replay establishes that the recorded behaviour
+  happens again. It can raise a finding to `reproduced` and no further; whether
+  the behaviour is a weakness is a separate judgement.
+
+Replay goes through the same executor as a probe, so the request budget, the
+write policy and the outbound route all apply to it.
+
+### Seeds and wide integers
+
+A schemathesis seed is 128 bits wide, and `JSON.parse` rounds anything past
+2<sup>53</sup>. A shipped export held `2.315194611349191e+38` where the seed had
+been `231519461134919091197611956279382553858`: still a number, no longer the
+seed, and useless for reproducing anything. Integers outside JavaScript's exact
+range are now written as decimal strings, and a seed that arrives as a float is
+refused rather than truncated, because by that point it is a different number.
+
+## Duplicates
+
+Namazu and the external tools overlap. Two reports are merged only on evidence:
+
+- **Merged** when both carry a captured exchange and the exchanges agree on the
+  operation, the response status and the specific thing observed, such as the
+  media type. Both sources are kept on the merged finding.
+- **Marked a possible duplicate** when the semantics line up but one side has no
+  exchange, so the agreement cannot be checked. Both findings stay.
+
+Nothing merges because two titles or two endpoints match. Two findings on
+`GET /orders/{id}` with the same title can be two different failures against
+two different inputs, and merging them loses one.
+
+## Authorization and workflows
+
+**Audit → permission matrix** (`POST /api/matrix`) states who should be able to
+do what: identity, role, tenant, test resource, operation, and whether access
+is expected to be allowed or denied.
+
+Two rules make its answers worth having. A row is only concluded after that
+identity's **own positive control** has passed, because an API that refuses
+everybody looks exactly like an API with a working boundary, and an API that is
+down looks like both; without a control, a denial is `inconclusive`. And access
+is judged by a **resource marker**, a string that appears in that resource and
+no other, rather than by a status code or by how similar two bodies are. A 200
+that does not carry the marker has not shown the resource was reached, which is
+how a tool comes to report a bypass against an API that returns an empty list
+to everyone.
+
+The **sequence runner** (`POST /api/sequence`) gets real identifiers into
+downstream requests: steps run in order, each can extract values from its
+response by JSON Pointer or from a response header, and later steps substitute
+them as `${name}`. There are no conditionals, loops or expressions, because none
+of them is needed to get an identifier into a path and each would need its own
+safety argument. An undefined variable stops the sequence rather than sending a
+request with the placeholder left in or blanked out, since `/reports/` is a
+different request from `/reports/r-100`.
+
+Objects are recorded as **created**, **possibly-created** (a write whose
+response never arrived) or **attempted**. Nothing is deleted: Namazu does not
+remove a resource without a configured cleanup step and an identity authorised
+to run it.
+
+## OAuth conclusions
+
+"The implicit flow is enabled" was being used for five different claims. They
+are now separate rungs, and a probe reports the highest one its evidence
+reaches:
+
+1. **advertised**: the specification declares the flow. A static read.
+2. **client-configured**: this client is set up for it.
+3. **server-accepts**: the authorization server did not reject the request.
+4. **token-issued**: a token came back, and where it came back is known.
+5. **weakness-demonstrated**: a concrete consequence was shown.
+
+A login page, a redirect and an HTTP 200 all sit at rung 3 at best. An
+authorization server renders a sign-in form to an unauthenticated browser
+whether or not it would ever issue through this grant, so rung 4 requires
+`access_token` in the fragment or the query string of the redirect. Which of
+the two it is decides whether the Referer and server-log exposure routes apply,
+so the finding reports the location rather than assuming one.
+
+Rung 4 needs a browser and a consenting user, so it is reported as *requiring*
+interactive verification, with the prerequisites named, and the token it would
+return is a live credential. A PKCE downgrade conclusion is only drawn from two
+observations of the same client and the same flow; a server may require PKCE
+for one client and not another, which is a configuration difference and not a
+downgrade.
 
 ## Reading a finding
 

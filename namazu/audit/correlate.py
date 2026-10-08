@@ -223,10 +223,13 @@ def correlate(findings: list) -> tuple[list, list]:
                 continue
             level, why = compare(left, right)
             if level == "confirmed":
+                # Described before absorbing. _absorb folds the absorbed
+                # finding's evidence into the keeper, including its "source",
+                # so describing the keeper afterwards names the wrong tool.
+                description = f"Merged {_describe(right)} into {_describe(left)}: {why}"
                 _absorb(left, right, why)
                 merged_into[id(right)] = left
-                notes.append(
-                    f"Merged {_describe(right)} into {_describe(left)}: {why}")
+                notes.append(description)
             elif level == "possible":
                 left.duplicate_of = left.duplicate_of or right.id
                 left.duplicate_confidence = "possible"

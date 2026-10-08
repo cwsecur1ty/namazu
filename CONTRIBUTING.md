@@ -23,6 +23,40 @@ contract rather than sending a request, it says so.
 attack surface worth testing, not a demonstrated weakness. If you are choosing
 between two, choose the weaker one.
 
+**The four axes.** A finding also declares what kind of defect it is, where its
+evidence came from and how far the behaviour was taken. Most checks get these
+from their id through `namazu/audit/evidence.py` and need nothing at the call
+site. Pass them explicitly in three cases:
+
+- The check's kind differs from its family's default. A `contract.*` check that
+  really is a security weakness says `category="security"`, and the table in
+  `evidence.py` is the place to record it for good.
+- The check demonstrates a consequence rather than inferring one. Pass
+  `verification="impact-demonstrated"` and a `confirmed_claim` naming the
+  consequence. This is what a finding needs to reach `critical`, and the claim
+  is required: "a security consequence was demonstrated" means nothing without
+  the consequence.
+- The check reads the specification, or normalises another tool's report. Then
+  any CWE or OWASP mapping needs a `mapping_basis` sentence stating the
+  relationship it claims. If there is no defensible one, drop the mapping. A
+  statically declared implicit OAuth flow carried CWE-598, "sensitive
+  information in a query string", for a grant whose token arrives in a URL
+  fragment, while the finding's own limitations said it had not determined
+  which applied. That is the mistake this field exists to catch.
+
+Severity is proposed, not assigned: `finding()` lowers it to what the rules in
+`evidence.py` permit and records which rule decided. Do not work around a
+ceiling by raising the proposed severity. If a check genuinely establishes more
+than its ceiling allows, it should be saying so on the verification axis.
+
+**A coverage entry.** A probe family that the engine can run needs an entry in
+`namazu/audit/coverage.py` saying what it tests and what it needs. Two fields
+decide whether it runs at all: `needs_baseline` for a check that concludes by
+comparing against a working baseline, and `denial_path` for one that needs a
+baseline which was *refused*. Getting these wrong is quiet. The bypass battery
+was briefly marked `needs_baseline`, which blocked the one check that is more
+useful when the caller has no access.
+
 **Limitations.** What does this finding *not* establish? A static read cannot
 show the running server behaves as documented. A version match is not a
 behaviour proof. Write it down; the field exists for this.
@@ -56,6 +90,14 @@ namazu/
     engine.py       orchestration, profiles, budgets, result shape
     transport.py    bounded, safety-gated HTTP execution
     model.py        Exchange, Finding, highlights, reproduction commands
+    evidence.py     category, origin, verification, and the severity rules
+    baseline.py     what the first request established, and what may follow
+    coverage.py     the per-family ledger: ran, blocked, skipped, inconclusive
+    capture.py      replayable cases, and bounded replay
+    correlate.py    merging two sources only when their evidence agrees
+    matrix.py       the permission matrix and the sequence runner
+    oauthladder.py  the five rungs between a declaration and a demonstration
+    zap.py          the ZAP Automation Framework adapter
     catalogue.py    CWE, references, issue background, default limitations
     specscan.py     contract analysis, sends nothing
     passive.py      single-response analysis

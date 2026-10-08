@@ -228,6 +228,41 @@
             <div class="row-actions"><button type="button" class="link" id="add-identity-b">+ Add header</button></div>
           </div>
         </details>
+        <details class="disclosure" id="baseline-block">
+          <summary>Baseline for this operation <span class="dim" id="baseline-state">generated</span></summary>
+          <div class="disclosure-body">
+            <p class="hint">An audit can only test what its first request reached. Where the contract documents no example, the generated request carries the literal <code>string</code>, which usually names nothing that exists, and every probe that compares against it then has nothing to compare.</p>
+            <div class="field">
+              <label for="baseline-url">Request URL</label>
+              <input id="baseline-url" type="text" spellcheck="false" placeholder="Leave empty to use the generated request">
+              <p class="hint">Paste a URL you know works for the selected operation. Use <strong>From last run</strong> to take the one the Request tab just sent.</p>
+            </div>
+            <div class="field">
+              <label for="baseline-body">Request body</label>
+              <textarea id="baseline-body" rows="3" spellcheck="false" placeholder="Leave empty to use the generated body"></textarea>
+            </div>
+            <p class="hint">Credential headers in a saved example are ignored. The identity being audited is always applied over it, so an example cannot change who the audit runs as.</p>
+            <div class="field">
+              <label for="baseline-status">Success is</label>
+              <div class="inline">
+                <input id="baseline-status" type="text" spellcheck="false" placeholder="200, 2xx or 200-204" class="mini-input">
+                <label class="check"><input id="baseline-negative" type="checkbox"><span>a refusal is the expected answer</span></label>
+              </div>
+              <p class="hint">A 2xx is not always success, and an expected negative test may legitimately return 403. Tick the box for an operation this identity is <em>supposed</em> to be refused, and a refusal becomes a baseline that worked rather than a reported gap.</p>
+            </div>
+            <div class="field">
+              <label for="baseline-contains">Response must contain</label>
+              <input id="baseline-contains" type="text" spellcheck="false" placeholder="A marker that belongs to this resource and no other">
+              <p class="hint">A resource marker is what distinguishes "the caller got this object" from "the caller got an object of this shape". Status codes and body similarity cannot tell those apart.</p>
+            </div>
+            <div class="row-actions">
+              <button type="button" class="link" id="baseline-from-run">From last run</button>
+              <button type="button" class="link" id="baseline-save">Save for this operation</button>
+              <button type="button" class="link" id="baseline-clear">Clear</button>
+            </div>
+            <p class="hint" id="baseline-saved-note"></p>
+          </div>
+        </details>
         <details class="disclosure" id="second-opinion-block">
           <summary>Second opinion <span class="dim" id="tools-state">not checked</span></summary>
           <div class="disclosure-body">
@@ -272,6 +307,8 @@
           <button type="button" class="link" id="audit-report">Report</button>
           <button type="button" class="link" id="audit-log">Traffic</button>
           <button type="button" class="link" id="export-audit" disabled>Export</button>
+          <button type="button" class="link" id="import-audit">Open saved</button>
+          <input id="import-audit-file" type="file" accept="application/json,.json" hidden>
         </div>
       </div>
     </section>
@@ -675,6 +712,7 @@
           <button type="button" class="btn" id="finding-back">Back to report</button>
         </div>
       </div>
+      <div class="axes-row" id="finding-axes"></div>
       <div class="report" id="finding-body"></div>
     </section>
 

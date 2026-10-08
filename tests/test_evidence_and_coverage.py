@@ -351,7 +351,12 @@ def test_two_sources_reporting_the_same_mismatch_merge():
     assert "schemathesis" in kept[0].provenance and "namazu" in kept[0].provenance
     assert kept[0].evidence["merged_from"] == ["schemathesis.content-type"]
     assert "establish the same mismatch" in kept[0].evidence["merge_basis"]
-    assert any("Merged" in note for note in notes)
+    # The note has to name the right tool on each side. _absorb folds the
+    # absorbed finding's evidence into the keeper, so describing the keeper
+    # afterwards named schemathesis as the source of Namazu's own finding.
+    note = next(note for note in notes if note.startswith("Merged"))
+    assert note.startswith("Merged schemathesis:schemathesis.content-type into "
+                           "namazu:contract.content-type-mismatch")
 
 
 def test_a_different_media_type_does_not_merge():
@@ -931,8 +936,9 @@ def test_a_sequence_write_is_refused_when_writes_are_not_enabled():
     assert record == []
 
 
-def test_a_sequence_does_not_put_extracted_values_in_its_result():
-    """An extracted value is frequently a session token."""
+def test_a_sequence_masks_an_extracted_value_in_the_evidence_it_keeps():
+    """An extracted value is frequently a session token, so the copy of it that
+    the step's own captured response would otherwise carry is masked."""
     steps = [{"name": "create", "method": "POST", "url": f"{fixtures.BASE}/sessions",
               "body": '{"label":"x"}', "identity": "tenant-a",
               "extract": {"session": "/session_id"}}]
@@ -945,7 +951,30 @@ def test_a_sequence_does_not_put_extracted_values_in_its_result():
         client.close()
     rendered = json.dumps(result.to_dict())
     assert "sess-tenant-a" not in rendered
+    assert "<extracted:session>" in rendered
+    # The names reach the reader; the values do not.
     assert result.to_dict()["variables"] == ["session"]
+
+
+def test_a_created_object_keeps_its_identifier_and_says_why():
+    """The one place a value is deliberately kept. Without the identifier
+    nobody can remove what the run left behind, so it stays, labelled."""
+    steps = [{"name": "create", "method": "POST", "url": f"{fixtures.BASE}/sessions",
+              "body": '{"label":"x"}', "identity": "tenant-a", "creates": True,
+              "extract": {"session": "/session_id"}}]
+    client, executor = _executor(allow_mutating=True, budget=20)
+    try:
+        result = matrix.run_sequence(steps, executor=executor,
+                                     identities={"tenant-a": TENANT_A},
+                                     allow_mutating=True)
+    finally:
+        client.close()
+    created = result.to_dict()["created"][0]
+    assert created["state"] == "created"
+    assert created["identifiers"]["session"].startswith("sess-tenant-a")
+    note = result.to_dict()["cleanup"]
+    assert "may" in note and "themselves be credentials" in note
+    assert "rather than report content" in note
 
 
 def test_a_sequence_is_bounded_in_length():

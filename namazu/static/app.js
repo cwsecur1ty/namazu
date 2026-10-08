@@ -32,7 +32,15 @@
     savedEntry: null,
     audit: { findings: [], running: false, cancelled: false, done: 0, total: 0,
              requests: 0, notes: [], discovery: null, finding: null, startedAt: null,
-             log: [], logEntry: null, logTruncated: false, statuses: [] },
+             log: [], logEntry: null, logTruncated: false, statuses: [],
+             coverage: {}, baselines: [], replays: {}, correlation: null },
+    // Per operation: a saved request known to work, and what a successful
+    // response looks like. Both are what turn a baseline that never reached a
+    // resource into one that did. Persisted, because an operator works out the
+    // right example once and should not do it again next session.
+    examples: {},
+    sequence: { steps: [], result: null },
+    matrix: { rows: [], result: null },
   };
 
   const SEVERITIES = ["critical", "high", "medium", "low", "info"];
@@ -641,6 +649,7 @@
       state.spec = spec;
 
       state.operation = null;
+      loadExamples();
       state.schema = null;
       state.savedEntry = null;
       state.selected.clear();
@@ -1243,6 +1252,7 @@
 
 
     renderParameters(op);
+    renderBaselineEditor();
 
     const contentTypes = bodyContentTypes(op);
     $("content-type").replaceChildren(...contentTypes.map((type) => {
@@ -2642,6 +2652,10 @@
     $("finding-severity").className = "chip";
     $("finding-severity").dataset.sev = item.severity;
     $("finding-title").textContent = item.title;
+    const axes = $("finding-axes");
+    axes.replaceChildren();
+    const chips = evidenceChips(item);
+    if (chips) axes.append(chips);
 
     const body = $("finding-body");
     body.replaceChildren();
@@ -2653,6 +2667,9 @@
     const legend = highlightLegend(item.highlights);
     if (legend) observed.push(legend);
     card("Issue detail", observed);
+
+    const assessed = evidenceCard(item);
+    if (assessed) card("What this establishes", assessed);
 
     // Issue background: how this class of weakness works, target independent.
     if (item.background) {
@@ -2686,6 +2703,14 @@
       const blocks = item.proof.map((exchange, index) => proofBlock(index + 1, exchange, item.highlights));
       card(`Proof of concept · ${item.proof.length} request${item.proof.length === 1 ? "" : "s"}`,
         blocks, "Proof of concept");
+    }
+    if (item.cases?.length) {
+      card(`Captured cases · ${item.cases.length}`,
+        [el("p", "hint", "Each case carries the request and response as recorded, and can be "
+          + "sent again. Replay establishes whether the behaviour happens again; it does not "
+          + "establish that the behaviour is a weakness."),
+         ...item.cases.map((aCase, index) => caseBlock(item, aCase, index))],
+        "Captured cases");
     }
     if (item.commands && !item.proof?.length) {
       card("Check it yourself", [
@@ -2810,7 +2835,7 @@
       ["Requests sent", String(audit.requests)],
       ["Findings", `${audit.findings.length} (${confirmed} confirmed)`],
       ["Second identity", Object.keys(identityB()).length
-        ? "supplied" : "not supplied, so authorization findings stay unconfirmed"],
+        ? "supplied" : "not supplied, so cross-identity access was not tested at all"],
       ["Surface sweep", audit.discovery
         ? `${(audit.discovery.shadow || []).length} undocumented, ${(audit.discovery.exposed || []).length} exposed`
         : "not run"],
@@ -2820,16 +2845,34 @@
       coverage.append(row);
     }
 
-    body.append(reportCard("Coverage", [coverage]));
+    body.append(reportCard("Run totals", [coverage]));
 
-
+    const baselines = baselineCard();
+    if (baselines) {
+      body.append(reportCard("Baselines", baselines, { collapsible: true, key: "Baselines" }));
+    }
+    const checks = coverageCard();
+    if (checks) {
+      body.append(reportCard("What was tested", checks,
+        { collapsible: true, key: "What was tested" }));
+    }
+    if (audit.correlation?.notes?.length) {
+      const list = el("ul", "note-list");
+      for (const note of audit.correlation.notes) list.append(el("li", "", note));
+      body.append(reportCard(
+        `Duplicates · ${audit.correlation.merged} merged`,
+        [el("p", "hint", "Two sources are merged only when their captured exchanges agree on "
+          + "the operation, the response status and the specific thing observed. Where one side "
+          + "has no exchange to compare, both are kept and cross-referenced."), list],
+        { collapsible: true, key: "Duplicates" }));
+    }
 
     if (audit.notes.length) {
       const list = el("ul", "note-list");
 
       for (const note of [...new Set(audit.notes)]) list.append(el("li", "", note));
 
-      body.append(reportCard("What did not run", [list]));
+      body.append(reportCard("Run notes", [list]));
     }
   }
 
@@ -2898,6 +2941,8 @@
       }
       list.append(row);
       list.append(el("p", "tool-role", info.role || ""));
+      const policy = info.capabilities?.write_policy;
+      if (policy) list.append(el("p", "tool-role dim", policy));
     }
   }
 
@@ -2921,8 +2966,7 @@
       const result = await api("/api/tools/run", {
         spec: state.spec,
         base_url: target,
-        // The endpoint reads the tool name from this field.
-        profile: name,
+        tool: name,
         identities: { primary: connection.headers },
         allow_mutating: connection.allow_mutating,
         ...routePayload(),
@@ -2937,6 +2981,19 @@
       const before = state.audit.findings.length;
       absorb(result, name);
       const added = state.audit.findings.length - before;
+      if (result.version) {
+        state.audit.notes.push(`${name} ${result.version} ran${result.summary?.operations_tested
+          ? `, testing ${result.summary.operations_tested} operation(s)` : ""}.`);
+      }
+      if (result.truncated) {
+        state.audit.notes.push(`${name} reported more findings than Namazu keeps; the rest are `
+          + "not shown.");
+      }
+      if (result.zap_coverage?.gaps?.length) {
+        for (const gap of result.zap_coverage.gaps) {
+          state.audit.notes.push(`${name} coverage: ${gap}`);
+        }
+      }
       activateSection("audit");
       renderFindings();
       renderAuditReport();
@@ -2967,15 +3024,657 @@
     }
     for (const name of ready) {
       if (state.audit.cancelled) break;
-      // Sequentially: both are subprocesses pointed at the same target, and
+      // Sequentially: each is a subprocess pointed at the same target, and
       // two of them at once is traffic the operator did not ask for.
       await runExternalTool(name, null, true);
     }
+    // Correlation runs last, once every source has reported. Doing it per tool
+    // would mean comparing a finding against only the sources that happened to
+    // have run already.
+    await correlateFindings();
+  }
+
+  // Deduplication happens on the server because the decision needs the
+  // captured exchanges, and because "are these two the same defect" is a
+  // judgement that should be testable rather than a line of browser code.
+  async function correlateFindings() {
+    if (state.audit.findings.length < 2) return;
+    try {
+      const result = await api("/api/correlate", {
+        findings: state.audit.findings.map(({ key, ...item }) => item),
+      });
+      const keys = new Map(state.audit.findings.map((item) => [findingKey(item), item.key]));
+      state.audit.findings = result.findings.map((item) => ({
+        ...item, key: keys.get(findingKey(item)) || findingKey(item),
+      }));
+      state.audit.correlation = { merged: result.merged, notes: result.notes };
+      if (result.merged) {
+        announce(`${result.merged} duplicate finding(s) merged across sources.`);
+      }
+      renderFindings();
+      renderAuditReport();
+    } catch (error) {
+      state.audit.notes.push(`Duplicate detection did not run: ${errorText(error)}`);
+      renderAuditReport();
+    }
+  }
+
+  function findingKey(item) {
+    return item.scope === "host"
+      ? `${item.id}|${item.parameter || ""}`
+      : `${item.id}|${item.endpoint}|${item.parameter || ""}`;
+  }
+
+  /* ───────────────────── saved baselines and expectations ───────────────────── */
+
+  // Persisted per operation id, keyed by the specification's own base URL so
+  // two environments of the same API do not share an example that only exists
+  // in one of them.
+  function examplesKey() {
+    return `examples:${state.spec?.title || "api"}:${$("base-url").value || ""}`;
+  }
+
+  function loadExamples() {
+    try {
+      const raw = prefs.read(examplesKey(), "");
+      state.examples = raw ? JSON.parse(raw) : {};
+    } catch { state.examples = {}; }
+    renderBaselineEditor();
+  }
+
+  function saveExamples() {
+    try { prefs.write(examplesKey(), JSON.stringify(state.examples)); }
+    catch { /* a saved example is a convenience, not state the audit needs */ }
+  }
+
+  function renderBaselineEditor() {
+    const block = $("baseline-block");
+    if (!block) return;
+    const operation = state.operation;
+    block.hidden = !operation;
+    if (!operation) return;
+    const saved = state.examples[operation.id] || {};
+    const example = saved.example || {};
+    const expectation = saved.expectation || {};
+    $("baseline-url").value = example.url || "";
+    $("baseline-body").value = typeof example.body === "string"
+      ? example.body
+      : (example.body === undefined || example.body === null ? "" : stringify(example.body));
+    $("baseline-status").value = expectation.status || "";
+    $("baseline-negative").checked = Boolean(expectation.negative);
+    $("baseline-contains").value = expectation.body_contains || "";
+    const parts = [];
+    if (example.url || example.body !== undefined) parts.push("saved request");
+    if (expectation.status || expectation.body_contains) parts.push("assertions");
+    if (expectation.negative) parts.push("negative test");
+    $("baseline-state").textContent = parts.length ? parts.join(" + ") : "generated";
+    const invented = generatedInputs(operation);
+    $("baseline-saved-note").textContent = parts.length
+      ? `Applies to ${operation.method} ${operation.path}.`
+      : invented.length
+        ? `The contract documents no example for ${invented.join(", ")}, so the generated `
+          + "request will carry placeholder values for them."
+        : "";
+  }
+
+  // The same rule the server applies, so the panel can warn before a run
+  // rather than only explaining afterwards. See namazu/audit/baseline.py.
+  function generatedInputs(operation) {
+    const out = [];
+    for (const parameter of operation?.parameters || []) {
+      if (parameter.in !== "path" && parameter.in !== "query") continue;
+      if (!parameter.name) continue;
+      const schema = parameter.schema || {};
+      const documented = parameter.example !== undefined || parameter.examples
+        || schema.example !== undefined || schema.default !== undefined
+        || schema.enum || schema.const !== undefined || schema.examples;
+      if (!documented) out.push(`${parameter.in}.${parameter.name}`);
+    }
+    return out;
+  }
+
+  function saveBaseline() {
+    const operation = state.operation;
+    if (!operation) return;
+    const url = $("baseline-url").value.trim();
+    const bodyText = $("baseline-body").value.trim();
+    const status = $("baseline-status").value.trim();
+    const contains = $("baseline-contains").value.trim();
+    const negative = $("baseline-negative").checked;
+
+    const example = {};
+    if (url) example.url = url;
+    if (bodyText) {
+      // A JSON body is sent as a structure so the server treats it the way the
+      // generated one is treated; anything else goes as the text typed.
+      try { example.body = JSON.parse(bodyText); }
+      catch { example.body = bodyText; }
+    }
+    if (url || bodyText) example.label = "a saved example request";
+
+    const expectation = {};
+    if (status) expectation.status = status;
+    if (contains) expectation.body_contains = contains;
+    if (negative) expectation.negative = true;
+
+    if (!Object.keys(example).length && !Object.keys(expectation).length) {
+      delete state.examples[operation.id];
+    } else {
+      state.examples[operation.id] = {
+        ...(Object.keys(example).length ? { example } : {}),
+        ...(Object.keys(expectation).length ? { expectation } : {}),
+      };
+    }
+    saveExamples();
+    renderBaselineEditor();
+    if (negative && !status) {
+      toast("Saved. A negative test needs a status to assert, or there is nothing to check.");
+    } else {
+      toast("Saved for this operation.");
+    }
+  }
+
+  function baselineFromRun() {
+    const last = state.history[0];
+    if (!last) {
+      toast("Send a request on the Request tab first, then take it from there.");
+      return;
+    }
+    $("baseline-url").value = last.url || "";
+    if (last.request?.body !== undefined && last.request.body !== null) {
+      $("baseline-body").value = stringify(last.request.body);
+    }
+    if (Number.isFinite(last.status)) $("baseline-status").value = String(last.status);
+    toast("Taken from the last run. Review it, then save.");
+  }
+
+  function clearBaseline() {
+    const operation = state.operation;
+    if (!operation) return;
+    delete state.examples[operation.id];
+    saveExamples();
+    for (const id of ["baseline-url", "baseline-body", "baseline-status", "baseline-contains"]) {
+      $(id).value = "";
+    }
+    $("baseline-negative").checked = false;
+    renderBaselineEditor();
+  }
+
+  /* ───────────────────── opening a saved audit ───────────────────── */
+
+  // Reading an export has to tolerate one written by a different version:
+  // fields this build has never heard of, and fields it expects that are not
+  // there. Refusing to open a report is a worse failure than losing a field.
+  function importAudit(text, filename) {
+    let payload;
+    try { payload = JSON.parse(text); }
+    catch (error) { toast(`That file is not JSON: ${errorText(error)}`); return; }
+    if (!payload || typeof payload !== "object" || !Array.isArray(payload.findings)) {
+      toast("That file does not look like a Namazu audit export.");
+      return;
+    }
+    const findings = payload.findings.filter((item) => item && typeof item === "object");
+    state.audit = {
+      findings: findings.map((item) => ({ ...item, key: findingKey(item) })),
+      running: false, cancelled: false,
+      done: payload.scope?.endpoints_audited || 0,
+      total: payload.scope?.endpoints_in_scope || 0,
+      requests: payload.scope?.requests_sent || 0,
+      notes: Array.isArray(payload.notes) ? payload.notes.slice() : [],
+      discovery: payload.scope?.surface_sweep || null,
+      finding: null, log: [], logEntry: null, logTruncated: false, statuses: [],
+      coverage: {}, baselines: [], replays: payload.replays || {},
+      correlation: payload.duplicates || null,
+      startedAt: payload.started_at || null,
+      imported: { file: filename, exported_at: payload.exported_at || "" },
+    };
+    // Coverage written by this version comes back as a list; anything else is
+    // left empty rather than guessed at, and the note says so.
+    for (const entry of payload.coverage?.checks || []) {
+      if (!entry || !entry.check) continue;
+      state.audit.coverage[entry.check] = {
+        check: entry.check, title: entry.title || entry.check, what: entry.what || "",
+        states: entry.states || { [entry.state || "skipped"]: 1 },
+        findings: entry.findings || 0,
+        blockedOn: entry.blocked_on || [], reasons: entry.reasons || [],
+        remediation: entry.remediation || "",
+      };
+    }
+    for (const row of payload.coverage?.baselines || []) {
+      if (row && typeof row === "object") state.audit.baselines.push(row);
+    }
+    const missing = [];
+    if (!payload.coverage) missing.push("coverage");
+    if (!payload.evidence_levels) missing.push("the evidence legend");
+    if (missing.length) {
+      state.audit.notes.push(
+        `This export was written before Namazu recorded ${missing.join(" and ")}, so that part `
+        + "of the report is not shown. Its findings are read as they were written, and any that "
+        + "carry no evidence axes are classified from their check id rather than invented.");
+    }
+    const unknown = Object.keys(payload).filter((name) => !KNOWN_EXPORT_KEYS.has(name));
+    if (unknown.length) {
+      state.audit.notes.push(
+        `This export carries fields this version does not recognise, which were kept out of the `
+        + `way rather than discarded: ${unknown.join(", ")}.`);
+    }
+
+    activateSection("audit");
+    showView("view-audit-report");
+    $("export-audit").disabled = false;
+    if ($("export-audit-top")) $("export-audit-top").disabled = false;
+    renderSeverityBar();
+    renderFindings();
+    renderAuditReport();
+    renderLog();
+    auditProgress();
+    toast(`Opened ${findings.length} finding(s) from ${filename}.`);
+    announce(`Opened a saved audit with ${findings.length} findings.`);
+  }
+
+  const KNOWN_EXPORT_KEYS = new Set([
+    "application", "export", "exported_at", "started_at", "api", "scope", "summary",
+    "notes", "findings", "note", "coverage", "replays", "duplicates", "evidence_levels",
+  ]);
+
+  /* ───────────────────── evidence, coverage and replay ───────────────────── */
+
+  // Wording for the four axes, kept here rather than taken from the server so
+  // the page explains itself even when a finding was read from an export
+  // written by a different version.
+  const CATEGORY_LABEL = {
+    security: "Security weakness",
+    hardening: "Hardening concern",
+    contract: "Contract defect",
+    reliability: "Reliability defect",
+    informational: "Informational observation",
+  };
+  const ORIGIN_LABEL = {
+    "static-declaration": "Read from the specification",
+    "runtime-observation": "Observed in a response",
+    "external-report": "Reported by another tool",
+  };
+  const VERIFICATION_LABEL = {
+    unverified: "Not verified",
+    observed: "Observed once",
+    reproduced: "Reproduced on replay",
+    "impact-demonstrated": "Impact demonstrated",
+  };
+  const REPLAY_LABEL = {
+    reproduced: "Reproduced",
+    "not-reproduced": "Not reproduced",
+    intermittent: "Intermittent",
+    blocked: "Blocked",
+    error: "Error",
+  };
+  const COVERAGE_LABEL = {
+    completed: "Ran",
+    blocked: "Blocked",
+    skipped: "Not in this profile",
+    inconclusive: "Inconclusive",
+    "not-applicable": "Nothing to test",
+    attempted: "Started",
+  };
+
+  function assessmentOf(item) { return item.assessment || {}; }
+
+  // The chips under a finding's title. Deliberately four separate chips rather
+  // than one line: the whole point is that these say different things and a
+  // reader should not be able to collapse them into "how bad is it".
+  function evidenceChips(item) {
+    const row = el("div", "axes");
+    const axis = (kind, text, title) => {
+      if (!text) return;
+      const chip = el("span", "axis", text);
+      chip.dataset.kind = kind;
+      if (title) chip.title = title;
+      row.append(chip);
+    };
+    const assessment = assessmentOf(item);
+    axis("category", CATEGORY_LABEL[assessment.category] || assessment.category,
+      assessment.category_meaning);
+    axis("origin", ORIGIN_LABEL[assessment.origin] || assessment.origin,
+      assessment.origin_meaning);
+    axis("verification", VERIFICATION_LABEL[assessment.verification] || assessment.verification,
+      assessment.verification_meaning);
+    return row.childElementCount ? row : null;
+  }
+
+  function evidenceCard(item) {
+    const assessment = assessmentOf(item);
+    if (!assessment.category) return null;
+    const parts = [];
+    if (assessment.confirmed_claim) {
+      const claim = el("div", "claim");
+      claim.append(el("div", "claim-label", `What “${item.confidence}” means here`),
+        el("p", "prose", assessment.confirmed_claim));
+      parts.push(claim);
+    }
+    const facts = el("dl", "facts");
+    const rows = [
+      ["Kind of defect", CATEGORY_LABEL[assessment.category] || assessment.category,
+        assessment.category_meaning],
+      ["Evidence came from", ORIGIN_LABEL[assessment.origin] || assessment.origin,
+        assessment.origin_meaning],
+      ["Taken as far as", VERIFICATION_LABEL[assessment.verification] || assessment.verification,
+        assessment.verification_meaning],
+    ];
+    if (assessment.proposed_severity) {
+      rows.push(["Severity", `${item.severity}, lowered from ${assessment.proposed_severity}`,
+        assessment.severity_reason]);
+    }
+    if (assessment.severity_rule && assessment.severity_rule !== "as-assessed") {
+      rows.push(["Severity rule", assessment.severity_rule, assessment.severity_reason]);
+    }
+    for (const entry of assessment.source_severity || []) {
+      rows.push([`${entry.tool} rated it`,
+        entry.confidence ? `${entry.severity} (confidence ${entry.confidence})` : entry.severity,
+        "The other tool's own rating, kept as it was rather than overwritten."]);
+    }
+    if (assessment.mapping_basis) {
+      rows.push(["Why this classification", assessment.mapping_basis, ""]);
+    }
+    for (const [label, value, note] of rows) {
+      if (!value) continue;
+      const row = el("div");
+      const term = el("dt", "", label);
+      if (note) term.title = note;
+      row.append(term, el("dd", "", value));
+      facts.append(row);
+    }
+    parts.push(facts);
+    if (item.provenance?.length > 1) {
+      parts.push(el("p", "hint", `Merged from ${item.provenance.length} sources: `
+        + `${item.provenance.join(", ")}.`));
+    }
+    if (item.duplicate_of) {
+      parts.push(el("p", "prose caution", `This may be the same defect as ${item.duplicate_of}. `
+        + "The evidence on one side was not complete enough to be sure, so both are kept."));
+    }
+    return parts;
+  }
+
+  /* ── captured cases and replay ── */
+
+  function caseBlock(item, aCase, index) {
+    const wrap = el("div", "case");
+    const head = el("div", "case-head");
+    head.append(el("span", "case-label", aCase.label || `Case ${index + 1}`));
+    const status = el("span", "chip");
+    status.dataset.status = String(aCase.status || 0);
+    status.textContent = aCase.status ? String(aCase.status) : (aCase.error || "no response");
+    head.append(status);
+    if (aCase.source && aCase.source !== "namazu") {
+      head.append(el("span", "src", aCase.tool_version
+        ? `${aCase.source} ${aCase.tool_version}` : aCase.source));
+    }
+    wrap.append(head);
+
+    wrap.append(el("pre", "raw-http", `${aCase.method} ${aCase.url}`));
+    const facts = el("dl", "facts tight");
+    for (const [label, value] of [
+      ["Sent as", aCase.identity_ref],
+      ["Recorded", aCase.recorded_at],
+      ["Response size", aCase.body_length ? `${aCase.body_length} characters` : ""],
+      ["Correlation", Object.entries(aCase.correlation || {})
+        .map(([name, value]) => `${name}: ${value}`).join(", ")],
+      ["Seed", aCase.seed],
+      ["Schema", aCase.schema_hash],
+      ["Changes data", aCase.mutating ? "yes" : "no"],
+    ]) {
+      if (!value) continue;
+      const row = el("div");
+      row.append(el("dt", "", label), el("dd", "", String(value)));
+      facts.append(row);
+    }
+    wrap.append(facts);
+    if (aCase.body_excerpt) wrap.append(el("pre", "raw-http", aCase.body_excerpt));
+
+    // Named gaps. A reader should never have to work out that something is
+    // absent from the fact that it is absent.
+    if (aCase.missing?.length) {
+      const list = el("ul", "note-list");
+      for (const note of aCase.missing) list.append(el("li", "", note));
+      wrap.append(el("div", "case-missing-label", "Not captured"), list);
+    }
+    if (aCase.redacted?.length) {
+      wrap.append(el("p", "hint", `Masked before recording: ${aCase.redacted.join(", ")}. `
+        + "Replay resolves these from the identity configured on the Auth tab; the placeholder "
+        + "is never sent as a credential."));
+    }
+
+    const key = `${item.key || item.id}|${index}`;
+    const controls = el("div", "case-actions");
+    const button = el("button", "ghost", "Replay");
+    button.type = "button";
+    button.addEventListener("click", () => replayCase(item, aCase, key, button, wrap));
+    controls.append(button);
+    const attempts = el("select", "mini");
+    attempts.setAttribute("aria-label", "Replay attempts");
+    for (const count of [1, 2, 3, 5]) {
+      const option = el("option", "", `${count} attempt${count === 1 ? "" : "s"}`);
+      option.value = String(count);
+      if (count === 2) option.selected = true;
+      attempts.append(option);
+    }
+    attempts.dataset.key = key;
+    controls.append(attempts);
+    if (aCase.mutating) {
+      controls.append(el("span", "hint",
+        "This case changes data, so replay needs Allow writes."));
+    }
+    wrap.append(controls);
+    const outcome = el("div", "replay-outcome");
+    outcome.dataset.key = key;
+    if (state.audit.replays[key]) outcome.replaceChildren(replayView(state.audit.replays[key]));
+    wrap.append(outcome);
+    return wrap;
+  }
+
+  function replayView(result) {
+    const box = el("div", "replay");
+    const head = el("div", "replay-head");
+    const verdict = el("span", "chip");
+    verdict.dataset.replay = result.outcome;
+    verdict.textContent = REPLAY_LABEL[result.outcome] || result.outcome;
+    head.append(verdict);
+    head.append(el("span", "hint",
+      `${result.matched} of ${result.attempts} attempt${result.attempts === 1 ? "" : "s"} matched`));
+    box.append(head);
+    box.append(el("p", "prose", result.reason || ""));
+    if (result.failed_assertions?.length) {
+      const list = el("ul", "note-list");
+      for (const note of result.failed_assertions) list.append(el("li", "", note));
+      box.append(list);
+    }
+    // Said every time. A reproduced response is a fact about the target, not a
+    // judgement about how serious it is.
+    box.append(el("p", "hint", result.note || ""));
+    return box;
+  }
+
+  async function replayCase(item, aCase, key, button, wrap) {
+    const select = wrap.querySelector(`select[data-key="${CSS.escape(key)}"]`);
+    const attempts = Number(select?.value || 2);
+    let connection;
+    try { connection = connectionPayload(); }
+    catch (error) { toast(errorText(error)); return; }
+    button.disabled = true;
+    const original = button.textContent;
+    button.textContent = "Replaying";
+    try {
+      const result = await api("/api/replay", {
+        case: aCase,
+        identities: { primary: renewableIdentity(connection.headers), secondary: identityB() },
+        attempts,
+        allow_mutating: connection.allow_mutating,
+        ...routePayload(),
+        timeout: connection.timeout,
+      });
+      state.audit.replays[key] = result;
+      const target = wrap.querySelector(`.replay-outcome[data-key="${CSS.escape(key)}"]`);
+      if (target) target.replaceChildren(replayView(result));
+      // Replay can raise a finding to "reproduced", and nothing higher: it
+      // establishes the behaviour, never its security impact.
+      if (result.outcome === "reproduced") {
+        const assessment = assessmentOf(item);
+        if (assessment.verification === "observed" || assessment.verification === "unverified") {
+          assessment.verification = "reproduced";
+          assessment.verification_meaning = VERIFICATION_LABEL.reproduced;
+          renderFindings();
+        }
+      }
+      announce(`Replay ${result.outcome} after ${result.attempts} attempts.`);
+    } catch (error) {
+      toast(errorText(error));
+    } finally {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
+
+  /* ── the coverage report ── */
+
+  function coverageCard() {
+    const held = Object.values(state.audit.coverage);
+    if (!held.length) return null;
+    const parts = [];
+    const counts = {};
+    for (const entry of held) {
+      const name = coverageState(entry);
+      counts[name] = (counts[name] || 0) + 1;
+    }
+    const tally = el("div", "cov-tally");
+    for (const name of COVERAGE_ORDER) {
+      if (!counts[name]) continue;
+      const cell = el("div", "cov-cell");
+      cell.dataset.state = name;
+      cell.append(el("div", "v", String(counts[name])),
+        el("div", "k", COVERAGE_LABEL[name] || name));
+      tally.append(cell);
+    }
+    parts.push(tally);
+    parts.push(el("p", "hint", "A check that ran and found nothing is shown as Ran, not as "
+      + "passed. Nothing here is a statement that the target is sound."));
+
+    const table = el("div", "cov-list");
+    const order = [...held].sort((a, b) =>
+      COVERAGE_ORDER.indexOf(coverageState(a)) - COVERAGE_ORDER.indexOf(coverageState(b))
+      || a.title.localeCompare(b.title));
+    for (const entry of order) {
+      const name = coverageState(entry);
+      const row = el("div", "cov-row");
+      row.dataset.state = name;
+      const label = el("div", "cov-name");
+      label.append(el("span", "t", entry.title));
+      if (entry.what) label.append(el("span", "w", entry.what));
+      row.append(label);
+      const right = el("div", "cov-right");
+      const chip = el("span", "chip");
+      chip.dataset.cov = name;
+      chip.textContent = COVERAGE_LABEL[name] || name;
+      right.append(chip);
+      if (entry.findings) right.append(el("span", "n", `${entry.findings} found`));
+      row.append(right);
+      if (entry.reasons.length) {
+        const why = el("div", "cov-why");
+        why.append(el("p", "prose", entry.reasons[0]));
+        if (entry.blockedOn.length) {
+          why.append(el("p", "hint", `Affected: ${entry.blockedOn.slice(0, 6).join(", ")}`
+            + (entry.blockedOn.length > 6 ? ` and ${entry.blockedOn.length - 6} more` : "")));
+        }
+        if (entry.remediation) why.append(el("p", "prose remedy", entry.remediation));
+        row.append(why);
+      }
+      table.append(row);
+    }
+    parts.push(table);
+    return parts;
+  }
+
+  function baselineCard() {
+    const rows = state.audit.baselines;
+    if (!rows.length) return null;
+    const parts = [];
+    const bad = rows.filter((row) => !row.usable);
+    if (bad.length) {
+      parts.push(el("p", "prose caution",
+        `${bad.length} of ${rows.length} baseline requests did not establish a working request, `
+        + "so the checks that depend on one are reported as blocked rather than clean."));
+    }
+    const list = el("div", "cov-list");
+    for (const row of rows.slice(0, 40)) {
+      const entry = el("div", "cov-row");
+      entry.dataset.state = row.usable ? "completed" : "blocked";
+      const label = el("div", "cov-name");
+      label.append(el("span", "t", row.endpoint));
+      label.append(el("span", "w", row.reason || ""));
+      entry.append(label);
+      const right = el("div", "cov-right");
+      const chip = el("span", "chip");
+      chip.dataset.cov = row.usable ? "completed" : "blocked";
+      chip.textContent = row.outcome;
+      right.append(chip);
+      if (row.status) right.append(el("span", "n", String(row.status)));
+      entry.append(right);
+      if (!row.usable && row.remediation) {
+        const why = el("div", "cov-why");
+        why.append(el("p", "prose remedy", row.remediation));
+        entry.append(why);
+      }
+      list.append(entry);
+    }
+    parts.push(list);
+    return parts;
+  }
+
+  // Coverage is accumulated per endpoint rather than summed, because "blocked"
+  // on one operation and "completed" on another are two different facts and a
+  // single total would hide both. A check blocked anywhere is listed as
+  // blocked, with every endpoint it was blocked on, because the reader needs
+  // to know which routes were not covered rather than how many.
+  function absorbCoverage(result, label) {
+    if (result.baseline_verdict) {
+      state.audit.baselines.push({
+        endpoint: result.endpoint || label,
+        outcome: result.baseline_outcome,
+        status: result.baseline_status,
+        reason: result.baseline_verdict.reason,
+        remediation: result.baseline_verdict.remediation,
+        usable: result.baseline_verdict.usable,
+      });
+    }
+    for (const entry of result.coverage?.checks || []) {
+      const held = state.audit.coverage[entry.check] || {
+        check: entry.check, title: entry.title, what: entry.what,
+        states: {}, findings: 0, blockedOn: [], reasons: [], remediation: "",
+      };
+      held.states[entry.state] = (held.states[entry.state] || 0) + 1;
+      held.findings += entry.findings || 0;
+      if (entry.state === "blocked" || entry.state === "inconclusive") {
+        held.blockedOn.push(result.endpoint || label);
+        if (entry.reason && !held.reasons.includes(entry.reason)) held.reasons.push(entry.reason);
+        held.remediation = held.remediation || entry.remediation || "";
+      }
+      state.audit.coverage[entry.check] = held;
+    }
+  }
+
+  const COVERAGE_ORDER = ["blocked", "inconclusive", "completed", "skipped", "not-applicable",
+    "attempted"];
+
+  // The worst state wins the label. A check completed on four endpoints and
+  // blocked on a fifth has a gap, and reporting the majority state would bury
+  // exactly the thing a reader needs.
+  function coverageState(held) {
+    for (const name of COVERAGE_ORDER) if (held.states[name]) return name;
+    return "skipped";
   }
 
   function absorb(result, label) {
     state.audit.requests += result.requests_sent || 0;
     for (const note of result.notes || []) state.audit.notes.push(`${label}: ${note}`);
+    absorbCoverage(result, label);
     for (const item of result.findings || []) {
       // Host-scoped findings (TLS, headers, CORS middleware) describe the whole
       // origin, so they must not reappear once per endpoint audited.
@@ -3028,6 +3727,7 @@
       findings: [], running: true, cancelled: false, done: 0, total: operations.length,
       requests: 0, notes: [], discovery: null, finding: null,
       log: [], logEntry: null, logTruncated: false, statuses: [],
+      coverage: {}, baselines: [], replays: {}, correlation: null,
       startedAt: new Date().toISOString(),
     };
 
@@ -3065,7 +3765,12 @@
         if (state.audit.cancelled) break;
         $("session-state").textContent = `Auditing ${state.audit.done + 1} of ${operations.length}`;
         try {
-          const result = await api("/api/audit", { ...payload, operation_id: op.id });
+          const saved = state.examples[op.id] || {};
+          const result = await api("/api/audit", {
+            ...payload, operation_id: op.id,
+            ...(saved.example ? { example: saved.example } : {}),
+            ...(saved.expectation ? { expectation: saved.expectation } : {}),
+          });
 
           absorb(result, `${op.method} ${op.path}`);
           absorbLog(result, `${op.method} ${op.path}`);
@@ -3098,6 +3803,51 @@
 
 
 
+  // Shipped inside every export. A severity is only arguable if the reader can
+  // see the rules it came from.
+  const EVIDENCE_LEVELS = {
+    note: "Each finding carries four independent axes. Severity alone cannot distinguish a "
+        + "confirmed reading of a specification from a confirmed security weakness.",
+    category: CATEGORY_LABEL,
+    origin: ORIGIN_LABEL,
+    verification: VERIFICATION_LABEL,
+    severity_rules: {
+      "informational-is-info": "An observation that asserts no defect is not a severity.",
+      "contract-defect-is-informational": "A disagreement between an implementation and its own "
+        + "specification is a documentation defect until a security consequence is demonstrated.",
+      "reliability-defect-is-low": "An unhandled path is a reliability defect until something is "
+        + "shown to come of it.",
+      "hardening-without-impact-is-medium": "A missing control with no demonstrated route to "
+        + "abuse cannot outrank a weakness that was shown.",
+      "static-declaration-is-low": "A specification states an intention, not behaviour.",
+      "unreproduced-external-report-is-medium": "Another tool's unreproduced report is a lead; "
+        + "Namazu did not re-send the request.",
+      "critical-needs-demonstrated-impact": "Critical is reserved for a weakness whose "
+        + "consequence was demonstrated.",
+    },
+    seeds: "Integers wider than 2**53-1, such as a schemathesis seed, are written as decimal "
+         + "strings. A JSON number would be rounded by any JavaScript reader and would no "
+         + "longer be the seed.",
+  };
+
+  function categoryTally(findings) {
+    const out = {};
+    for (const item of findings) {
+      const name = assessmentOf(item).category || "unclassified";
+      out[name] = (out[name] || 0) + 1;
+    }
+    return out;
+  }
+
+  function verificationTally(findings) {
+    const out = {};
+    for (const item of findings) {
+      const name = assessmentOf(item).verification || "unknown";
+      out[name] = (out[name] || 0) + 1;
+    }
+    return out;
+  }
+
   function exportAudit() {
     if (!state.audit.findings.length) return;
     const payload = {
@@ -3115,9 +3865,28 @@
         surface_sweep: state.audit.discovery,
         second_identity: Object.keys(identityB()).length > 0,
       },
-      summary: { total: state.audit.findings.length, severity: severityTally(state.audit.findings) },
+      summary: { total: state.audit.findings.length, severity: severityTally(state.audit.findings),
+                 category: categoryTally(state.audit.findings),
+                 verification: verificationTally(state.audit.findings) },
+      // What was tested and what was not, in the export rather than only on
+      // screen. A report that lists three findings and does not say that forty
+      // checks were blocked is the failure this whole structure exists to fix.
+      coverage: {
+        checks: Object.values(state.audit.coverage).map((entry) => ({
+          check: entry.check, title: entry.title, what: entry.what,
+          state: coverageState(entry), states: entry.states, findings: entry.findings,
+          blocked_on: entry.blockedOn, reasons: entry.reasons,
+          remediation: entry.remediation,
+        })),
+        baselines: state.audit.baselines,
+        note: "A check shown as completed ran and reached a conclusion. It is not a statement "
+            + "that the target is sound, and a blocked check is not one either.",
+      },
+      replays: state.audit.replays,
+      duplicates: state.audit.correlation,
       notes: [...new Set(state.audit.notes)],
       findings: state.audit.findings.map(({ key, ...item }) => item),
+      evidence_levels: EVIDENCE_LEVELS,
       note: "Proof-of-concept requests have credential headers and query values masked. Response "
           + "excerpts may still contain sensitive data; review before sharing.",
     };
@@ -3155,6 +3924,18 @@
       updateProfileNote();
     });
     $("add-identity-b").addEventListener("click", () => { identityKv.addRow(); identityKv.focusLast(); });
+    $("baseline-save").addEventListener("click", saveBaseline);
+    $("baseline-from-run").addEventListener("click", baselineFromRun);
+    $("baseline-clear").addEventListener("click", clearBaseline);
+    $("import-audit").addEventListener("click", () => $("import-audit-file").click());
+    $("import-audit-file").addEventListener("change", async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      try { importAudit(await file.text(), file.name); }
+      catch (error) { toast(`That file could not be read: ${errorText(error)}`); }
+      // Cleared so choosing the same file again still fires a change event.
+      event.target.value = "";
+    });
     $("run-audit").addEventListener("click", runAudit);
     $("cancel-audit").addEventListener("click", () => {
       state.audit.cancelled = true;

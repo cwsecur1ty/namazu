@@ -221,9 +221,17 @@ class SequenceResult:
             # Values are deliberately absent: an extracted value can be a
             # session token, and the names are what a reader needs.
             "variables": sorted(self.variables),
+            # The identifiers under "created" are kept on purpose: without
+            # them nobody can remove what this run left behind. They are also
+            # exactly the sort of value that should not travel into a client
+            # report, and a session id is both an identifier and a credential,
+            # so the note says so rather than leaving a reader to notice.
             "created": self.created,
             "cleanup": ("Nothing was removed. Namazu does not delete resources without a "
-                        "configured cleanup step and an identity authorised to run it."
+                        "configured cleanup step and an identity authorised to run it. The "
+                        "identifiers recorded here are for whoever cleans up, and may "
+                        "themselves be credentials: treat this as operational notes rather "
+                        "than report content."
                         if self.created else ""),
         }
 

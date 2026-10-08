@@ -350,6 +350,37 @@ class Finding:
         return out
 
 
+def _exchange_from_dict(entry: dict) -> Exchange:
+    """An exchange read back from a proof of concept.
+
+    What comes back is the redacted, excerpted record, which is all an export
+    ever held. ``body`` is therefore the excerpt and ``length`` keeps the real
+    figure, so nothing downstream mistakes the excerpt for the whole body.
+    """
+    exchange = Exchange(
+        label=str(entry.get("label") or ""),
+        method=str(entry.get("method") or "GET"),
+        url=str(entry.get("url") or ""),
+        request_headers=entry.get("request_headers") if isinstance(
+            entry.get("request_headers"), dict) else {},
+        request_body=entry.get("request_body") if isinstance(
+            entry.get("request_body"), str) else None,
+        identity=str(entry.get("identity") or "anonymous"),
+        mutating=bool(entry.get("mutating")),
+    )
+    try:
+        exchange.status = int(entry.get("status") or 0)
+    except (TypeError, ValueError):
+        exchange.status = 0
+    exchange.headers = entry.get("response_headers") if isinstance(
+        entry.get("response_headers"), dict) else {}
+    exchange.body = str(entry.get("body_excerpt") or "")
+    exchange.truncated = bool(entry.get("truncated")) or (
+        isinstance(entry.get("body_length"), int) and entry["body_length"] > len(exchange.body))
+    exchange.error = str(entry.get("error") or "")
+    return exchange
+
+
 def finding_from_dict(data) -> Finding:
     """Rehydrate a finding from an export, however old the export is.
 
@@ -379,6 +410,14 @@ def finding_from_dict(data) -> Finding:
     item = Finding(**values)
     item.cases = [CapturedCase.from_dict(case) for case in (data.get("cases") or [])
                   if isinstance(case, dict)]
+    # The proof of concept has to come back as exchanges, not be dropped.
+    # Correlation decides whether two findings are the same defect by comparing
+    # the evidence behind them, and a finding whose exchange was lost on the
+    # way through the API reads as having no evidence at all: a confirmed
+    # duplicate then degrades to a possible one for no reason but the round
+    # trip.
+    item.exchanges = [_exchange_from_dict(entry) for entry in (data.get("proof") or [])
+                      if isinstance(entry, dict)]
     raw = data.get("assessment")
     if isinstance(raw, dict):
         item.assessment = ev.Assessment(

@@ -289,11 +289,29 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
 
     try:
         if settings["authz"]:
-            findings += family("authorization", lambda: authz.probe(
+            before = len(notes)
+            authz_findings = family("authorization", lambda: authz.probe(
                 executor, baseline=baseline, endpoint=endpoint, operation=operation,
                 identity_a=identity_a, identity_b=identity_b, base_headers=built["headers"],
                 notes=notes,
             ))
+            findings += authz_findings
+            # The cross-identity read is tracked apart from the rest of the
+            # family, so "no second identity" does not read as "the whole of
+            # authorization went untested" and, as here, a probe that did run
+            # does not end the run recorded as skipped.
+            if ledger.state("cross-identity") != "blocked":
+                refusal = next((note for note in notes[before:]
+                                if "cross-identity read did not run" in note), "")
+                if refusal:
+                    ledger.inconclusive(
+                        "cross-identity", refusal,
+                        "Supply a second identity that holds a different object on this "
+                        "operation, and give it a resource marker so the read can be checked "
+                        "by content rather than by status code.")
+                else:
+                    ledger.complete("cross-identity", findings=len(
+                        [item for item in authz_findings if item.id.startswith("authz.bola")]))
             findings += family("credential-handling", lambda: contract.invalid_credentials(
                 executor, baseline=baseline, endpoint=endpoint, operation=operation,
                 identity=identity_a, headers=built["headers"]))
