@@ -731,6 +731,31 @@ the XML probe confirms that external entities resolve but cannot see a parser
 that resolves them silently, and the SQL timing probe covers only parameters
 interpolated into a quoted string on an engine that has a sleep function.
 
+On the evidence and coverage work specifically:
+
+- **Rung 4 of the OAuth ladder cannot be reached automatically.** Showing that
+  a token is issued through the implicit grant needs a browser and a consenting
+  user, so Namazu reports the prerequisites and stops at rung 3. Rung 5 is
+  recorded from an operator's own evidence and is never inferred.
+- **nuclei findings carry no replayable case.** It reports the matcher that
+  fired and the URL it matched, not the exchange, so its findings cannot be
+  replayed and stay at `unverified`. schemathesis and ZAP both record the
+  exchange and can be.
+- **Correlation is limited to the observations listed in `correlate.py`.** Two
+  sources agreeing about something not in that table are reported twice. That
+  is the deliberate direction to fail in: a missed merge is a duplicate in the
+  report, and a wrong merge is a finding that disappeared.
+- **A replay of a mutating case is refused, not queued.** Enabling writes is
+  the only way to replay one, and Namazu will not repeat a write on its own
+  initiative to raise confidence.
+- **Cleanup is recorded, not performed.** Nothing is deleted without a cleanup
+  step you configure and an identity authorised to run it, so an audit that
+  created objects leaves them for you with a list of what they were.
+- **The ZAP adapter has not been exercised against an installed ZAP here.** Its
+  plan is built, round-tripped through a YAML parser and tested, and its report
+  parsing is tested against the `traditional-json-plus` shape, but no ZAP
+  binary was available to run end to end.
+
 **Only run this against systems you are authorised to test.**
 
 ## Development
