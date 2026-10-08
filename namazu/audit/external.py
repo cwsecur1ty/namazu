@@ -270,21 +270,6 @@ def _schemathesis_coverage(document) -> str:
     return "schemathesis coverage: " + "; ".join(parts) + "."
 
 
-# The ndjson record names checks in snake case and failures in camel case. One
-# table maps the check that ran to the failure type, so a captured exchange can
-# be attached to the finding built from the summary.
-ST_CHECK_TO_FAILURE = {
-    "status_code_conformance": ("UndefinedStatusCode", "UndocumentedStatusCode"),
-    "content_type_conformance": ("UndefinedContentType", "MissingContentType",
-                                 "MalformedMediaType"),
-    "response_schema_conformance": ("ResponseConformance",),
-    "not_a_server_error": ("ServerError",),
-    "ignored_auth": ("IgnoredAuth",),
-    "negative_data_rejection": ("AcceptedNegativeData",),
-    "positive_data_acceptance": ("RejectedPositiveData",),
-}
-
-
 def _schemathesis_cases(record: Path, *, version: str, identity_ref: str, schema_hash: str,
                         schema_source: str, seed: str) -> tuple[dict, list]:
     """Failing request/response pairs from the ndjson record, keyed by failure type.

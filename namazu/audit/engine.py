@@ -127,12 +127,22 @@ def summarize(findings: list) -> dict:
     counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
     confidence = {"confirmed": 0, "probable": 0, "possible": 0}
     owasp: dict = {}
+    # Tallied here as well as in the browser, so a caller using the API gets
+    # the same breakdown. A count by severity alone invites the reading this
+    # whole structure exists to prevent: five findings is not five weaknesses.
+    category: dict = {}
+    verification: dict = {}
     for item in findings:
         counts[item.severity] = counts.get(item.severity, 0) + 1
         confidence[item.confidence] = confidence.get(item.confidence, 0) + 1
         if item.owasp:
             owasp[item.owasp] = owasp.get(item.owasp, 0) + 1
-    return {"total": len(findings), "severity": counts, "confidence": confidence, "owasp": owasp}
+        if item.category:
+            category[item.category] = category.get(item.category, 0) + 1
+        if item.verification:
+            verification[item.verification] = verification.get(item.verification, 0) + 1
+    return {"total": len(findings), "severity": counts, "confidence": confidence,
+            "owasp": owasp, "category": category, "verification": verification}
 
 
 def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = None,
@@ -714,8 +724,21 @@ def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict
             http.close()
 
     deduped = _dedupe(_attach_commands(findings, parsed.get("source_url") or ""))
+    # The sweep gets a ledger entry of its own, so the report says whether it
+    # ran rather than leaving its absence to be read as nothing found.
+    ledger = coverage.Ledger()
+    ledger.complete("contract-review", findings=len(list(specscan.review_document(parsed))))
+    if summary.get("budget_exhausted"):
+        ledger.inconclusive(
+            "inventory",
+            f"The sweep's request budget of {tracker.limit} was spent before it finished, so "
+            "the surface around the documented routes was only partly probed.",
+            "Raise the sweep budget to cover the whole surface.")
+    else:
+        ledger.complete("inventory", findings=len(probe_findings), requests=tracker.spent)
     return {
         "scope": "inventory",
+        "coverage": ledger.to_dict(),
         "base_url": target,
         "profile": "readonly",
         "requests_sent": tracker.spent,

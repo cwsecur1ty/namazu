@@ -46,11 +46,6 @@ OUTCOMES = (
     "transport-failure",
 )
 
-# A baseline in one of these states cannot support a probe that needs a working
-# request to compare against.
-BLOCKING = frozenset({"authentication-failure", "permission-denied", "invalid-data",
-                      "unexpected", "transport-failure"})
-
 # Values the example generator in spec.py produces when a schema documents no
 # example. A request carrying one of these in a path parameter has not named a
 # real object, and a 404 or a 422 answering it is a statement about the input
@@ -217,7 +212,8 @@ class Verdict:
     outcome: str
     reason: str
     remediation: str = ""
-    # Probe families that cannot draw a conclusion from this baseline.
+    # What the classification was based on: the status, the challenge header,
+    # which inputs were generated, which assertions failed.
     evidence: dict = field(default_factory=dict)
 
     @property

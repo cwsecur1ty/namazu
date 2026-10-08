@@ -259,24 +259,3 @@ def from_probe(scheme: str, *, flow: str = "implicit", json_pointer: str = "",
     elif exchange.status in (400, 401, 403) and not present:
         evidence.server_rejected = True
     return evidence
-
-
-def pkce_comparable(left: dict, right: dict) -> tuple[bool, str]:
-    """Whether two authorization observations can be compared for a PKCE downgrade.
-
-    A downgrade conclusion means "this client and this flow accept a request
-    without the protection they accept it with". Comparing observations from
-    two different clients, or two different flows, does not say that: a server
-    may well require PKCE for one client and not another, which is a
-    configuration fact rather than a downgrade.
-    """
-    for key, label in (("client_id", "client"), ("flow", "flow"),
-                       ("authorization_endpoint", "authorization endpoint")):
-        first, second = str(left.get(key) or ""), str(right.get(key) or "")
-        if not first or not second:
-            return False, (f"the {label} is not recorded for both observations, so they cannot "
-                           "be compared")
-        if first != second:
-            return False, (f"the two observations use a different {label} ({first} against "
-                           f"{second}), so one is not a downgrade of the other")
-    return True, "both observations are the same client and the same flow"

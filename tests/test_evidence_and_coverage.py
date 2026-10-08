@@ -28,6 +28,7 @@ from namazu.audit import (
     engine,
     evidence,
     matrix,
+    oauthladder,
     transport,
 )
 from namazu.audit.model import Exchange, big_int, finding, finding_from_dict, json_safe
@@ -1102,3 +1103,123 @@ def test_the_placeholder_list_matches_what_the_example_generator_produces():
         assert str(produced).lower() in {
             value.lower() for value in baseline_module.GENERATED_FILLER}, (
             f"{schema} produces {produced!r}, which baseline.GENERATED_FILLER does not list")
+
+
+# ── the OAuth ladder ───────────────────────────────────────────────────────
+
+def _probe(status, location="", body=""):
+    exchange = Exchange(label="authorize", method="GET",
+                        url="https://id.example.test/authorize?response_type=token")
+    exchange.status = status
+    exchange.headers = {"location": location} if location else {}
+    exchange.body = body
+    return exchange
+
+
+def test_a_redirect_without_a_token_reaches_server_accepts_and_no_further():
+    """A login page, a redirect and an HTTP 200 are not a token.
+
+    An authorization server renders a sign-in form to an unauthenticated
+    browser whether or not it would ever issue through this grant.
+    """
+    rung = oauthladder.assess(oauthladder.from_probe(
+        "Oauth2", client_id="app", exchange=_probe(302, "https://app.test/cb?state=x")))
+    assert rung.rung == "server-accepts"
+    assert rung.severity == "low"
+    assert "does not establish" in rung.why
+    assert "sign-in page" in rung.why
+    assert "consenting user" in rung.missing
+
+
+def test_an_http_200_is_not_token_issuance():
+    rung = oauthladder.assess(oauthladder.from_probe(
+        "Oauth2", client_id="app", exchange=_probe(200, body="<html>Sign in</html>")))
+    assert rung.rung == "server-accepts"
+
+
+def test_a_token_in_the_fragment_reaches_token_issued_and_names_the_location():
+    rung = oauthladder.assess(oauthladder.from_probe(
+        "Oauth2", client_id="app",
+        exchange=_probe(302, "https://app.test/cb#access_token=abc&token_type=bearer")))
+    assert rung.rung == "token-issued"
+    assert "fragment" in rung.claim
+    # The location decides which exposure routes apply, which is exactly what
+    # the static finding could not determine and asserted anyway.
+    assert "not sent to the server" in rung.why
+    assert "Referer" in rung.why
+
+
+def test_a_token_in_the_query_string_says_the_log_routes_do_apply():
+    rung = oauthladder.assess(oauthladder.from_probe(
+        "Oauth2", client_id="app", exchange=_probe(302, "https://app.test/cb?access_token=abc")))
+    assert rung.rung == "token-issued"
+    assert "query string is sent to the server" in rung.why
+
+
+@pytest.mark.parametrize("location", [
+    "https://app.test/cb#error=unsupported_response_type",
+    "https://app.test/cb?error=unsupported_response_type",
+    "https://app.test/cb#error=unauthorized_client",
+])
+def test_a_refusal_is_read_as_a_refusal_wherever_the_error_is_returned(location):
+    """RFC 6749 section 4.2.2.1 returns an implicit-flow error in the fragment.
+
+    Reading only the query string missed every well-behaved refusal and
+    reported the server as accepting the grant it had just rejected.
+    """
+    evidence = oauthladder.from_probe("Oauth2", client_id="app", exchange=_probe(302, location))
+    assert evidence.server_rejected is True
+    rung = oauthladder.assess(evidence)
+    assert rung.rung == "advertised"
+    assert rung.severity == "info"
+    assert "stale" in rung.why
+
+
+def test_the_ladder_without_any_probe_stops_at_the_declaration():
+    rung = oauthladder.assess(oauthladder.from_probe(
+        "Oauth2", json_pointer="#/components/securitySchemes/Oauth2/flows/implicit"))
+    assert rung.rung == "advertised"
+    assert rung.verification == "unverified"
+    assert "No request was sent" in rung.why
+    assert "response_type=token" in rung.missing
+
+
+def test_the_ladder_reports_every_rung_and_which_were_reached():
+    rendered = oauthladder.assess(oauthladder.from_probe(
+        "Oauth2", client_id="app",
+        exchange=_probe(302, "https://app.test/cb#access_token=abc"))).to_dict()
+    reached = [entry["rung"] for entry in rendered["ladder"] if entry["reached"]]
+    assert reached == ["advertised", "client-configured", "server-accepts", "token-issued"]
+    assert all(entry["meaning"] for entry in rendered["ladder"])
+
+
+def test_the_pkce_finding_records_the_client_and_flow_it_compared():
+    """A downgrade conclusion means this client accepts a request without the
+    protection it accepts it with. A server may require PKCE for one client and
+    not another, which is a configuration difference and not a downgrade."""
+    from namazu import oauth
+
+    def handler(request):
+        target = request.url.params.get("redirect_uri", "")
+        if request.url.params.get("response_type") == "token":
+            return httpx.Response(302, headers={"location": f"{target}#error=unsupported_response_type"})
+        return httpx.Response(302, headers={"location": f"{target}?code=abc"})
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        findings = oauth.probe_authorization_server(
+            authorization_endpoint="https://id.example.test/authorize", client_id="namazu-app",
+            redirect_uri="http://localhost:8010/oauth/callback",
+            metadata={"code_challenge_methods_supported": ["S256"]}, client=client)
+    hit = next(item for item in findings if item.id == "oauth.pkce-not-enforced")
+    assert hit.evidence["client_id"] == "namazu-app"
+    assert hit.evidence["flow"] == "authorization_code"
+    assert "same client" in hit.limitations
+    assert "same authorization code" in hit.limitations
+    # And it does not claim a code would actually be issued.
+    assert "would actually be issued" in hit.limitations
+
+
+def test_the_creation_states_are_the_ones_the_runner_can_produce():
+    """A fourth state appearing in run_sequence without being listed here would
+    reach a report with nothing documenting what it means."""
+    assert set(matrix.CREATION) == {"created", "possibly-created", "attempted"}
