@@ -3,6 +3,27 @@
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def local_sockets_only(monkeypatch):
+    """The audit regression suite never contacts a non-local target, even for TLS."""
+    import ipaddress
+    import socket
+    original = socket.create_connection
+
+    def connect(address, *args, **kwargs):
+        host = address[0]
+        if host != "localhost":
+            try:
+                local = ipaddress.ip_address(host).is_loopback
+            except ValueError:
+                local = False
+            if not local:
+                raise OSError("Non-local network disabled in tests; use MockTransport or loopback")
+        return original(address, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "create_connection", connect)
+
+
 @pytest.fixture
 def api_document():
     return {
