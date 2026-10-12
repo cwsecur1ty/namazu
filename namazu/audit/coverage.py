@@ -246,9 +246,10 @@ class Ledger:
                         "Add a second identity on the Auth tab, ideally one that owns a "
                         "different object on the same operation, and record which object each "
                         "identity owns so a read can be checked by content.")
-        if verdict.usable:
+        if verdict.positive_control:
             return
-        reason = f"The baseline did not succeed ({verdict.outcome}). {verdict.reason}"
+        reason = (f"No successful positive control ({verdict.outcome}). {verdict.reason} "
+                  "An expected denial does not demonstrate successful access.")
         for check, meta in CHECKS.items():
             if not meta.get("needs_baseline"):
                 continue

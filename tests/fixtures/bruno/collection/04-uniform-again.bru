@@ -1,0 +1,19 @@
+meta {
+  name: uniform-again
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/uniform-again
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 403
+}
+
+settings {
+  timeout: 200
+}

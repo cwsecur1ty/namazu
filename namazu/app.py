@@ -23,6 +23,7 @@ from .audit import (
     zap,
 )
 from .audit.model import finding_from_dict
+from .bruno_routes import router as bruno_router
 from .discovery import Connection, fetch_document
 from .runner import execute_request, prepare_request
 from .signature import Signature
@@ -30,6 +31,7 @@ from .spec import parse_spec, spec_hash
 
 STATIC = Path(__file__).parent / "static"
 app = FastAPI(title="Namazu", version="0.1.0", description="Standalone API testing by K9", docs_url=None, redoc_url=None)
+app.include_router(bruno_router)
 
 
 @app.middleware("http")

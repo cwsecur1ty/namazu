@@ -1,0 +1,25 @@
+.bruno-native-report { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; overflow-wrap: anywhere; }
+.bruno-native-report > * { min-width: 0; max-width: 100%; }
+.bruno-native-report .btn { white-space: normal; }
+.bruno-dialog { width: min(1060px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); padding: 24px; border: 1px solid var(--border, #586779); border-radius: 12px; background: var(--bg, #17202c); color: var(--text, #e4e9ef); overflow: auto; }
+.bruno-dialog::backdrop { background: #0009; }
+.bruno-dialog h2, .bruno-dialog h3 { margin: 0; }
+.bruno-dialog p { line-height: 1.5; }
+.bruno-dialog input:not([type=checkbox]), .bruno-dialog select { width: 100%; min-width: 0; }
+.bruno-dialog input[type=checkbox] { margin-right: 9px; flex-shrink: 0; }
+.bruno-heading, .bruno-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.bruno-heading { justify-content: space-between; }
+.bruno-actions { margin: 16px 0; }
+.bruno-summary { border-block: 1px solid var(--border, #586779); padding: 16px 0; }
+.bruno-results { display: grid; gap: 12px; max-height: 360px; overflow: auto; }
+.bruno-row { padding: 12px; background: var(--surface, #202d3c); border-radius: 6px; min-width: 0; overflow-wrap: anywhere; }
+.bruno-row label { font-weight: 600; }
+.bruno-row p { margin: 6px 0; }
+.bruno-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; font-size: 12px; }
+.bruno-fields { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; margin: 16px 0; }
+.bruno-mapping > label, .bruno-conversion > label { display: block; margin-block: 14px; }
+.bruno-mapping { border-block: 1px solid var(--border, #586779); padding-block: 18px; }
+.bruno-conversion { padding-top: 20px; }
+.bruno-conversion ul { line-height: 1.6; }
+#bruno-export-preview { padding: 12px; background: var(--surface, #202d3c); }
+@media (max-width: 600px) { .bruno-dialog { padding: 16px; width: calc(100vw - 16px); max-height: calc(100dvh - 16px); } .bruno-fields { grid-template-columns: 1fr; } .bruno-actions .btn { flex: 1 1 100%; white-space: normal; } .bruno-heading h2 { font-size: 19px; } }

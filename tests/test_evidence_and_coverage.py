@@ -178,7 +178,8 @@ def test_an_expected_refusal_is_a_baseline_that_worked(spec):
                                  "body_contains": "not entitled"})
     assert result["baseline_outcome"] == "success"
     assert "negative test that passed" in result["baseline_verdict"]["reason"]
-    assert _state(result, "authorization") == "completed"
+    assert result["baseline_verdict"]["positive_control"] is False
+    assert _state(result, "authorization") == "blocked"
 
 
 def test_an_assertion_that_fails_is_not_quietly_a_success(spec):

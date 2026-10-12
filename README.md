@@ -83,6 +83,191 @@ Requests originate from the Namazu container, so `localhost` means the
 container. Use `host.docker.internal` for an API on the Docker Desktop host.
 </details>
 
+## Bruno interoperability
+
+Open **Bruno** in the top bar to import historical run evidence, prepare explicitly
+reviewed request templates, or export selected requests. This is an independent
+Namazu integration, not an official Bruno partnership or endorsement.
+
+### Supported formats and runtime
+
+- **Run reports:** the JSON reporter from **`@usebruno/cli@4.2.1`**, verified with
+  real local runs. Its root is an array of iteration objects with `iterationIndex`
+  and `results`; reports do not identify their CLI version. The UI explicitly
+  targets 4.2.1. Legacy object-shaped reports, JUnit, collection JSON, and
+  OpenCollection YAML are not accepted as run reports.
+- **Definitions:** Bruno collection manifest version **1** (`bruno.json`) and
+  `.bru` grammar v2, parsed/serialized with the official **`@usebruno/lang@0.40.0`**.
+  The MIT parser is bundled with its third-party notices in
+  [namazu/bruno_node](namazu/bruno_node/README.md). **Node.js 20+** must be on the
+  Namazu server's PATH for definitions and exports. Report import needs Python
+  only. The base Docker image does not include Node; report import works there,
+  while definition conversion requires adding Node to a derived image.
+
+The reusable backend adapters are `namazu.bruno.import_report`,
+`namazu.bruno_collections.import_collection` and `export_collection`. The UI uses
+the same offline `/api/bruno/*` endpoints under Namazu's existing Host/Origin
+checks. They never create a target HTTP client, acquire tokens or run scripts.
+
+### Generate and import a run report
+
+From the collection directory, using the [documented CLI options](https://docs.usebruno.com/bru-cli/run/options):
+
+```sh
+npx --yes @usebruno/cli@4.2.1 run --env Local --iteration-count 2 --sandbox developer --noproxy --reporter-json report.json
+```
+
+This command **executes the collection**. Use it only with requests and scripts
+you have reviewed and targets you are authorised to test. The walkthrough below
+uses loopback only. `--sandbox developer` permits that fixture's small assertion
+script; it is never used by Namazu's importer. There is no CLI
+`--request-timeout` flag in this version: the fixture uses a `.bru` `settings`
+block with `timeout: 200` milliseconds.
+
+Choose **Import Bruno run (JSON)**. The panel labels evidence **Imported Bruno
+run**, shows import time separately, and records **zero requests sent during
+import**. CLI execution timestamps and exact wire-attempt counts are unknown.
+Logical executions, observed HTTP responses and each assertion/test namespace
+have separate counts. Every iteration remains a distinct execution; importing
+the same report replaces the viewed evidence and retains stable source/row IDs.
+
+Request/response data, errors, timings, suite/path identities, unknown metadata
+and source JSON pointers are retained in a redacted source representation.
+Bruno's decoded `data` is not claimed to be exact wire bytes. Missing bodies,
+empty/omitted headers, partial reports and explicit truncation remain visible;
+templates are never used to fill missing captured evidence. A skipped result is
+not a request, and an execution error does not prove dispatch. Reports are
+limited to 8 MiB, 2,000 executions and 40 nesting levels.
+
+Use **Open in Namazu evidence views** for the existing request/response log,
+or **Export redacted evidence + source** to retain source references and
+provenance. Importing, viewing, offline reassessment and exporting send no target
+requests. The original run is historical and is never resumed. Bruno assertions
+are not Namazu findings: failure is not a vulnerability, pass is not proof of
+security, and HTTP 2xx alone does not establish business success. Uniform 403
+denials leave downstream handling unknown; explicit edge pages, validation
+observations and timeouts/incomplete evidence remain separate. No field mutations
+or baseline comparisons are invented from a report.
+
+### Import definitions and prepare a baseline
+
+1. Import a supplied OpenAPI contract through Namazu's existing API import flow.
+   A Bruno collection is a request template library, not a response contract.
+2. Choose **Import collection folder**, or select `.bru` files. Include
+   `collection.bru`, ancestor `folder.bru` files and environment files to preserve
+   inherited definitions. Folder import reads only `.bru` and `bruno.json`.
+3. Explicitly choose an environment, or **No environment**, then resolve it.
+   [Bruno's variable precedence](https://docs.usebruno.com/variables/overview)
+   is runtime > request > folder > environment > collection > global. Namazu
+   resolves the supported static string scopes in that order; it never invents
+   runtime, global, process, secret-provider or dynamic values. Unresolved values,
+   inheritance, cycles and unsupported features are shown and block preparation.
+4. Select **one request**, open **Prepare one explicitly selected baseline**,
+   select the matching method/target/path operation and confirm mapping to
+   Namazu's **primary** identity (the identity used for baseline execution).
+   Configure its actual credentials separately in Namazu; imported authentication
+   is only a reference. Define an expected status and non-secret resource and
+   content JSON Pointer assertions. A Bruno assertion cannot substitute for them.
+5. Save the reviewed template. This sends nothing and does not establish a
+   successful positive control. Review credentials and the execution plan before
+   starting a separate, explicitly authorised Namazu run. Existing baseline
+   checks must satisfy both business assertions; expected denials never unlock
+   success-dependent checks.
+
+The supported subset includes standard HTTP methods, resolved absolute URLs,
+query parameters already represented in the URL, inherited headers, and static
+JSON, text, XML and URL-encoded bodies. The pinned CLI uses the URL rather than
+merging a divergent query table; Namazu flags mismatches instead of guessing.
+Authentication references require local mapping, with no OAuth/token acquisition
+or signing. Bruno transport settings are displayed as conversion warnings and
+must be reviewed in Namazu separately.
+
+Scripts/hooks, tests, dynamic expressions and post-response variables stay inert.
+Scripts that could affect a request block preparation; tests are displayed as
+warnings and are not converted into baseline assertions. Path-parameter templates,
+binary/file/multipart/GraphQL bodies, non-HTTP protocols, typed variables,
+environment inheritance and external secret providers need manual conversion.
+Referenced local files are never opened. Archives are not accepted. Uploads are
+bounded to 200 definitions, 256 KiB each and 8 MiB total; absolute paths, traversal,
+drive letters and duplicate paths are rejected.
+
+### Export requests to Bruno
+
+Select imported requests, or choose **Choose Namazu requests to export** for
+captured requests and saved baseline templates. Select up to 100, then **Preview
+conversion**. Review the warnings and secret-free file preview, acknowledge them,
+and download the ZIP. It contains `bruno.json`, numbered `.bru` requests and
+`environments/Local.bru`. Namazu serializes and reparses every file with the
+official grammar before download. Unrepresentable/injectable syntax is rejected.
+
+Credentials become named `{{NAMAZU_...}}` variables with empty environment values.
+Fill them locally before running Bruno. Header variables require the **complete**
+value, including a Bearer/Basic prefix where applicable. Tokens, cookies, API keys,
+credential-looking body/query fields and learned echoes are redacted. Add custom
+credential names **before import** for names Namazu cannot recognise. Response
+status/counters and meaningful non-secret headers remain intact. Arbitrary script
+source is omitted from preserved source rather than exported with hidden literals.
+Review remaining business data before sharing; credential redaction is not general
+data anonymisation. Raw import files are held in memory, not written to server
+storage. Only explicitly saved templates or downloaded evidence persist.
+
+Exports preserve the supported request subset; they do not promise roundtrip
+fidelity for scripts, hooks, assertions, auth flows/signing, cookie jars, transport
+settings or unsupported bodies. Wire-only headers are omitted with warnings.
+Bruno CLI reserializes JSON, so JSON value roundtrips do not promise identical
+whitespace or exact wire bytes. Query encoding can also be normalised.
+Missing evidence stays a warning, not a reconstructed body. No assertion or
+authentication flow is silently converted into executable code.
+
+### Complete local mock walkthrough
+
+From the repository root, start the synthetic target in one terminal:
+
+```sh
+python -m tests.bruno_fixture --serve
+```
+
+In another terminal (Node 20+), run the checked-in collection:
+
+```sh
+cd tests/fixtures/bruno/collection
+npx --yes @usebruno/cli@4.2.1 run --env Local --iteration-count 2 --sandbox developer --noproxy --reporter-json local-report.json
+```
+
+An exit code of 1 is expected: the collection deliberately includes a failed
+assertion and a timeout. All seven routes use `http://127.0.0.1:9876`. Import
+`local-report.json` in Namazu: expect 14 recorded executions, 12 responses,
+10 passed/2 failed status assertions and 2 passed script tests. Inspect the
+uniform403, validation400, explicit edge and timeout rows. The checked-in
+`report.json` and `omitted.json` are sanitised CLI output with
+[fixture provenance](tests/fixtures/bruno/provenance.json); the latter was generated
+with `--reporter-skip-all-headers --reporter-skip-body`.
+
+Import [the local OpenAPI fixture](tests/fixtures/bruno/openapi.json) into Namazu,
+then import the collection folder and choose **Local**. Select `01-ok.bru`, map
+it to `GET /ok` and primary identity, use status `200`, resource `/id` =
+`local-widget`, and content `/owner` = `fixture-user`. Save the template without
+running it. Choose Namazu requests, select that baseline, preview/export it, and
+extract the downloaded ZIP into a new directory. From that directory:
+
+```sh
+npx --yes @usebruno/cli@4.2.1 run --env Local --noproxy --reporter-json roundtrip.json
+```
+
+This last command explicitly executes only the reviewed local collection. For
+repeatable development validation, install the pinned CLI in an ignored location:
+
+```sh
+npm install --prefix .local-reports/bruno-tools --ignore-scripts --no-audit --no-fund @usebruno/cli@4.2.1
+python -m tests.bruno_roundtrip --cli .local-reports/bruno-tools/node_modules/@usebruno/cli/bin/bru.js
+python -m pytest -q tests/test_bruno.py
+# Regenerate sanitised report fixtures only:
+python -m tests.bruno_fixture --cli .local-reports/bruno-tools/node_modules/@usebruno/cli/bin/bru.js
+```
+
+The roundtrip check verifies GET and POST method, URL, header and body at a local
+mock server. These are interoperability checks, not API security coverage.
+
 ## What it does
 
 **Workbench.** Import a Swagger or OpenAPI document from a URL, a paste or a

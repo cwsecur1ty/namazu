@@ -28,3 +28,5 @@ namazu-results-*.json
 Thumbs.db
 .hypothesis/
 .schemathesis/
+.local-reports/
+node_modules/

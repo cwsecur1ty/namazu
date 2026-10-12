@@ -2058,6 +2058,7 @@
   }
 
   function rawRequest(entry) {
+    if (entry.source_kind === "bruno-cli-report" && (!entry.method || !entry.url)) return "Request method or resolved URL was not captured.";
     let target = entry.url;
     try {
       const parsed = new URL(entry.url);
@@ -2071,13 +2072,14 @@
   }
 
   function rawResponse(entry) {
+    if (entry.source_kind === "bruno-cli-report" && !entry.status) return `HTTP response not captured. ${entry.error || "Dispatch and downstream handling are unknown."}`;
     if (entry.error) return `No response: ${entry.error}`;
     const reason = STATUS_TEXT[entry.status] ? ` ${STATUS_TEXT[entry.status]}` : "";
     const lines = [`HTTP/1.1 ${entry.status}${reason}`];
     for (const [name, value] of Object.entries(entry.response_headers || {})) {
       lines.push(`${headerCase(name)}: ${value}`);
     }
-    return `${lines.join("\n")}\n\n${entry.body_excerpt || ""}`;
+    return `${lines.join("\n")}\n\n${entry.response_body ?? entry.body_excerpt ?? ""}`;
   }
 
   // The raw views are built from the parsed exchange, so the reader is told
@@ -2087,9 +2089,11 @@
 
   /** How much of the body this entry carries, when the server sent more. */
   function bodyNote(entry) {
-    const held = (entry.body_excerpt || "").replace(/…$/, "").length;
+    if (entry.source_kind === "bruno-cli-report") return ["Bruno-decoded evidence; exact wire bytes and size are unknown.", ...(entry.missing_evidence || [])].join(" ");
+    const held = (entry.response_body ?? entry.body_excerpt ?? "").replace(/…$/, "").length;
     const total = entry.body_length || 0;
-    if (total <= held) return "";
+    if (entry.truncated) return "The response capture reached its size limit; uncaptured bytes are unavailable.";
+    if (typeof entry.response_body === "string" || total <= held) return "";
     return `The history keeps the first ${held.toLocaleString()} of ${total.toLocaleString()} characters.`;
   }
 
@@ -2129,7 +2133,7 @@
       body.append(el("p", "proof-label", "request body"));
       body.append(el("pre", "code-block wrap", prettyBody(entry.request_body)));
     } else {
-      body.append(el("p", "pane-note", "This request has no body."));
+      body.append(el("p", "pane-note", entry.source_kind === "bruno-cli-report" && entry.request_body == null ? "Request body absent or omitted by the reporter; exact request evidence is unknown." : "This request has no body."));
     }
   }
 
@@ -2155,24 +2159,24 @@
     head.append(entry.error ? pill("error", "fail")
       : pill(`HTTP ${entry.status}${STATUS_TEXT[entry.status] ? ` ${STATUS_TEXT[entry.status]}` : ""}`,
              statusKind(entry.status)));
-    head.append(el("span", "mono dim", `${humanBytes(entry.body_length || 0)} · ${
+    head.append(el("span", "mono dim", `${entry.source_kind === "bruno-cli-report" ? "wire size unknown" : humanBytes(entry.body_length || 0)} · ${
       Number.isFinite(entry.elapsed_ms) ? `${Math.round(entry.elapsed_ms)} ms` : "no timing"}`));
-    if (entry.truncated) head.append(el("span", "chip warn", "capped at 512 KB"));
+    if (entry.truncated) head.append(el("span", "chip warn", entry.source_kind === "bruno-cli-report" ? "omitted or incomplete" : "capped at 512 KB"));
     body.append(head);
     if (entry.error) {
       body.append(el("p", "pane-note", `The request did not complete: ${entry.error}.`));
       return;
     }
     body.append(el("p", "proof-label", "response headers"));
-    body.append(headerTable(entry.response_headers, "no headers returned"));
-    if (entry.body_excerpt) {
-      body.append(el("p", "proof-label", `response body · ${humanBytes(entry.body_length || 0)}`));
-      const text = prettyBody(entry.body_excerpt);
+    body.append(headerTable(entry.response_headers, entry.source_kind === "bruno-cli-report" ? "headers empty or omitted by reporter" : "no headers returned"));
+    if (entry.response_body ?? entry.body_excerpt) {
+      body.append(el("p", "proof-label", entry.source_kind === "bruno-cli-report" ? "response body · decoded reporter data" : `response body · ${humanBytes(entry.body_length || 0)}`));
+      const text = prettyBody(entry.response_body ?? entry.body_excerpt);
       body.append(markedInto(el("pre", "code-block wrap"), text, bodyHighlights(text), { limit: 4 }));
       const note = bodyNote(entry);
       if (note) body.append(el("p", "pane-note", note));
     } else {
-      body.append(el("p", "pane-note", "The response has an empty body."));
+      body.append(el("p", "pane-note", entry.source_kind === "bruno-cli-report" && entry.response_body == null ? "Response body not captured or omitted by the reporter." : "The response has an empty body."));
     }
   }
 
@@ -2514,8 +2518,8 @@
     $("rail-findings").textContent = all.length;
     $("rail-findings").hidden = all.length === 0;
     $("audit-filters").hidden = all.length === 0;
-    $("export-audit").disabled = all.length === 0;
-    $("export-audit-top").disabled = all.length === 0;
+    $("export-audit").disabled = all.length === 0 && !state.audit.bruno;
+    $("export-audit-top").disabled = all.length === 0 && !state.audit.bruno;
 
     renderSeverityBar();
 
@@ -2785,6 +2789,10 @@
     const body = $("audit-report-body");
     body.replaceChildren();
     const audit = state.audit;
+    if (audit.bruno && window.NamazuBruno) {
+      window.NamazuBruno.renderReport(audit.bruno, body, () => { showTraffic(); revealWork(); });
+      return;
+    }
     if (!audit.total && !audit.findings.length) {
       body.append(el("p", "pane-empty",
         "No audit has run yet. Choose a profile on the left and select Run audit."));
@@ -3474,7 +3482,7 @@
     $("baseline-contains").value = expectation.body_contains || "";
     const parts = [];
     if (example.url || example.body !== undefined) parts.push("saved request");
-    if (expectation.status || expectation.body_contains) parts.push("assertions");
+    if (expectation.status || expectation.body_contains || expectation.business_assertions?.length) parts.push("assertions");
     if (expectation.negative) parts.push("negative test");
     $("baseline-state").textContent = parts.length ? parts.join(" + ") : "generated";
     const invented = generatedInputs(operation);
@@ -3511,7 +3519,10 @@
     const contains = $("baseline-contains").value.trim();
     const negative = $("baseline-negative").checked;
 
-    const example = {};
+    const previous = state.examples[operation.id] || {};
+    const example = {...(previous.example || {})};
+    delete example.url;
+    delete example.body;
     if (url) example.url = url;
     if (bodyText) {
       // A JSON body is sent as a structure so the server treats it the way the
@@ -3521,7 +3532,10 @@
     }
     if (url || bodyText) example.label = "a saved example request";
 
-    const expectation = {};
+    const expectation = {...(previous.expectation || {})};
+    delete expectation.status;
+    delete expectation.body_contains;
+    delete expectation.negative;
     if (status) expectation.status = status;
     if (contains) expectation.body_contains = contains;
     if (negative) expectation.negative = true;
@@ -3530,6 +3544,7 @@
       delete state.examples[operation.id];
     } else {
       state.examples[operation.id] = {
+        ...previous,
         ...(Object.keys(example).length ? { example } : {}),
         ...(Object.keys(expectation).length ? { expectation } : {}),
       };
@@ -3585,6 +3600,8 @@
     const findings = payload.findings.filter((item) => item && typeof item === "object");
     state.audit = {
       findings: findings.map((item) => ({ ...item, key: findingKey(item) })),
+      bruno: payload.bruno || null,
+      brunoOriginal: payload.bruno ? payload : null,
       running: false, cancelled: false,
       done: payload.scope?.endpoints_audited || 0,
       total: payload.scope?.endpoints_in_scope || 0,
@@ -3612,6 +3629,7 @@
     for (const row of payload.coverage?.baselines || []) {
       if (row && typeof row === "object") state.audit.baselines.push(row);
     }
+    if (payload.bruno) absorbLog({log: Array.isArray(payload.requests) ? payload.requests : []}, "Imported Bruno run");
     const missing = [];
     if (!payload.coverage) missing.push("coverage");
     if (!payload.evidence_levels) missing.push("the evidence legend");
@@ -3642,7 +3660,7 @@
   }
 
   const KNOWN_EXPORT_KEYS = new Set([
-    "application", "export", "exported_at", "started_at", "api", "scope", "summary",
+    "application", "export", "exported_at", "started_at", "api", "scope", "summary", "bruno",
     "notes", "findings", "note", "coverage", "replays", "duplicates", "evidence_levels",
   ]);
 
@@ -4218,7 +4236,7 @@
   }
 
   function exportAudit() {
-    if (!state.audit.findings.length) return;
+    if (!state.audit.findings.length && !state.audit.bruno) return;
     const payload = {
       application: "Namazu",
       export: "security-audit",
@@ -4259,7 +4277,7 @@
       note: "Proof-of-concept requests have credential headers and query values masked. Response "
           + "excerpts may still contain sensitive data; review before sharing.",
     };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+    const url = URL.createObjectURL(new Blob([JSON.stringify(window.NamazuBruno ? window.NamazuBruno.exportEvidencePayload(state.audit, payload) : payload, null, 2)], { type: "application/json" }));
     const link = el("a");
     link.href = url;
     link.download = `namazu-audit-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
@@ -5044,5 +5062,39 @@
 
 
   start();
+  if (window.NamazuBruno) window.NamazuBruno.mount({
+    api,
+    spec: () => state.spec ? {...state.spec, base_url: $("base-url").value || state.spec.base_url} : null,
+    openEvidence: async (payload) => {
+      if (state.busy || state.audit.running) throw new Error("Finish the active action before opening imported evidence.");
+      if (await importAudit(JSON.stringify(payload), "Imported Bruno run") === false) throw new Error("Evidence could not be opened. No request was sent.");
+      revealWork();
+    },
+    baseline: async (result) => {
+      if (state.busy || state.audit.running) throw new Error("Finish the active action before changing a baseline.");
+      const previous = state.examples;
+      state.examples = {...previous, [result.operation_id]: {example: result.example, expectation: result.expectation}};
+      saveExamples();
+      if (prefs.read(examplesKey(), "") !== JSON.stringify(state.examples)) {
+        state.examples = previous;
+        throw new Error("Baseline template was not saved: browser storage is unavailable or full. Export the template to retain it.");
+      }
+      if (state.operation?.id === result.operation_id) renderBaselineEditor();
+      toast("Bruno baseline template saved. Review identity, assertions and a new run plan before execution.");
+    },
+    requests: async () => {
+      const rows = [...state.history, ...state.audit.log].map((row, index) => ({
+        id: `captured-${index}`, name: row.label || row.endpoint || row.url,
+        request: {method: row.method || row.request?.method, url: row.url || row.request?.url,
+          headers: row.request?.headers || row.request_headers || {}, body: row.request?.body ?? row.request_body ?? null},
+      }));
+      for (const [id, saved] of Object.entries(state.examples)) {
+        const op = state.spec?.operations.find(operation => operation.id === id);
+        if (op && saved.example?.url) rows.push({id: `baseline-${id}`, name: `Prepared baseline: ${id}`,
+          request: {method: op.method, ...saved.example}});
+      }
+      return rows;
+    },
+  });
 })();
 

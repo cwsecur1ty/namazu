@@ -1,0 +1,2 @@
+# Preserve whitespace inside the bundled upstream grammar/template strings.
+namazu/bruno_node/parser.cjs -whitespace

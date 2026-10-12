@@ -1,0 +1,9 @@
+{
+  "name": "namazu-bruno-parser",
+  "private": true,
+  "scripts": {
+    "build": "esbuild entry.cjs --bundle --platform=node --target=node20 --minify --legal-comments=eof --outfile=parser.cjs"
+  },
+  "dependencies": {"@usebruno/lang": "0.40.0"},
+  "devDependencies": {"esbuild": "0.25.12"}
+}

@@ -1,0 +1,19 @@
+meta {
+  name: edge
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/edge
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 403
+}
+
+settings {
+  timeout: 200
+}

@@ -92,10 +92,13 @@ class Expectation:
     header_contains: str = ""
     negative: bool = False
     note: str = ""
+    # Optional business-level controls prepared in the readiness workflow.
+    # A 2xx cannot satisfy these without the named resource/content values.
+    business_assertions: list = field(default_factory=list)
 
     def asserted(self) -> bool:
         return any([self.status, self.body_contains, self.body_excludes, self.pointer,
-                    self.header])
+                    self.header, self.business_assertions])
 
     def to_dict(self) -> dict:
         return {key: value for key, value in {
@@ -104,7 +107,8 @@ class Expectation:
             "pointer_equals": self.pointer_equals, "header": self.header,
             "header_contains": self.header_contains, "negative": self.negative,
             "note": self.note,
-        }.items() if value not in ("", False)}
+            "business_assertions": self.business_assertions,
+        }.items() if value not in ("", False, [])}
 
     @classmethod
     def from_dict(cls, data) -> Expectation:
@@ -127,6 +131,8 @@ class Expectation:
             parts.append(f"{self.pointer} equal to “{self.pointer_equals}”")
         if self.header:
             parts.append(f"header {self.header} containing “{self.header_contains}”")
+        if self.business_assertions:
+            parts.append(f"{len(self.business_assertions)} explicit resource/content assertions")
         if not parts:
             return "no assertions were configured"
         joined = ", ".join(parts)
@@ -157,7 +163,9 @@ def _pointer_value(body: str, pointer: str):
     except (ValueError, TypeError):
         return _MISSING
     current = document
-    for token in [piece for piece in pointer.split("/") if piece != ""]:
+    if not isinstance(pointer, str) or not pointer.startswith("/"):
+        return _MISSING
+    for token in pointer[1:].split("/"):
         token = token.replace("~1", "/").replace("~0", "~")
         if isinstance(current, dict) and token in current:
             current = current[token]
@@ -200,6 +208,25 @@ def check(expectation: Expectation, exchange) -> tuple[bool, list]:
             failures.append(
                 f"{expectation.header} is “{actual}”, which does not contain "
                 f"“{expectation.header_contains}”")
+    for assertion in expectation.business_assertions:
+        if not isinstance(assertion, dict):
+            failures.append("a business assertion is not an object")
+            continue
+        pointer = assertion.get("pointer", "")
+        operator = assertion.get("operator", "equals")
+        if not isinstance(pointer, str) or not pointer.startswith("/"):
+            failures.append("a business assertion needs a response JSON pointer")
+            continue
+        value = _pointer_value(body, pointer)
+        expected = assertion.get("expected")
+        if re.search(r"<credential>|<redacted>|\[redacted\]|\[Filtered\]", json.dumps(expected), re.I):
+            failures.append(f"business assertion at {pointer} uses a redacted value, not a resource/content marker")
+            continue
+        matched = (value is _MISSING if operator == "absent" else
+                   value is not _MISSING and type(value) is type(expected) and value == expected if operator == "equals" else
+                   isinstance(value, str) and isinstance(expected, str) and expected in value if operator == "contains" else False)
+        if not matched:
+            failures.append(f"business assertion {assertion.get('purpose', 'content')} at {pointer} did not match")
     return not failures, failures
 
 
@@ -221,9 +248,17 @@ class Verdict:
         """Whether a probe may compare against this response and conclude from it."""
         return self.outcome == "success"
 
+    @property
+    def positive_control(self) -> bool:
+        """An expected denial satisfies an assertion, not an access control."""
+        status = self.evidence.get("status")
+        return (self.usable and not self.evidence.get("negative_test")
+                and isinstance(status, int) and 200 <= status < 300)
+
     def to_dict(self) -> dict:
         return {"outcome": self.outcome, "reason": self.reason,
                 "remediation": self.remediation, "usable": self.usable,
+                "positive_control": self.positive_control,
                 "evidence": self.evidence}
 
 
@@ -363,7 +398,8 @@ def _heuristic(exchange, operation: dict, who: str) -> Verdict:
             "permission-denied", reason,
             "Use an identity entitled to this resource, or supply a saved example request that "
             "is known to succeed. If a refusal is the correct answer for this identity, record it "
-            "as an expected negative test so the coverage report stops treating it as a gap.",
+            "as an expected negative test. This does not supply the positive control needed "
+            "by success-dependent checks.",
             evidence)
 
     if status in (400, 404, 405, 409, 410, 415, 422):

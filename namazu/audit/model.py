@@ -27,7 +27,7 @@ REDACTED_HEADERS = {
     "x-api-key", "api-key", "apikey", "x-auth-token", "x-access-token",
     "x-session-token", "x-csrf-token", "x-xsrf-token", "authentication",
 }
-CREDENTIAL_QUERY = re.compile(r"(?i)^(.*(token|api[-_]?key|secret|password|passwd|auth|sig|signature|session).*)$")
+CREDENTIAL_QUERY = re.compile(r"(?i)^(?:.*(?:token|api[-_]?key|secret|password|passwd|authorization|authentication|session).*|(?:.*[-_])?(?:sig|signature|auth))$")
 
 # Volatile values that differ between two otherwise identical responses.
 _VOLATILE = [
