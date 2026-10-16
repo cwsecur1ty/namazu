@@ -96,6 +96,13 @@ jobs:
           node-version: "20"
       - name: Check app.js parses
         run: node --check namazu/static/app.js
+      - name: Check workspace JavaScript
+        run: |
+          node --check namazu/static/workspaces.js
+          node --check namazu/static/desktop-model.js
+          node --check namazu/static/desktop-workbench.js
+          node --check namazu/static/desktop-testing.js
+          node --check namazu/static/audit-results-view.js
       - name: Check Bruno integration JavaScript
         run: |
           node --check namazu/static/bruno.js

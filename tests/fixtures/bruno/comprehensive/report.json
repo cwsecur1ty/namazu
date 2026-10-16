@@ -1,0 +1,5542 @@
+[
+  {
+    "iterationIndex": 0,
+    "results": [
+      {
+        "test": {
+          "filename": "Nested folder\\Child with spaces\\Same request.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/space path/café?layer=folder",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "X-Folder": "inherited",
+            "x-override": "folder",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "465",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/space path/café",
+            "query": {
+              "layer": [
+                "folder"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "folder",
+              "x-folder": "inherited",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/space%20path/caf%C3%A9?layer=folder",
+          "responseTime": 21,
+          "duration": 21,
+          "size": 465
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "Cf5ZOIg5IyKzGom3hyYUy",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0731714,
+        "name": "Same request",
+        "suitename": "fixture/comprehensive/collection\\Nested folder\\Child with spaces\\Same request",
+        "path": "Nested folder\\Child with spaces\\Same request",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Nested folder\\Same request.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?layer=request&message=café 雪",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "request",
+            "X-Folder": "inherited",
+            "x-override": "folder",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "480",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "layer": [
+                "request"
+              ],
+              "message": [
+                "café 雪"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "folder",
+              "x-folder": "inherited",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?layer=request&message=caf%C3%A9%20%E9%9B%AA",
+          "responseTime": 3,
+          "duration": 3,
+          "size": 480
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "T9nBzo1jV47dboCUtJsW9",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0062302,
+        "name": "Same request",
+        "suitename": "fixture/comprehensive/collection\\Nested folder\\Same request",
+        "path": "Nested folder\\Same request",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Other folder\\Same request.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?layer=environment",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "437",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "layer": [
+                "environment"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?layer=environment",
+          "responseTime": 3,
+          "duration": 3,
+          "size": 437
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "P_KTJYIMiFy2ynHCHp9PU",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0061269,
+        "name": "Same request",
+        "suitename": "fixture/comprehensive/collection\\Other folder\\Same request",
+        "path": "Other folder\\Same request",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "01-request-auth-override.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?case=override",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "434",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "override"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=override",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 434
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "EBS6xagVRSXiTMFhLYa4d",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.004365,
+        "name": "Request bearer override",
+        "suitename": "fixture/comprehensive/collection\\01-request-auth-override",
+        "path": "01-request-auth-override",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "02-no-auth.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?case=no-auth",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "384",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "no-auth"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=no-auth",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 384
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "1bJ3nAA6wvUcuXBWDjo-v",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0044524,
+        "name": "Explicit no auth",
+        "suitename": "fixture/comprehensive/collection\\02-no-auth",
+        "path": "02-no-auth",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "03-json-object.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "80",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "application/json"
+          },
+          "data": "{\"name\":\"café 雪\",\"enabled\":true,\"count\":0,\"items\":[null,false,\"space value\"]}"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "566",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {},
+            "body": "{\"name\":\"café 雪\",\"enabled\":true,\"count\":0,\"items\":[null,false,\"space value\"]}",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/json",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "80",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo",
+          "responseTime": 3,
+          "duration": 3,
+          "size": 566
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "t_0qg56ZLBvXllLDmmw4e",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0160106,
+        "name": "JSON object and Unicode",
+        "suitename": "fixture/comprehensive/collection\\03-json-object",
+        "path": "03-json-object",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "04-json-null.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=null",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "4",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "application/json"
+          },
+          "data": "null"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "493",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "null"
+              ]
+            },
+            "body": "null",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/json",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "4",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=null",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 493
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "nhG8fSw7sBv1Dq4c-dobm",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0049204,
+        "name": "JSON null",
+        "suitename": "fixture/comprehensive/collection\\04-json-null",
+        "path": "04-json-null",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "05-json-false.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=false",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "5",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "application/json"
+          },
+          "data": "false"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "495",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "false"
+              ]
+            },
+            "body": "false",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/json",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "5",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=false",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 495
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "zUQatvP4gLFnzZxym3g0F",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0044842,
+        "name": "JSON false",
+        "suitename": "fixture/comprehensive/collection\\05-json-false",
+        "path": "05-json-false",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "06-json-zero.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=zero",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "application/json"
+          },
+          "data": "0"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "490",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "zero"
+              ]
+            },
+            "body": "0",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/json",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "1",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=zero",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 490
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "r_7emHMPhddL-CNi3xaOm",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0042251,
+        "name": "JSON zero",
+        "suitename": "fixture/comprehensive/collection\\06-json-zero",
+        "path": "06-json-zero",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "07-json-string.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=string",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "11",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "application/json"
+          },
+          "data": "\"café 雪\""
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "505",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "string"
+              ]
+            },
+            "body": "\"café 雪\"",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/json",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "11",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=string",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 505
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "Em9mHw5_WogIwzC47ZtDA",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0050833,
+        "name": "JSON string",
+        "suitename": "fixture/comprehensive/collection\\07-json-string",
+        "path": "07-json-string",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "08-text.bru"
+        },
+        "request": {
+          "method": "PUT",
+          "url": "http://127.0.0.1:9876/echo?case=text",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "18",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "text/plain"
+          },
+          "data": "line one\ncafé 雪"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "502",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "PUT",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "text"
+              ]
+            },
+            "body": "line one\ncafé 雪",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "text/plain",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "18",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=text",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 502
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "sZZ20dZAado7mDEe_0qPQ",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0037394,
+        "name": "Text body",
+        "suitename": "fixture/comprehensive/collection\\08-text",
+        "path": "08-text",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "09-xml.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=xml",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "55",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "application/xml"
+          },
+          "data": "<entry label=\"café\"><value>space value</value></entry>"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "545",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "xml"
+              ]
+            },
+            "body": "<entry label=\"café\"><value>space value</value></entry>",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/xml",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "55",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=xml",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 545
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "lJ_5KrnZBZ7dsz0GF4X3N",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.003687,
+        "name": "XML body",
+        "suitename": "fixture/comprehensive/collection\\09-xml",
+        "path": "09-xml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "10-form.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=form",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "Content-Length": "0",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********"
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "506",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "form"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/x-www-form-urlencoded",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive",
+              "content-length": "0"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=form",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 506
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "sFxY5hEDEyS2miUzz6IIT",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0035708,
+        "name": "Form body",
+        "suitename": "fixture/comprehensive/collection\\10-form",
+        "path": "10-form",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "11-no-body.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=absent",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "Content-Length": "0",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "455",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "absent"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive",
+              "content-length": "0"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=absent",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 455
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "dw4_Cs_05fhdAvvXwe1_W",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0033996,
+        "name": "POST without body",
+        "suitename": "fixture/comprehensive/collection\\11-no-body",
+        "path": "11-no-body",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "12-empty-response.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/empty",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 204,
+          "statusText": "No Content",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "0",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": "",
+          "url": "http://127.0.0.1/empty",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 0
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "_MTTAhTqrAWi__im1Dgo_",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 204",
+            "rhsOperand": "204",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0031916,
+        "name": "Empty response",
+        "suitename": "fixture/comprehensive/collection\\12-empty-response",
+        "path": "12-empty-response",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "13-successful-tests.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/ok",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "411",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/ok",
+            "query": {},
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/ok",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 411
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "vLlQijWUAZ1WUSiGIhFuY",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [
+          {
+            "description": "resource content",
+            "status": "pass",
+            "uid": "XU7OS8b81zdPDf7sdcVrG"
+          }
+        ],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0075089,
+        "name": "Successful assertions and script tests",
+        "suitename": "fixture/comprehensive/collection\\13-successful-tests",
+        "path": "13-successful-tests",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "14-failed-tests.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/ok",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "411",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/ok",
+            "query": {},
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/ok",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 411
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "wKD4RYXnR270qGb3A38a6",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 201",
+            "rhsOperand": "201",
+            "operator": "eq",
+            "status": "fail",
+            "error": "expected 200 to equal 201"
+          }
+        ],
+        "testResults": [
+          {
+            "description": "deliberate failure",
+            "status": "fail",
+            "error": "expected 'local-widget' to equal 'different-widget'",
+            "actual": "local-widget",
+            "expected": "different-widget",
+            "stack": "AssertionError: expected 'local-widget' to equal 'different-widget'\n    at fixture/comprehensive/collection\\14-failed-tests.bru:4:65\n    at C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\test.js:3:11\n    at test (C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\utils\\results.js:35:21)\n    at fixture/comprehensive/collection\\14-failed-tests.bru:4:1\n    at fixture/comprehensive/collection\\14-failed-tests.bru:5:3\n    at fixture/comprehensive/collection\\14-failed-tests.bru:6:11\n    at Script.runInContext (node:vm:149:12)\n    at runScript (C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\sandbox\\node-vm\\index.js:135:48)\n    at runScriptInNodeVm (C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\sandbox\\node-vm\\index.js:141:17)\n    at TestRuntime.runTests (C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\runtime\\test-runtime.js:115:15)",
+            "errorName": "AssertionError",
+            "uid": "y_VhePTOl3YNHAs-zZm91"
+          }
+        ],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.011012,
+        "name": "Failed assertion and script test",
+        "suitename": "fixture/comprehensive/collection\\14-failed-tests",
+        "path": "14-failed-tests",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "15-denial.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/denied",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "43",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "detail": "Not entitled to this resource"
+          },
+          "url": "http://127.0.0.1/denied",
+          "responseTime": 3,
+          "duration": 3,
+          "size": 43
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "i71Bb2A_lMfp3DCkQD6Yn",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0056306,
+        "name": "Application denial",
+        "suitename": "fixture/comprehensive/collection\\15-denial",
+        "path": "15-denial",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "16-validation.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/validation",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 400,
+          "statusText": "Bad Request",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "51",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "errors": {
+              "count": "must be a positive integer"
+            }
+          },
+          "url": "http://127.0.0.1/validation",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 51
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "UcGY9kcHlKVkKj6EWOlsy",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 400",
+            "rhsOperand": "400",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0042394,
+        "name": "Field validation",
+        "suitename": "fixture/comprehensive/collection\\16-validation",
+        "path": "16-validation",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "17-edge.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/edge",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "text/html",
+            "content-length": "86",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": "<html>Incapsula incident ID: local <iframe src=\"/_Incapsula_Resource\"></iframe></html>",
+          "url": "http://127.0.0.1/edge",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 86
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "JgwbxfONOhlXe30Gz6DHk",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0035506,
+        "name": "Edge block",
+        "suitename": "fixture/comprehensive/collection\\17-edge",
+        "path": "17-edge",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "18-timeout.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/timeout",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "timeout of 200ms exceeded",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.2090314,
+        "name": "Timeout",
+        "suitename": "fixture/comprehensive/collection\\18-timeout",
+        "path": "18-timeout",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "19-unresolved-query.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?unresolved={{missingValue}}",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "447",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "unresolved": [
+                "{{missingValue}}"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?unresolved={{missingValue}}",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 447
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "WxwhErmAhzw3-fbU3tU4s",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0030374,
+        "name": "Unresolved static input",
+        "suitename": "fixture/comprehensive/collection\\19-unresolved-query",
+        "path": "19-unresolved-query",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "20-inert-script.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?case=script",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null,
+            "X-Script": "fixture-script-ran"
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "465",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "script"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "x-script": "fixture-script-ran",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=script",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 465
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "77qNwHsNLiRjbYIf21qTd",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0035614,
+        "name": "Script-dependent request",
+        "suitename": "fixture/comprehensive/collection\\20-inert-script",
+        "path": "20-inert-script",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "21-graphql.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=graphql",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "55",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "application/json"
+          },
+          "data": {
+            "query": "query { localWidget { id } }",
+            "variables": {}
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "554",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "graphql"
+              ]
+            },
+            "body": "{\"query\":\"query { localWidget { id } }\",\"variables\":{}}",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/json",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "55",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=graphql",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 554
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "gW_zMCBsqtnQQpds_3gUy",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002419,
+        "name": "Unsupported GraphQL conversion",
+        "suitename": "fixture/comprehensive/collection\\21-graphql",
+        "path": "21-graphql",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "22-json-escapes.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=escapes",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "104",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "application/json"
+          },
+          "data": "{\"quote\": \"a \\\"quoted\\\" value\", \"path\": \"C:\\\\fixture\\\\path\", \"line\": \"one\\ntwo\", \"unicode\": \"café 雪\"}"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "623",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "escapes"
+              ]
+            },
+            "body": "{\"quote\": \"a \\\"quoted\\\" value\", \"path\": \"C:\\\\fixture\\\\path\", \"line\": \"one\\ntwo\", \"unicode\": \"café 雪\"}",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/json",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "104",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=escapes",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 623
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "CzAsKPpNkBo_sRk8NR-9X",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0024965,
+        "name": "Escaped JSON strings",
+        "suitename": "fixture/comprehensive/collection\\22-json-escapes",
+        "path": "22-json-escapes",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "23-disabled-variable.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?disabled=collection-value",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "445",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "disabled": [
+                "collection-value"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?disabled=collection-value",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 445
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "5UFWg6V8lfZ1GuiaQl0ua",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0025503,
+        "name": "Disabled override keeps lower scope",
+        "suitename": "fixture/comprehensive/collection\\23-disabled-variable",
+        "path": "23-disabled-variable",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "24-opaque-auth-reference.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?case=opaque-auth",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "441",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "opaque-auth"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=opaque-auth",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 441
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "xtu6xrbIT8jXIowoOgHVB",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0025812,
+        "name": "Opaque auth reference",
+        "suitename": "fixture/comprehensive/collection\\24-opaque-auth-reference",
+        "path": "24-opaque-auth-reference",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "25-empty-text.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=empty-text-block",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "30",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "text/plain"
+          },
+          "data": "}\n\nassert {\nres.status: eq 200"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "529",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "empty-text-block"
+              ]
+            },
+            "body": "}\n\nassert {\nres.status: eq 200",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "text/plain",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "30",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=empty-text-block",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 529
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0023733,
+        "name": "Empty text block parser boundary",
+        "suitename": "fixture/comprehensive/collection\\25-empty-text",
+        "path": "25-empty-text",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "26-duplicate-query.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?tag=one&tag=two&empty=",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "449",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "tag": [
+                "one",
+                "two"
+              ],
+              "empty": [
+                ""
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?tag=one&tag=two&empty=",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 449
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "5tN6FQl9367AbIJE9LG2x",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0027077,
+        "name": "Repeated and empty query values",
+        "suitename": "fixture/comprehensive/collection\\26-duplicate-query",
+        "path": "26-duplicate-query",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "27-custom-content-type.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=content-type",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "15",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "content-type": "application/problem+json",
+            "Authorization": "Bearer ********"
+          },
+          "data": "{\"label\":\"one\"}"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "525",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "content-type"
+              ]
+            },
+            "body": "{\"label\":\"one\"}",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/problem+json",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "15",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=content-type",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 525
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "IZwXwfv7bp1lLB24j0zoX",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0027328,
+        "name": "Explicit content type casing",
+        "suitename": "fixture/comprehensive/collection\\27-custom-content-type",
+        "path": "27-custom-content-type",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "28-owned-file.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=file",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "41",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "text/plain"
+          },
+          "data": {
+            "0": 79,
+            "1": 119,
+            "2": 110,
+            "3": 101,
+            "4": 100,
+            "5": 32,
+            "6": 115,
+            "7": 121,
+            "8": 110,
+            "9": 116,
+            "10": 104,
+            "11": 101,
+            "12": 116,
+            "13": 105,
+            "14": 99,
+            "15": 32,
+            "16": 108,
+            "17": 111,
+            "18": 99,
+            "19": 97,
+            "20": 108,
+            "21": 32,
+            "22": 117,
+            "23": 112,
+            "24": 108,
+            "25": 111,
+            "26": 97,
+            "27": 100,
+            "28": 46,
+            "29": 32,
+            "30": 99,
+            "31": 97,
+            "32": 102,
+            "33": 195,
+            "34": 169,
+            "35": 32,
+            "36": 233,
+            "37": 155,
+            "38": 170,
+            "39": 13,
+            "40": 10
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "527",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "file"
+              ]
+            },
+            "body": "Owned synthetic local upload. café 雪\r\n",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "text/plain",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "41",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=file",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 527
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "h7SYFGhNMC3sdKz2CTYqb",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0040706,
+        "name": "Owned fixture file upload",
+        "suitename": "fixture/comprehensive/collection\\28-owned-file",
+        "path": "28-owned-file",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "29-owned-multipart.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=multipart",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "Content-Length": "0",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********"
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "511",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "multipart"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/x-www-form-urlencoded",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive",
+              "content-length": "0"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=multipart",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 511
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "g1muWWzwYFzdfd7AqCBvT",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.003764,
+        "name": "Owned fixture multipart",
+        "suitename": "fixture/comprehensive/collection\\29-owned-multipart",
+        "path": "29-owned-multipart",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "30-response-false.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/scalar-false",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "5",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": false,
+          "url": "http://127.0.0.1/scalar-false",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 5
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "OuLq_GgcKwur-btp_zfK_",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0022489,
+        "name": "False response value",
+        "suitename": "fixture/comprehensive/collection\\30-response-false",
+        "path": "30-response-false",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "31-response-zero.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/scalar-zero",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "1",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": 0,
+          "url": "http://127.0.0.1/scalar-zero",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 1
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "BNtJ7YAeHsK96WBuctGbv",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0031433,
+        "name": "Zero response value",
+        "suitename": "fixture/comprehensive/collection\\31-response-zero",
+        "path": "31-response-zero",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "32-response-null.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/scalar-null",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "4",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": null,
+          "url": "http://127.0.0.1/scalar-null",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 4
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "hNuCk1n6bPQ_hPa-U3WYK",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002232,
+        "name": "Null response value",
+        "suitename": "fixture/comprehensive/collection\\32-response-null",
+        "path": "32-response-null",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "33-empty-text-mode.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=empty-text",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "Content-Length": "0",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "text/plain"
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "489",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "empty-text"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "text/plain",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive",
+              "content-length": "0"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=empty-text",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 489
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "xaKK-FzgEzKokF_fbXsau",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002575,
+        "name": "Empty text mode without a block",
+        "suitename": "fixture/comprehensive/collection\\33-empty-text-mode",
+        "path": "33-empty-text-mode",
+        "iterationIndex": 0
+      }
+    ],
+    "summary": {
+      "totalRequests": 36,
+      "passedRequests": 34,
+      "failedRequests": 1,
+      "errorRequests": 1,
+      "skippedRequests": 0,
+      "skippedByBail": 0,
+      "totalAssertions": 34,
+      "passedAssertions": 33,
+      "failedAssertions": 1,
+      "totalTests": 2,
+      "passedTests": 1,
+      "failedTests": 1,
+      "totalPreRequestTests": 0,
+      "passedPreRequestTests": 0,
+      "failedPreRequestTests": 0,
+      "totalPostResponseTests": 0,
+      "passedPostResponseTests": 0,
+      "failedPostResponseTests": 0
+    }
+  },
+  {
+    "iterationIndex": 1,
+    "results": [
+      {
+        "test": {
+          "filename": "Nested folder\\Child with spaces\\Same request.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/space path/café?layer=folder",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "X-Folder": "inherited",
+            "x-override": "folder",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "465",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/space path/café",
+            "query": {
+              "layer": [
+                "folder"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "folder",
+              "x-folder": "inherited",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/space%20path/caf%C3%A9?layer=folder",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 465
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "PB7EMrWHttA-eZ7URVCGN",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0026549,
+        "name": "Same request",
+        "suitename": "fixture/comprehensive/collection\\Nested folder\\Child with spaces\\Same request",
+        "path": "Nested folder\\Child with spaces\\Same request",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "Nested folder\\Same request.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?layer=request&message=café 雪",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "request",
+            "X-Folder": "inherited",
+            "x-override": "folder",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "480",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "layer": [
+                "request"
+              ],
+              "message": [
+                "café 雪"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "folder",
+              "x-folder": "inherited",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?layer=request&message=caf%C3%A9%20%E9%9B%AA",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 480
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "6hTCtoNtodRHQXNaqRyrR",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0024142,
+        "name": "Same request",
+        "suitename": "fixture/comprehensive/collection\\Nested folder\\Same request",
+        "path": "Nested folder\\Same request",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "Other folder\\Same request.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?layer=environment",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "437",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "layer": [
+                "environment"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?layer=environment",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 437
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "dRaG0-QOFkO5ulGHYRbhz",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0019848,
+        "name": "Same request",
+        "suitename": "fixture/comprehensive/collection\\Other folder\\Same request",
+        "path": "Other folder\\Same request",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "01-request-auth-override.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?case=override",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "434",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "override"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=override",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 434
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "WRj_A0gEeo_8wrahdtoXF",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0019242,
+        "name": "Request bearer override",
+        "suitename": "fixture/comprehensive/collection\\01-request-auth-override",
+        "path": "01-request-auth-override",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "02-no-auth.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?case=no-auth",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "384",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "no-auth"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=no-auth",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 384
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "KodfNocARORxaKrGCILa3",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020783,
+        "name": "Explicit no auth",
+        "suitename": "fixture/comprehensive/collection\\02-no-auth",
+        "path": "02-no-auth",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "03-json-object.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "80",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "application/json"
+          },
+          "data": "{\"name\":\"café 雪\",\"enabled\":true,\"count\":0,\"items\":[null,false,\"space value\"]}"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "566",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {},
+            "body": "{\"name\":\"café 雪\",\"enabled\":true,\"count\":0,\"items\":[null,false,\"space value\"]}",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/json",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "80",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 566
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "6Fcr48iZ2C0wN3U7fl1ZQ",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0022496,
+        "name": "JSON object and Unicode",
+        "suitename": "fixture/comprehensive/collection\\03-json-object",
+        "path": "03-json-object",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "04-json-null.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=null",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "4",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "application/json"
+          },
+          "data": "null"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "493",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "null"
+              ]
+            },
+            "body": "null",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/json",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "4",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=null",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 493
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "wVS24u8XOCsIfGOz3C2NN",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0022213,
+        "name": "JSON null",
+        "suitename": "fixture/comprehensive/collection\\04-json-null",
+        "path": "04-json-null",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "05-json-false.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=false",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "5",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "application/json"
+          },
+          "data": "false"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "495",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "false"
+              ]
+            },
+            "body": "false",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/json",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "5",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=false",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 495
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "fmnAtwOgYfBY0yF0JvjJp",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002055,
+        "name": "JSON false",
+        "suitename": "fixture/comprehensive/collection\\05-json-false",
+        "path": "05-json-false",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "06-json-zero.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=zero",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "application/json"
+          },
+          "data": "0"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "490",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "zero"
+              ]
+            },
+            "body": "0",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/json",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "1",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=zero",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 490
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "MkQwSAHb41MSt1SP_K8MH",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0021465,
+        "name": "JSON zero",
+        "suitename": "fixture/comprehensive/collection\\06-json-zero",
+        "path": "06-json-zero",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "07-json-string.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=string",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "11",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "application/json"
+          },
+          "data": "\"café 雪\""
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "505",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "string"
+              ]
+            },
+            "body": "\"café 雪\"",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/json",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "11",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=string",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 505
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "6N7wEWBQSZ7hX0UVIvw0p",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0021568,
+        "name": "JSON string",
+        "suitename": "fixture/comprehensive/collection\\07-json-string",
+        "path": "07-json-string",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "08-text.bru"
+        },
+        "request": {
+          "method": "PUT",
+          "url": "http://127.0.0.1:9876/echo?case=text",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "18",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "text/plain"
+          },
+          "data": "line one\ncafé 雪"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "502",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "PUT",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "text"
+              ]
+            },
+            "body": "line one\ncafé 雪",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "text/plain",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "18",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=text",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 502
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "amuMODqMI7h3gVAkfM_4T",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0017972,
+        "name": "Text body",
+        "suitename": "fixture/comprehensive/collection\\08-text",
+        "path": "08-text",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "09-xml.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=xml",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "55",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "application/xml"
+          },
+          "data": "<entry label=\"café\"><value>space value</value></entry>"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "545",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "xml"
+              ]
+            },
+            "body": "<entry label=\"café\"><value>space value</value></entry>",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/xml",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "55",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=xml",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 545
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "mLWpaznMYy8_gILN-V7-d",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0018391,
+        "name": "XML body",
+        "suitename": "fixture/comprehensive/collection\\09-xml",
+        "path": "09-xml",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "10-form.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=form",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "Content-Length": "0",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********"
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "506",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "form"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/x-www-form-urlencoded",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive",
+              "content-length": "0"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=form",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 506
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "iqwfrSJ7mWV1NBQufbucs",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0019244,
+        "name": "Form body",
+        "suitename": "fixture/comprehensive/collection\\10-form",
+        "path": "10-form",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "11-no-body.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=absent",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "Content-Length": "0",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "455",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "absent"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive",
+              "content-length": "0"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=absent",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 455
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "H2g3VUATKdb-3Whl8rlow",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0018413,
+        "name": "POST without body",
+        "suitename": "fixture/comprehensive/collection\\11-no-body",
+        "path": "11-no-body",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "12-empty-response.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/empty",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 204,
+          "statusText": "No Content",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "0",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": "",
+          "url": "http://127.0.0.1/empty",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 0
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "avTanrxJXPjzRTeLpcXNS",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 204",
+            "rhsOperand": "204",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0019369,
+        "name": "Empty response",
+        "suitename": "fixture/comprehensive/collection\\12-empty-response",
+        "path": "12-empty-response",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "13-successful-tests.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/ok",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "411",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/ok",
+            "query": {},
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/ok",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 411
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "7SeLwwDlJzMLk-7e-o9kf",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [
+          {
+            "description": "resource content",
+            "status": "pass",
+            "uid": "CQEaaQZW1EUuKOwhKYNPE"
+          }
+        ],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002987,
+        "name": "Successful assertions and script tests",
+        "suitename": "fixture/comprehensive/collection\\13-successful-tests",
+        "path": "13-successful-tests",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "14-failed-tests.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/ok",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "411",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/ok",
+            "query": {},
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/ok",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 411
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "moa6FwTFYq3gziRQKVpVQ",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 201",
+            "rhsOperand": "201",
+            "operator": "eq",
+            "status": "fail",
+            "error": "expected 200 to equal 201"
+          }
+        ],
+        "testResults": [
+          {
+            "description": "deliberate failure",
+            "status": "fail",
+            "error": "expected 'local-widget' to equal 'different-widget'",
+            "actual": "local-widget",
+            "expected": "different-widget",
+            "stack": "AssertionError: expected 'local-widget' to equal 'different-widget'\n    at fixture/comprehensive/collection\\14-failed-tests.bru:4:65\n    at C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\test.js:3:11\n    at test (C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\utils\\results.js:35:21)\n    at fixture/comprehensive/collection\\14-failed-tests.bru:4:1\n    at fixture/comprehensive/collection\\14-failed-tests.bru:5:3\n    at fixture/comprehensive/collection\\14-failed-tests.bru:6:11\n    at Script.runInContext (node:vm:149:12)\n    at runScript (C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\sandbox\\node-vm\\index.js:135:48)\n    at runScriptInNodeVm (C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\sandbox\\node-vm\\index.js:141:17)\n    at TestRuntime.runTests (C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\runtime\\test-runtime.js:115:15)",
+            "errorName": "AssertionError",
+            "uid": "ZbUEkY9Dq2SckqhD7mCj4"
+          }
+        ],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0040152,
+        "name": "Failed assertion and script test",
+        "suitename": "fixture/comprehensive/collection\\14-failed-tests",
+        "path": "14-failed-tests",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "15-denial.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/denied",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "43",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "detail": "Not entitled to this resource"
+          },
+          "url": "http://127.0.0.1/denied",
+          "responseTime": 3,
+          "duration": 3,
+          "size": 43
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "y_jg3LLQi_MLz-c-B0jZD",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.004685,
+        "name": "Application denial",
+        "suitename": "fixture/comprehensive/collection\\15-denial",
+        "path": "15-denial",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "16-validation.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/validation",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 400,
+          "statusText": "Bad Request",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "51",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "errors": {
+              "count": "must be a positive integer"
+            }
+          },
+          "url": "http://127.0.0.1/validation",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 51
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "GwDvb79RfAq9Iti2qc_gC",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 400",
+            "rhsOperand": "400",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0021582,
+        "name": "Field validation",
+        "suitename": "fixture/comprehensive/collection\\16-validation",
+        "path": "16-validation",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "17-edge.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/edge",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:49 GMT",
+            "content-type": "text/html",
+            "content-length": "86",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": "<html>Incapsula incident ID: local <iframe src=\"/_Incapsula_Resource\"></iframe></html>",
+          "url": "http://127.0.0.1/edge",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 86
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "wGnkvCgz9Was7Kla7Dd7l",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0021955,
+        "name": "Edge block",
+        "suitename": "fixture/comprehensive/collection\\17-edge",
+        "path": "17-edge",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "18-timeout.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/timeout",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "timeout of 200ms exceeded",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.2052365,
+        "name": "Timeout",
+        "suitename": "fixture/comprehensive/collection\\18-timeout",
+        "path": "18-timeout",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "19-unresolved-query.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?unresolved={{missingValue}}",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:50 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "447",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "unresolved": [
+                "{{missingValue}}"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?unresolved={{missingValue}}",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 447
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "v-dtyxaExgRtWYbh9dvpZ",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0023301,
+        "name": "Unresolved static input",
+        "suitename": "fixture/comprehensive/collection\\19-unresolved-query",
+        "path": "19-unresolved-query",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "20-inert-script.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?case=script",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null,
+            "X-Script": "fixture-script-ran"
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:50 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "465",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "script"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "x-script": "fixture-script-ran",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=script",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 465
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "Mc_ydXBichiHxdJvxdWQC",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0028457,
+        "name": "Script-dependent request",
+        "suitename": "fixture/comprehensive/collection\\20-inert-script",
+        "path": "20-inert-script",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "21-graphql.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=graphql",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "55",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "application/json"
+          },
+          "data": {
+            "query": "query { localWidget { id } }",
+            "variables": {}
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:50 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "554",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "graphql"
+              ]
+            },
+            "body": "{\"query\":\"query { localWidget { id } }\",\"variables\":{}}",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/json",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "55",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=graphql",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 554
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "BkIne5ngQP0KlTai0ZKqL",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0018943,
+        "name": "Unsupported GraphQL conversion",
+        "suitename": "fixture/comprehensive/collection\\21-graphql",
+        "path": "21-graphql",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "22-json-escapes.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=escapes",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "104",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "application/json"
+          },
+          "data": "{\"quote\": \"a \\\"quoted\\\" value\", \"path\": \"C:\\\\fixture\\\\path\", \"line\": \"one\\ntwo\", \"unicode\": \"café 雪\"}"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:50 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "623",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "escapes"
+              ]
+            },
+            "body": "{\"quote\": \"a \\\"quoted\\\" value\", \"path\": \"C:\\\\fixture\\\\path\", \"line\": \"one\\ntwo\", \"unicode\": \"café 雪\"}",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/json",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "104",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=escapes",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 623
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "Llc_cM07kC_rwMksVv3oT",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0018664,
+        "name": "Escaped JSON strings",
+        "suitename": "fixture/comprehensive/collection\\22-json-escapes",
+        "path": "22-json-escapes",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "23-disabled-variable.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?disabled=collection-value",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:50 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "445",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "disabled": [
+                "collection-value"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?disabled=collection-value",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 445
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "EKrlUXslMG0Xwb1X0GbAD",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020678,
+        "name": "Disabled override keeps lower scope",
+        "suitename": "fixture/comprehensive/collection\\23-disabled-variable",
+        "path": "23-disabled-variable",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "24-opaque-auth-reference.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?case=opaque-auth",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:50 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "441",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "opaque-auth"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=opaque-auth",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 441
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "X9Y8NaPpfzT6EVKb_TYW-",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0022568,
+        "name": "Opaque auth reference",
+        "suitename": "fixture/comprehensive/collection\\24-opaque-auth-reference",
+        "path": "24-opaque-auth-reference",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "25-empty-text.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=empty-text-block",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "30",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "text/plain"
+          },
+          "data": "}\n\nassert {\nres.status: eq 200"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:50 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "529",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "empty-text-block"
+              ]
+            },
+            "body": "}\n\nassert {\nres.status: eq 200",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "text/plain",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "30",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=empty-text-block",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 529
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0019242,
+        "name": "Empty text block parser boundary",
+        "suitename": "fixture/comprehensive/collection\\25-empty-text",
+        "path": "25-empty-text",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "26-duplicate-query.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?tag=one&tag=two&empty=",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:50 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "449",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "GET",
+            "path": "/echo",
+            "query": {
+              "tag": [
+                "one",
+                "two"
+              ],
+              "empty": [
+                ""
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?tag=one&tag=two&empty=",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 449
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "G9UpVJP0HRv4HEc-A1jiw",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002648,
+        "name": "Repeated and empty query values",
+        "suitename": "fixture/comprehensive/collection\\26-duplicate-query",
+        "path": "26-duplicate-query",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "27-custom-content-type.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=content-type",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "15",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "content-type": "application/problem+json",
+            "Authorization": "Bearer ********"
+          },
+          "data": "{\"label\":\"one\"}"
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:50 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "525",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "content-type"
+              ]
+            },
+            "body": "{\"label\":\"one\"}",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/problem+json",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "15",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=content-type",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 525
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "iRFomvvU2qkrdO31nqV7U",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0018569,
+        "name": "Explicit content type casing",
+        "suitename": "fixture/comprehensive/collection\\27-custom-content-type",
+        "path": "27-custom-content-type",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "28-owned-file.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=file",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Content-Length": "41",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "text/plain"
+          },
+          "data": {
+            "0": 79,
+            "1": 119,
+            "2": 110,
+            "3": 101,
+            "4": 100,
+            "5": 32,
+            "6": 115,
+            "7": 121,
+            "8": 110,
+            "9": 116,
+            "10": 104,
+            "11": 101,
+            "12": 116,
+            "13": 105,
+            "14": 99,
+            "15": 32,
+            "16": 108,
+            "17": 111,
+            "18": 99,
+            "19": 97,
+            "20": 108,
+            "21": 32,
+            "22": 117,
+            "23": 112,
+            "24": 108,
+            "25": 111,
+            "26": 97,
+            "27": 100,
+            "28": 46,
+            "29": 32,
+            "30": 99,
+            "31": 97,
+            "32": 102,
+            "33": 195,
+            "34": 169,
+            "35": 32,
+            "36": 233,
+            "37": 155,
+            "38": 170,
+            "39": 13,
+            "40": 10
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:50 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "527",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "file"
+              ]
+            },
+            "body": "Owned synthetic local upload. café 雪\r\n",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "text/plain",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "content-length": "41",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=file",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 527
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "fSOy9NHx1XQqfmtb9_S_E",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002818,
+        "name": "Owned fixture file upload",
+        "suitename": "fixture/comprehensive/collection\\28-owned-file",
+        "path": "28-owned-file",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "29-owned-multipart.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=multipart",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "Content-Length": "0",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********"
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:50 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "511",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "multipart"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "application/x-www-form-urlencoded",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive",
+              "content-length": "0"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=multipart",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 511
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "9cTXN3roghYxlXN3dOR78",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0018686,
+        "name": "Owned fixture multipart",
+        "suitename": "fixture/comprehensive/collection\\29-owned-multipart",
+        "path": "29-owned-multipart",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "30-response-false.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/scalar-false",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:50 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "5",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": false,
+          "url": "http://127.0.0.1/scalar-false",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 5
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "Nr_qBfmpOiot20Wywc6NV",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.001887,
+        "name": "False response value",
+        "suitename": "fixture/comprehensive/collection\\30-response-false",
+        "path": "30-response-false",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "31-response-zero.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/scalar-zero",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:50 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "1",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": 0,
+          "url": "http://127.0.0.1/scalar-zero",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 1
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "2FXf4K_Kj1fWfdXQx2fkY",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020528,
+        "name": "Zero response value",
+        "suitename": "fixture/comprehensive/collection\\31-response-zero",
+        "path": "31-response-zero",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "32-response-null.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/scalar-null",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:50 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "4",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": null,
+          "url": "http://127.0.0.1/scalar-null",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 4
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "pDcEO6l01PQHR18mma9OC",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.00232,
+        "name": "Null response value",
+        "suitename": "fixture/comprehensive/collection\\32-response-null",
+        "path": "32-response-null",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "33-empty-text-mode.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=empty-text",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "Content-Length": "0",
+            "X-Collection": "inherited",
+            "X-Override": "collection",
+            "Authorization": "Bearer ********",
+            "content-type": "text/plain"
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Thu, 15 Oct 2026 09:35:50 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "489",
+            "x-fixture": "Namazu local Bruno interoperability"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user",
+            "method": "POST",
+            "path": "/echo",
+            "query": {
+              "case": [
+                "empty-text"
+              ]
+            },
+            "body": "",
+            "headers": {
+              "accept": "application/json, text/plain, */*",
+              "content-type": "text/plain",
+              "user-agent": "bruno-runtime/4.2.1",
+              "x-collection": "inherited",
+              "x-override": "collection",
+              "authorization": "Bearer ********",
+              "accept-encoding": "gzip, compress, deflate, br",
+              "host": "127.0.0.1:9876",
+              "connection": "keep-alive",
+              "content-length": "0"
+            }
+          },
+          "url": "http://127.0.0.1/echo?case=empty-text",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 489
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "jc81gcvCC3KBifvLbLQRG",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0022832,
+        "name": "Empty text mode without a block",
+        "suitename": "fixture/comprehensive/collection\\33-empty-text-mode",
+        "path": "33-empty-text-mode",
+        "iterationIndex": 1
+      }
+    ],
+    "summary": {
+      "totalRequests": 36,
+      "passedRequests": 34,
+      "failedRequests": 1,
+      "errorRequests": 1,
+      "skippedRequests": 0,
+      "skippedByBail": 0,
+      "totalAssertions": 34,
+      "passedAssertions": 33,
+      "failedAssertions": 1,
+      "totalTests": 2,
+      "passedTests": 1,
+      "failedTests": 1,
+      "totalPreRequestTests": 0,
+      "passedPreRequestTests": 0,
+      "failedPreRequestTests": 0,
+      "totalPostResponseTests": 0,
+      "passedPostResponseTests": 0,
+      "failedPostResponseTests": 0
+    }
+  }
+]

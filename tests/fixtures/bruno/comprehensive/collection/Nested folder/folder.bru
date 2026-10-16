@@ -1,0 +1,22 @@
+meta {
+  name: Nested folder
+  seq: 1
+}
+
+vars:pre-request {
+  layer: folder
+  folderToken: fixture-folder-token
+}
+
+headers {
+  X-Folder: inherited
+  x-override: folder
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{folderToken}}
+}

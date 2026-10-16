@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "Namazu comprehensive local Bruno fixture",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

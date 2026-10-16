@@ -1,0 +1,1220 @@
+[
+  {
+    "method": "GET",
+    "path": "/space%20path/caf%C3%A9?layer=folder",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "folder",
+      "x-folder": "inherited",
+      "authorization": "Bearer fixture-folder-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/echo?layer=request&message=caf%C3%A9%20%E9%9B%AA",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "folder",
+      "x-folder": "inherited",
+      "authorization": "Bearer fixture-folder-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/echo?layer=environment",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/echo?case=override",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-request-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/echo?case=no-auth",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "POST",
+    "path": "/echo",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/json",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "80",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "{\"name\":\"café 雪\",\"enabled\":true,\"count\":0,\"items\":[null,false,\"space value\"]}",
+    "body_bytes": 80
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=null",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/json",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "4",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "null",
+    "body_bytes": 4
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=false",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/json",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "5",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "false",
+    "body_bytes": 5
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=zero",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/json",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "1",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "0",
+    "body_bytes": 1
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=string",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/json",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "11",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "\"café 雪\"",
+    "body_bytes": 11
+  },
+  {
+    "method": "PUT",
+    "path": "/echo?case=text",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "text/plain",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "18",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "line one\ncafé 雪",
+    "body_bytes": 18
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=xml",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/xml",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "55",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "<entry label=\"café\"><value>space value</value></entry>",
+    "body_bytes": 55
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=form",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/x-www-form-urlencoded",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive",
+      "content-length": "0"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=absent",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive",
+      "content-length": "0"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/empty",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/ok",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/ok",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/denied",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/validation",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/edge",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/timeout",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/echo?unresolved={{missingValue}}",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/echo?case=script",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "x-script": "fixture-script-ran",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=graphql",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/json",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "55",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "{\"query\":\"query { localWidget { id } }\",\"variables\":{}}",
+    "body_bytes": 55
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=escapes",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/json",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "104",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "{\"quote\": \"a \\\"quoted\\\" value\", \"path\": \"C:\\\\fixture\\\\path\", \"line\": \"one\\ntwo\", \"unicode\": \"café 雪\"}",
+    "body_bytes": 104
+  },
+  {
+    "method": "GET",
+    "path": "/echo?disabled=collection-value",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/echo?case=opaque-auth",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-opaque-auth-value",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=empty-text-block",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "text/plain",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "30",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "}\n\nassert {\nres.status: eq 200",
+    "body_bytes": 30
+  },
+  {
+    "method": "GET",
+    "path": "/echo?tag=one&tag=two&empty=",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=content-type",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/problem+json",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "15",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "{\"label\":\"one\"}",
+    "body_bytes": 15
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=file",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "text/plain",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "41",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "Owned synthetic local upload. café 雪\r\n",
+    "body_bytes": 41
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=multipart",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/x-www-form-urlencoded",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive",
+      "content-length": "0"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/scalar-false",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/scalar-zero",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/scalar-null",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=empty-text",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "text/plain",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive",
+      "content-length": "0"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/space%20path/caf%C3%A9?layer=folder",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "folder",
+      "x-folder": "inherited",
+      "authorization": "Bearer fixture-folder-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/echo?layer=request&message=caf%C3%A9%20%E9%9B%AA",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "folder",
+      "x-folder": "inherited",
+      "authorization": "Bearer fixture-folder-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/echo?layer=environment",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/echo?case=override",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-request-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/echo?case=no-auth",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "POST",
+    "path": "/echo",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/json",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "80",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "{\"name\":\"café 雪\",\"enabled\":true,\"count\":0,\"items\":[null,false,\"space value\"]}",
+    "body_bytes": 80
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=null",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/json",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "4",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "null",
+    "body_bytes": 4
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=false",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/json",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "5",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "false",
+    "body_bytes": 5
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=zero",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/json",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "1",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "0",
+    "body_bytes": 1
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=string",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/json",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "11",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "\"café 雪\"",
+    "body_bytes": 11
+  },
+  {
+    "method": "PUT",
+    "path": "/echo?case=text",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "text/plain",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "18",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "line one\ncafé 雪",
+    "body_bytes": 18
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=xml",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/xml",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "55",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "<entry label=\"café\"><value>space value</value></entry>",
+    "body_bytes": 55
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=form",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/x-www-form-urlencoded",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive",
+      "content-length": "0"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=absent",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive",
+      "content-length": "0"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/empty",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/ok",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/ok",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/denied",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/validation",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/edge",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/timeout",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/echo?unresolved={{missingValue}}",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/echo?case=script",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "x-script": "fixture-script-ran",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=graphql",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/json",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "55",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "{\"query\":\"query { localWidget { id } }\",\"variables\":{}}",
+    "body_bytes": 55
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=escapes",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/json",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "104",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "{\"quote\": \"a \\\"quoted\\\" value\", \"path\": \"C:\\\\fixture\\\\path\", \"line\": \"one\\ntwo\", \"unicode\": \"café 雪\"}",
+    "body_bytes": 104
+  },
+  {
+    "method": "GET",
+    "path": "/echo?disabled=collection-value",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/echo?case=opaque-auth",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-opaque-auth-value",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=empty-text-block",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "text/plain",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "30",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "}\n\nassert {\nres.status: eq 200",
+    "body_bytes": 30
+  },
+  {
+    "method": "GET",
+    "path": "/echo?tag=one&tag=two&empty=",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=content-type",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/problem+json",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "15",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "{\"label\":\"one\"}",
+    "body_bytes": 15
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=file",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "text/plain",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "content-length": "41",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "Owned synthetic local upload. café 雪\r\n",
+    "body_bytes": 41
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=multipart",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "application/x-www-form-urlencoded",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive",
+      "content-length": "0"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/scalar-false",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/scalar-zero",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "GET",
+    "path": "/scalar-null",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive"
+    },
+    "body": "",
+    "body_bytes": 0
+  },
+  {
+    "method": "POST",
+    "path": "/echo?case=empty-text",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "content-type": "text/plain",
+      "user-agent": "bruno-runtime/4.2.1",
+      "x-collection": "inherited",
+      "x-override": "collection",
+      "authorization": "Bearer fixture-shared-token",
+      "accept-encoding": "gzip, compress, deflate, br",
+      "host": "127.0.0.1:9876",
+      "connection": "keep-alive",
+      "content-length": "0"
+    },
+    "body": "",
+    "body_bytes": 0
+  }
+]

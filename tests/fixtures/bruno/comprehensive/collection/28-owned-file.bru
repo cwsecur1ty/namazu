@@ -1,0 +1,23 @@
+meta {
+  name: Owned fixture file upload
+  type: http
+  seq: 30
+}
+
+post {
+  url: {{baseUrl}}/echo?case=file
+  body: file
+  auth: inherit
+}
+
+body:file {
+  file: @file(assets/local payload.txt) @contentType(text/plain)
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

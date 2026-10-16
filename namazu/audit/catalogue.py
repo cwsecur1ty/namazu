@@ -202,6 +202,7 @@ CATALOGUE: dict[str, dict] = {
 
     # ── transport and headers ────────────────────────────────────────────
     "transport.cleartext": {"cwe": 319, "refs": [CHEAT["tls"]], "method": BASELINE},
+    "transport.header-observation": {"cwe": None, "refs": [CHEAT["headers"]], "method": BASELINE},
     "transport.no-hsts": {"cwe": 319, "refs": [RFC["hsts"], CHEAT["headers"]], "method": BASELINE},
     "transport.no-nosniff": {"cwe": 16, "refs": [CHEAT["headers"]], "method": BASELINE},
     "transport.cacheable-private": {"cwe": 525, "refs": [RFC["cache"], CHEAT["headers"]], "method": BASELINE},
@@ -224,8 +225,8 @@ CATALOGUE: dict[str, dict] = {
     "cookie.weak-flags": {"cwe": 1004, "refs": [RFC["cookies"], CHEAT["headers"]], "method": BASELINE},
 
     # ── information disclosure ───────────────────────────────────────────
-    "disclosure.version-banner": {"cwe": 200, "refs": [CHEAT["headers"]], "method": BASELINE},
-    "disclosure.verbose-error": {"cwe": 209, "refs": [CHEAT["errors"]], "method": BASELINE},
+    "disclosure.implementation-detail": {"refs": [CHEAT["errors"]], "method": None},
+    "disclosure.potentially-sensitive": {"refs": [CHEAT["errors"]], "method": None},
     "exposure.secret-value": {"cwe": 798, "refs": [CHEAT["secrets"]], "method": BASELINE},
     "exposure.sensitive-field": {"cwe": 200, "refs": [CHEAT["rest"]], "method": BASELINE},
     "exposure.undocumented-field": {"cwe": 200, "refs": [CHEAT["rest"], RFC["oas"]],
@@ -242,6 +243,7 @@ CATALOGUE: dict[str, dict] = {
     "authz.write-bfla": {"cwe": 285, "refs": [CHEAT["authz"]], "method": None},
     "authz.method-bypass": {"cwe": 285, "refs": [CHEAT["authz"]], "method": None},
     "authz.invalid-credentials-accepted": {"cwe": 287, "refs": [CHEAT["authz"], RFC["jwt-bcp"]], "method": None},
+    "contract.response-disagreement": {"refs": [RFC["oas"], CHEAT["rest"]], "method": None},
     "contract.server-error": {"cwe": 248, "refs": [CHEAT["errors"], RFC["oas"]], "method": None},
     "contract.undocumented-status": {"cwe": 1059, "refs": [RFC["oas"]], "method": None},
     "contract.content-type-mismatch": {"cwe": 1059, "refs": [RFC["oas"]], "method": None},
@@ -289,7 +291,6 @@ CATALOGUE: dict[str, dict] = {
     "input.parameter-pollution": {"cwe": 235, "refs": [CHEAT["hpp"]], "method": None},
     "input.mass-assignment-confirmed": {"cwe": 915, "refs": [CHEAT["massassign"]], "method": None},
     "input.mass-assignment-echoed": {"cwe": 915, "refs": [CHEAT["massassign"]], "method": None},
-    "input.unknown-property-accepted": {"cwe": 235, "refs": [CHEAT["massassign"], RFC["oas"]], "method": None},
 
     # ── resource consumption ─────────────────────────────────────────────
     "limits.pagination-not-enforced": {"cwe": 770, "refs": [CHEAT["ratelimit"]], "method": None},
@@ -647,9 +648,10 @@ BACKGROUND: dict[str, dict] = {
             "usually far more privileged than the caller's: cloud instance metadata, internal admin "
             "interfaces, databases and service meshes commonly trust anything originating inside the "
             "network.\n\n"
-            "Detection does not require reaching any of those. A network error that only the server could "
-            "have produced, such as a name that does not resolve or a port that refuses the connection, "
-            "establishes that the parameter controls a server-side fetch."
+            "A network-error signature in a response is only a lead: validation, intermediaries or "
+            "simulated errors can produce the same text without a fetch. Confirmation requires separately "
+            "correlated destination-side evidence, and a callback alone does not demonstrate internal "
+            "resource access or a security consequence."
         ),
         "remediation_background": (
             "Allow-listing destinations is the only robust control. Blocklists of private ranges are "
@@ -661,10 +663,10 @@ BACKGROUND: dict[str, dict] = {
     "cors.origin-reflected": {
         "background": (
             "The same-origin policy stops one site reading another's authenticated responses. CORS is how "
-            "a server opts out for specific origins. A server that echoes whatever Origin it receives has "
-            "opted out for all of them.\n\n"
-            "With `Access-Control-Allow-Credentials: true`, any site a victim visits can make credentialed "
-            "requests to this API and read the replies."
+            "a server permits reads from specific origins. Reflecting the tested Origin is an observation "
+            "about that request, not proof that every origin is accepted.\n\n"
+            "A security consequence depends on browser enforcement, preflight, credential delivery and "
+            "sensitive response content. An Allow-Credentials header alone does not establish those conditions."
         ),
     },
     "input.mass-assignment-confirmed": {

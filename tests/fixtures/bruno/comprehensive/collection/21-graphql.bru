@@ -1,0 +1,27 @@
+meta {
+  name: Unsupported GraphQL conversion
+  type: http
+  seq: 23
+}
+
+post {
+  url: {{baseUrl}}/echo?case=graphql
+  body: graphql
+  auth: inherit
+}
+
+body:graphql {
+  query { localWidget { id } }
+}
+
+body:graphql:vars {
+  {}
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

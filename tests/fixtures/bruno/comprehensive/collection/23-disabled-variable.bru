@@ -1,0 +1,23 @@
+meta {
+  name: Disabled override keeps lower scope
+  type: http
+  seq: 25
+}
+
+get {
+  url: {{baseUrl}}/echo?disabled={{disabledFallback}}
+  body: none
+  auth: inherit
+}
+
+vars:pre-request {
+  ~disabledFallback: must-not-use
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

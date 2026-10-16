@@ -1,0 +1,23 @@
+meta {
+  name: Inert script
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base}}/echo?layer={{layer}}&global={{global_value}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  false
+}
+
+vars:pre-request {
+  layer: request
+}
+
+script:pre-request {
+  throw new Error('DO NOT EXECUTE FIXTURE');
+}

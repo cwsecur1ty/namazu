@@ -5,7 +5,7 @@ window.NamazuBruno = {
     const root = document.createElement("div"); root.className = "bruno-native-report"; body.append(root);
     const add = (tag, text) => { const n = document.createElement(tag); n.textContent = text; root.append(n); return n; };
     add("h2", "Imported Bruno run");
-    add("p", `${bruno.recorded_executions} recorded executions · ${bruno.observed_responses} recorded HTTP responses. Exact wire attempts and execution time are unknown. Zero requests sent during import or viewing.`);
+    add("p", `${bruno.recorded_executions} recorded executions · ${bruno.recorded_iterations ?? "unknown"} iterations · ${bruno.observed_responses} recorded HTTP responses. Exact wire attempts and execution time are unknown. Zero requests sent during import or viewing.`);
     for (const [kind, counts] of Object.entries(bruno.assertion_counts || {})) add("p", `${kind}: ${counts.pass} passed, ${counts.fail} failed, ${counts.unknown} unknown.`);
     add("p", "These are historical observations. Bruno assertions are separate from Namazu vulnerabilities. No field mutations, baseline comparisons or successful business controls were inferred. Uniform application denials leave downstream handling unknown.");
     const observations = new Map();
@@ -32,12 +32,16 @@ window.NamazuBruno = {
     const status = node("p", "Import, mapping and export are offline. Zero target requests sent.", "hint"); status.setAttribute("role", "status"); status.id = "bruno-status";
     const error = node("p", "", "msg error"); error.setAttribute("role", "alert"); error.hidden = true;
     const intro = node("p", "CLI 4.2.1 JSON reports and Bruno .bru definitions. Assertions are separate from HTTP responses and security findings. Collections are not response contracts.");
+    intro.id = "bruno-input-explanation";
     const namesLabel = node("label", "Additional credential names (comma separated)");
     const names = node("input"); names.id = "bruno-credential-names"; names.placeholder = "X-Workspace-Key, accessCode"; namesLabel.htmlFor = names.id;
     const actions = node("div", "", "bruno-actions");
     const reportInput = node("input"); reportInput.type = "file"; reportInput.accept = ".json"; reportInput.hidden = true;
+    reportInput.id = "bruno-report-file";
     const fileInput = node("input"); fileInput.type = "file"; fileInput.accept = ".bru,.json"; fileInput.multiple = true; fileInput.hidden = true;
+    fileInput.id = "bruno-definition-files";
     const folderInput = node("input"); folderInput.type = "file"; folderInput.multiple = true; folderInput.setAttribute("webkitdirectory", ""); folderInput.hidden = true;
+    folderInput.id = "bruno-collection-folder";
     const button = (text, fn) => { const b = node("button", text, "btn"); b.type = "button"; b.onclick = () => guarded(fn); return b; };
     const reportButton = button("Import Bruno run (JSON)", () => reportInput.click()); reportButton.id = "bruno-import-report";
     actions.append(reportButton, button("Import .bru files", () => fileInput.click()), button("Import collection folder", () => folderInput.click()), button("Choose Namazu requests to export", loadNative));
@@ -50,7 +54,14 @@ window.NamazuBruno = {
     const outputActions = node("div", "", "bruno-actions");
     const openEvidence = button("Open in Namazu evidence views", async () => { if (!evidence) throw Error("Import a Bruno run first."); await host.openEvidence(evidence); dialog.close(); });
     const saveEvidence = button("Export redacted evidence + source", () => { if (!evidence) throw Error("Import a Bruno run first."); download(JSON.stringify(evidence, null, 2), "namazu-bruno-evidence.json", "application/json"); });
-    outputActions.append(openEvidence, saveEvidence);
+    const addWorkspace = button("Add definitions to current workspace", async () => {
+      if (!input?.files || !rows.length) throw Error("Import definitions and resolve their environment first.");
+      if (!window.NamazuDesktop?.addBrunoCollection) throw Error("Open the request workspace before adding definitions.");
+      const result = await window.NamazuDesktop.addBrunoCollection({...input, credential_names: credentialNames()});
+      status.textContent = result.duplicate ? "This definition snapshot already exists in the workspace; no duplicate requests were added." : "Definitions added as a separate request collection. No response contract, successful control or identity assignment was inferred.";
+      dialog.close();
+    }); addWorkspace.id = "bruno-add-workspace"; addWorkspace.disabled = true;
+    outputActions.append(addWorkspace, openEvidence, saveEvidence);
     const mapping = node("details", "", "bruno-mapping"); mapping.append(node("summary", "Prepare one explicitly selected baseline"));
     mapping.append(node("p", "Select one request above and a matching imported OpenAPI operation below. Map its identity and define resource/content assertions. This prepares a template; it does not establish business success or authorise a run."));
     const form = node("div", "", "bruno-fields");
@@ -76,11 +87,24 @@ window.NamazuBruno = {
     const acknowledgedLabel = node("label", "I reviewed the conversion warnings and secret-free template"); acknowledgedLabel.prepend(acknowledged);
     const downloadButton = button("Download Bruno collection (.zip)", exportZip); downloadButton.disabled = true;
     conversion.append(node("h3", "Export selected requests to Bruno"), button("Preview conversion", preview), warningList, exportPreview, acknowledgedLabel, downloadButton);
-    dialog.append(head, intro, status, namesLabel, names, actions, reportInput, fileInput, folderInput, environmentBox, error, summary, list, outputActions, mapping, conversion);
+    const legacy = node("section", "", "bruno-advanced"); legacy.id = "bruno-advanced";
+    legacy.append(intro, status, namesLabel, names, actions, reportInput, fileInput, folderInput, environmentBox, error, summary, list, outputActions, mapping, conversion);
+    const flow = window.NamazuBrunoImport.create({api: host.api, close: () => dialog.close(), legacy: mode => showLegacy(mode), report: async file => { await guarded(() => readReport(file)); showLegacy("bruno-results"); }});
+    const advanced = button("Advanced mapping and export", () => showLegacy("advanced")); advanced.id = "bruno-advanced-open";
+    const back = button("Back to source import", () => { legacy.hidden = true; flow.open(); advanced.hidden = false; title.textContent = "Import Bruno workspace or collection"; }); back.id = "bruno-back-import"; legacy.prepend(back);
+    dialog.append(head, flow.panel, advanced, legacy); legacy.hidden = true;
+    dialog.addEventListener("close", () => flow.close());
     document.body.append(dialog);
     let evidence = null, input = null, rows = [], selected = new Set(), exportPayload = null, working = false;
     const credentialNames = () => names.value.split(",").map(v => v.trim()).filter(Boolean);
-    async function guarded(fn) { if (working) return; error.hidden = true; working = true; try { await fn(); } catch (e) { error.textContent = e.message; error.hidden = false; } finally { working = false; } }
+    async function guarded(fn) {
+      if (working) return;
+      error.hidden = true; working = true; dialog.setAttribute("aria-busy", "true");
+      const busyAreas = [actions, environmentBox, list, outputActions, mapping, conversion];
+      busyAreas.forEach(area => { area.inert = true; }); names.disabled = true;
+      try { await fn(); } catch (e) { error.textContent = e.message; error.hidden = false; }
+      finally { working = false; dialog.setAttribute("aria-busy", "false"); busyAreas.forEach(area => { area.inert = false; }); names.disabled = false; }
+    }
     function resetPreview() { exportPayload = null; acknowledged.checked = false; downloadButton.disabled = true; warningList.replaceChildren(); exportPreview.hidden = true; }
     names.oninput = resetPreview;
     acknowledged.onchange = () => { downloadButton.disabled = !acknowledged.checked || !exportPayload; };
@@ -101,38 +125,42 @@ window.NamazuBruno = {
         const detail = node("details"), code = node("pre", JSON.stringify(row, null, 2)); detail.append(node("summary", "Evidence, assertions and source reference"), code); item.append(detail); list.append(item);
       }
       openEvidence.disabled = saveEvidence.disabled = !evidence;
+      addWorkspace.disabled = !input?.files || !rows.length;
     }
     async function readFiles(fileList, directory) {
       const all = [...fileList], accepted = directory ? all.filter(f => f.name.endsWith(".bru") || f.name === "bruno.json") : all;
       if (!accepted.length || accepted.length > 200 || accepted.some(f => f.size > 256 * 1024) || accepted.reduce((n, f) => n + f.size, 0) > 8 * 1024 * 1024) throw Error("Select 1–200 definitions, at most 256 KiB each and 8 MiB total. Archives are not supported.");
       const files = await Promise.all(accepted.map(async file => ({path: file.webkitRelativePath || file.name, content: await file.text()})));
-      input = {files}; evidence = null; env.replaceChildren(); environmentBox.hidden = true;
+      await resolveCollection({files}, true);
       status.textContent = `Definitions read locally; ${all.length - accepted.length} non-definition files ignored without reading. No scripts, external files or requests executed.`;
-      await resolveCollection();
     }
-    fileInput.onchange = () => guarded(() => readFiles(fileInput.files, false)); folderInput.onchange = () => guarded(() => readFiles(folderInput.files, true));
-    reportInput.onchange = () => guarded(async () => {
-      const file = reportInput.files[0]; if (!file) return;
+    fileInput.onchange = () => guarded(async () => { try { await readFiles(fileInput.files, false); } finally { fileInput.value = ""; } });
+    folderInput.onchange = () => guarded(async () => { try { await readFiles(folderInput.files, true); } finally { folderInput.value = ""; } });
+    async function readReport(file) {
+      if (!file) return;
       if (file.size > 8 * 1024 * 1024) throw Error("Run reports are limited to 8 MiB.");
       const report = JSON.parse(await file.text());
       const result = await host.api("/api/bruno/report", {report, version: "4.2.1", credential_names: credentialNames()});
       evidence = result; input = {report: result.bruno.source, version: "4.2.1"}; environmentBox.hidden = true;
       rows = result.bruno.executions.map(ex => { const r = result.requests.find(r => r.exchange_id === ex.id); return {...ex, httpStatus: r?.status, elapsed: r?.elapsed_ms, request: r && {method:r.method,url:r.url,headers:r.request_headers,body:r.request_body}}; });
       const counts = result.bruno.assertion_counts;
-      summary.textContent = `Imported Bruno run · ${rows.length} recorded executions · ${result.bruno.observed_responses} HTTP responses · wire request attempts unknown. Assertions ${counts.assertionResults.pass} passed / ${counts.assertionResults.fail} failed; tests ${counts.testResults.pass} passed / ${counts.testResults.fail} failed.`;
+      summary.textContent = `Imported Bruno run · ${rows.length} recorded executions · ${result.bruno.recorded_iterations} iterations · ${result.bruno.observed_responses} HTTP responses · wire request attempts unknown. Assertions ${counts.assertionResults.pass} passed / ${counts.assertionResults.fail} failed / ${counts.assertionResults.unknown} unknown; tests ${counts.testResults.pass} passed / ${counts.testResults.fail} failed / ${counts.testResults.unknown} unknown.`;
       status.textContent = `Imported at ${result.provenance.imported_at}. Execution time not supplied by this reporter. Zero requests sent during import.`;
       reportInput.value = ""; render();
-    });
-    async function resolveCollection() {
-      if (!input?.files) throw Error("Select .bru definitions first.");
-      const result = await host.api("/api/bruno/collection", {...input, spec:host.spec(), credential_names:credentialNames(), ...(env.value !== "choose" && env.options.length ? {environment:env.value} : {})});
+    }
+    reportInput.onchange = () => guarded(async () => { const file = reportInput.files[0]; reportInput.value = ""; await readReport(file); });
+    async function resolveCollection(candidate = input, fresh = false) {
+      if (!candidate?.files) throw Error("Select .bru definitions first.");
+      const result = await host.api("/api/bruno/collection", {...candidate, spec:host.spec(), credential_names:credentialNames(), ...(!fresh && env.value !== "choose" && env.options.length ? {environment:env.value} : {})});
+      input = candidate; evidence = null;
+      if (fresh) { env.replaceChildren(); environmentBox.hidden = true; }
       if (result.requires_environment) {
         env.replaceChildren(); for (const [value, text] of [["choose", "Choose an environment"], ["", "No environment"], ...result.environments.map(v => [v,v])]) { const o=node("option",text);o.value=value;env.append(o); }
         environmentBox.hidden = false; rows = []; summary.textContent = result.warnings.join(" "); render(); return;
       }
       input.environment = result.environment || ""; rows = result.requests; summary.textContent = `${result.collection} · ${rows.length} request definitions · environment ${result.environment || "none"}. No target requests sent.`; render();
     }
-    async function loadNative() { evidence = null; input = null; rows = await host.requests(); environmentBox.hidden = true; summary.textContent = "Select the Namazu requests or prepared baselines to convert. No requests will be sent."; render(); }
+    async function loadNative() { const next = await host.requests(); evidence = null; input = null; rows = next; environmentBox.hidden = true; summary.textContent = "Select the Namazu requests or prepared baselines to convert. No requests will be sent."; render(); }
     async function prepare() {
       if (!input || selected.size !== 1) throw Error("Select exactly one imported request to prepare.");
       const parseValue = value => { try { return JSON.parse(value); } catch { return value; } };
@@ -155,5 +183,13 @@ window.NamazuBruno = {
     }
     function download(value, filename, type) { const url=URL.createObjectURL(value instanceof Blob ? value : new Blob([value],{type}));const a=node("a");a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000); }
     document.getElementById("bruno-open").onclick = () => { error.hidden = true; refreshOperations(); dialog.showModal(); };
+    function showLegacy(mode) { flow.panel.hidden = true; legacy.hidden = false; advanced.hidden = true; title.textContent = mode === "bruno-results" ? "Import Bruno execution results" : "Bruno mapping and export"; }
+    window.NamazuBruno.selectMode = mode => {
+      intro.textContent = mode === "bruno-results" ? "Bruno CLI 4.2.1 JSON execution results. These are historical records, with separate response and assertion counts. Missing headers or bodies remain unavailable; importing sends zero requests."
+        : mode === "bruno-definitions" ? "Bruno collections and individual .bru files, parsed with @usebruno/lang 0.40.0. Definitions describe requests, not authoritative response schemas or proof of execution. Scripts remain inert; auth requires explicit local mapping." : "CLI 4.2.1 JSON reports and Bruno .bru definitions. Assertions are separate from HTTP responses and security findings. Collections are not response contracts.";
+      dialog.dataset.inputMode = mode || "all";
+      if (mode === "bruno-results") { showLegacy(mode); reportButton.focus(); }
+      else { legacy.hidden = true; flow.open(); advanced.hidden = false; title.textContent = "Import Bruno workspace or collection"; }
+    };
   },
 };

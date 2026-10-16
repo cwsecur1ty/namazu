@@ -102,14 +102,15 @@ def similarity(left: str, right: str) -> float:
     return round(SequenceMatcher(None, a, b).ratio(), 3)
 
 
-def redact_headers(headers: dict) -> dict:
+def redact_headers(headers: dict, names=()) -> dict:
     return {
-        name: ("<credential>" if name.lower() in REDACTED_HEADERS else value)
+        name: ("<credential>" if name.lower() in REDACTED_HEADERS or name.lower() in names
+               or CREDENTIAL_QUERY.match(name) else value)
         for name, value in (headers or {}).items()
     }
 
 
-def redact_url(url: str) -> str:
+def redact_url(url: str, names=()) -> str:
     from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
     try:
         parts = urlsplit(url)
@@ -118,10 +119,43 @@ def redact_url(url: str) -> str:
     if not parts.query:
         return url
     pairs = [
-        (key, "<credential>" if CREDENTIAL_QUERY.match(key) else value)
+        (key, "<credential>" if CREDENTIAL_QUERY.match(key) or key.lower() in names else value)
         for key, value in parse_qsl(parts.query, keep_blank_values=True)
     ]
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(pairs), parts.fragment))
+
+
+def redact_body(text: str | None, names=()) -> str:
+    """Redact credential properties before truncating or generating commands."""
+    if not text:
+        return text or ""
+    def clean(value):
+        if isinstance(value, dict):
+            return {key: "<credential>" if CREDENTIAL_QUERY.match(key) or key.lower() in names
+                    else clean(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [clean(item) for item in value]
+        return value
+    try:
+        document = json.loads(text)
+        redacted = clean(document)
+        return text if redacted == document else json.dumps(redacted, ensure_ascii=False)
+    except (ValueError, TypeError):
+        # Form data and common plaintext key=value error messages.
+        from urllib.parse import unquote_plus
+
+        if "=" not in text:
+            return text
+
+        def form_value(match):
+            name = unquote_plus(match[2])
+            if CREDENTIAL_QUERY.match(name) or name.lower() in names:
+                return match[1] + match[2] + "=<credential>"
+            return match[0]
+
+        text = re.sub(r"(^|&)([^=&\s]+)=([^&]*)", form_value, text)
+        return re.sub(r"(?i)((?:[\w-]*(?:token|password|secret|api[-_]?key|session)[\w-]*)=)[^&\s]+",
+                      r"\1<credential>", text)
 
 
 def _sh_quote(value: str) -> str:
@@ -165,6 +199,74 @@ class Exchange:
     error: str = ""
     mutating: bool = False
     identity: str = "anonymous"
+    # A stable per-run request id, assigned by the run's receipt store when the
+    # request is dispatched. Empty for an ad-hoc send outside a persisted run.
+    exchange_id: str = ""
+    # The lifecycle state of this one request, distinct from its HTTP status:
+    # "" (not dispatched) | dispatched | responded | timed-out | transport-error
+    # | cancelled-before-dispatch | interrupted-unknown. "dispatched" without a
+    # later state means the outcome is genuinely unknown (process ended, or the
+    # request was in flight when the run stopped); it is never assumed sent-and-
+    # answered, and never re-sent.
+    outcome: str = ""
+    redacted_names: set = field(default_factory=set, repr=False)
+
+    def safe_text(self, text: str | None, *, redact_properties: bool = True) -> str:
+        """Also remove credentials echoed outside named properties by a target."""
+        from urllib.parse import parse_qsl, quote, quote_plus, urlsplit
+        secrets = set()
+        for name, value in self.request_headers.items():
+            if (name.lower() in REDACTED_HEADERS or name.lower() in self.redacted_names
+                    or CREDENTIAL_QUERY.match(name)):
+                secrets.add(str(value))
+                if name.lower() == "cookie":
+                    secrets.update(piece.partition("=")[2].strip() for piece in str(value).split(";"))
+                elif " " in str(value):
+                    secrets.add(str(value).split(" ", 1)[1])
+        secrets.update(value for key, value in parse_qsl(urlsplit(self.url).query)
+                       if CREDENTIAL_QUERY.match(key) or key.lower() in self.redacted_names)
+        def collect(value):
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    if CREDENTIAL_QUERY.match(key) or key.lower() in self.redacted_names:
+                        if isinstance(item, (str, int, float)):
+                            secrets.add(str(item))
+                    else:
+                        collect(item)
+            elif isinstance(value, list):
+                for item in value:
+                    collect(item)
+        try:
+            collect(json.loads(self.request_body or ""))
+        except (ValueError, TypeError):
+            secrets.update(value for key, value in parse_qsl(self.request_body or "")
+                           if CREDENTIAL_QUERY.match(key) or key.lower() in self.redacted_names)
+        result = redact_body(text, self.redacted_names) if redact_properties else (text or "")
+        def mask(value):
+            for secret in sorted(secrets, key=len, reverse=True):
+                if len(secret) >= 4:
+                    for encoded in {secret, quote(secret, safe=""), quote_plus(secret),
+                                    json.dumps(secret, ensure_ascii=False)[1:-1]}:
+                        value = value.replace(encoded, "<credential>")
+            return value
+
+        def values(value):
+            if isinstance(value, dict):
+                return {key: values(item) for key, item in value.items()}
+            if isinstance(value, list):
+                return [values(item) for item in value]
+            return mask(value) if isinstance(value, str) else value
+
+        # A credential can be the word "true" or a number. Never replace JSON
+        # syntax or property names while masking an echo inside a body.
+        if result.lstrip().startswith(("{", "[")):
+            try:
+                document = json.loads(result)
+                masked = values(document)
+                return result if masked == document else json.dumps(masked, ensure_ascii=False)
+            except (ValueError, TypeError):
+                pass
+        return mask(result)
 
     @property
     def ok(self) -> bool:
@@ -186,7 +288,7 @@ class Exchange:
         return default
 
     def excerpt(self, limit: int = 600) -> str:
-        text = self.body or ""
+        text = self.safe_text(self.body)
         return text[:limit] + ("…" if len(text) > limit else "")
 
     def _parts(self) -> list:
@@ -199,17 +301,16 @@ class Exchange:
         # Probes read redirects rather than following them, so the command must too.
         parts.append("--max-redirs")
         parts.append("0")
-        for name, value in redact_headers(self.request_headers).items():
+        for name, value in redact_headers(self.request_headers, self.redacted_names).items():
             if name.lower() in ("host", "content-length", "accept-encoding", "connection"):
                 continue
             # HTTP header names are case-insensitive; canonical case reads better
             # in a report than whatever the client library happened to send.
             canonical = "-".join(word.capitalize() for word in name.split("-"))
-            parts += ["-H", f"{canonical}: {value}"]
+            parts += ["-H", f"{canonical}: {self.safe_text(value)}"]
         if self.request_body:
-            body = self.request_body
-            parts += ["--data-raw", body if len(body) <= 2000 else body[:2000]]
-        parts.append(redact_url(self.url))
+            parts += ["--data-raw", self.safe_text(self.request_body)]
+        parts.append(self.safe_text(redact_url(self.url, self.redacted_names)))
         return parts
 
     def curl(self) -> str:
@@ -233,20 +334,25 @@ class Exchange:
 
     def to_dict(self) -> dict:
         return {
-            "label": self.label,
+            "label": self.safe_text(self.label),
             "identity": self.identity,
+            "exchange_id": self.exchange_id,
+            "outcome": self.outcome,
             "method": self.method,
-            "url": redact_url(self.url),
-            "request_headers": redact_headers(self.request_headers),
-            "request_body": self.request_body if self.request_body and len(self.request_body) <= 4000 else (self.request_body or "")[:4000] or None,
+            "url": self.safe_text(redact_url(self.url, self.redacted_names)),
+            "request_headers": {name: self.safe_text(value) for name, value in
+                                redact_headers(self.request_headers, self.redacted_names).items()},
+            "request_body": self.safe_text(self.request_body) if self.request_body is not None else None,
             "status": self.status,
-            "response_headers": self.headers,
+            "response_headers": {name: self.safe_text(value) for name, value in
+                                 redact_headers(self.headers, self.redacted_names).items()},
+            "response_body": self.safe_text(self.body),
             "body_excerpt": self.excerpt(),
             "body_length": self.length,
             "body_signature": body_signature(self.body),
             "elapsed_ms": self.elapsed_ms,
             "truncated": self.truncated,
-            "error": self.error,
+            "error": self.safe_text(self.error),
             "mutating": self.mutating,
             "curl": self.curl(),
             "commands": self.commands(),
@@ -378,6 +484,8 @@ def _exchange_from_dict(entry: dict) -> Exchange:
     exchange.truncated = bool(entry.get("truncated")) or (
         isinstance(entry.get("body_length"), int) and entry["body_length"] > len(exchange.body))
     exchange.error = str(entry.get("error") or "")
+    exchange.exchange_id = str(entry.get("exchange_id") or "")
+    exchange.outcome = str(entry.get("outcome") or "")
     return exchange
 
 

@@ -1,0 +1,23 @@
+meta {
+  name: JSON string
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/echo?case=string
+  body: json
+  auth: inherit
+}
+
+body:json {
+  "café 雪"
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

@@ -1,10 +1,13 @@
 """Parse/serialize Bruno definitions with the pinned official parser, offline."""
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path, PurePosixPath
 from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
 
@@ -12,28 +15,51 @@ from .bruno import MARKER, bounded, sanitise, sensitive
 from .runner import normalize_spec
 
 METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE", "POST", "PUT", "PATCH", "DELETE"})
+PARSER_VERSION = "0.40.0"
+FILESTORE_VERSION = "0.13.0"
+MAX_COLLECTION_FILES = 2200
 VARIABLE = re.compile(r"\{\{([^{}]+)\}\}")
 BRIDGE = Path(__file__).parent / "bruno_node" / "bridge.cjs"
 
 
-def parser(action, items):
+def parser(action, items, *, cancel_event=None):
     node = shutil.which("node")
     if not node:
         raise ValueError("Bruno definitions require Node.js 20 or newer on the Namazu server. JSON run reports do not require Node.")
     try:
-        result = subprocess.run([node, "--max-old-space-size=192", str(BRIDGE)], input=json.dumps({"action": action, "items": items}), capture_output=True, encoding="utf-8", timeout=15, check=False)
-        output = json.loads(result.stdout)
+        with subprocess.Popen([node, "--max-old-space-size=192", str(BRIDGE)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, encoding="utf-8", creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0) as process:
+            payload = json.dumps({"action": action, "items": items})
+            deadline = time.monotonic() + 15
+            while True:
+                if cancel_event is not None and cancel_event.is_set():
+                    process.kill()
+                    process.communicate()
+                    raise ValueError("Bruno parsing cancelled.")
+                if time.monotonic() >= deadline:
+                    process.kill()
+                    process.communicate()
+                    raise subprocess.TimeoutExpired("Bruno parser", 15)
+                try:
+                    stdout, _stderr = process.communicate(input=payload, timeout=0.1)
+                    break
+                except subprocess.TimeoutExpired:
+                    payload = None
+            output = json.loads(stdout)
+            returncode = process.returncode
     except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
+        if cancel_event is not None and cancel_event.is_set():
+            raise ValueError("Bruno parsing cancelled.") from None
         raise ValueError("Bruno parser could not complete within its limits. Check Node.js and reduce the selected files.") from exc
-    if result.returncode or output.get("error"):
+    if returncode or output.get("error"):
         raise ValueError(output.get("error") or "Bruno syntax was rejected by parser 0.40.0.")
     return output["result"]
 
 
 def file_map(files):
     bounded(files)
-    if not isinstance(files, list) or not files or len(files) > 200:
-        raise ValueError("Select 1–200 .bru files and optionally bruno.json. Archives are not accepted.")
+    if not isinstance(files, list) or not files or len(files) > MAX_COLLECTION_FILES:
+        raise ValueError("Select 1–2200 Bruno definition and metadata files per collection.")
     out = {}
     for item in files:
         if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("content"), str):
@@ -44,13 +70,13 @@ def file_map(files):
             raise ValueError("Use relative collection paths without traversal, drive letters or empty segments.")
         if name.casefold() in {key.casefold() for key in out}:
             raise ValueError("Duplicate file paths are not supported (including case-only duplicates).")
-        if not (name.endswith(".bru") or path.name == "bruno.json"):
-            raise ValueError("Only .bru and bruno.json files are accepted; referenced files and archives are never read.")
+        if not (name.endswith((".bru", ".yml", ".yaml")) or path.name == "bruno.json"):
+            raise ValueError("Only Bruno BRU/YAML definitions and bruno.json are accepted; referenced files are never read.")
         if len(item["content"].encode()) > 256 * 1024:
             raise ValueError("Each Bruno definition is limited to 256 KiB.")
         out[name] = item["content"]
     # Folder uploads include one outer directory; remove exactly the bruno.json root.
-    roots = [str(PurePosixPath(name).parent) for name in out if PurePosixPath(name).name == "bruno.json"]
+    roots = [str(PurePosixPath(name).parent) for name in out if PurePosixPath(name).name in {"bruno.json", "opencollection.yml", "opencollection.yaml"}]
     if len(roots) > 1:
         raise ValueError("Select exactly one collection root.")
     if roots and roots[0] != ".":
@@ -64,6 +90,52 @@ def file_map(files):
 def _vars(value):
     # A missing higher-precedence secret must shadow a lower static value.
     return {row["name"]: None if row.get("secret") else row.get("value", "") for row in value or [] if row.get("enabled", True)}
+
+
+def _redacted_values(original, cleaned):
+    """Learn source secrets once instead of rescanning every definition per row."""
+    if cleaned == MARKER and isinstance(original, str):
+        yield original
+        if original.lower().startswith(("bearer ", "basic ")):
+            yield original.split(" ", 1)[1]
+    elif isinstance(original, dict) and isinstance(cleaned, dict):
+        for key in original.keys() & cleaned.keys():
+            yield from _redacted_values(original[key], cleaned[key])
+    elif isinstance(original, list) and isinstance(cleaned, list):
+        for raw, safe in zip(original, cleaned, strict=False):
+            yield from _redacted_values(raw, safe)
+
+
+def _oauth_mapping(auth, resolve):
+    if auth.get("mode") != "oauth2":
+        return None
+    value = auth.get("oauth2") or {}
+    if (value.get("grantType") != "client_credentials" or value.get("credentialsPlacement", "body") not in {"body", "header"}
+            or value.get("tokenPlacement", "header") != "header" or value.get("tokenHeaderPrefix", "") not in {"", "Bearer", "bearer"}
+            or value.get("tokenSource", "access_token") != "access_token"
+            or any(value.get(key) for key in ("additionalParameters", "accessTokenAdditionalParameters", "refreshTokenAdditionalParameters"))):
+        return None
+    result = {"grant": "client_credentials", "endpoint": resolve(value.get("accessTokenUrl", "")),
+              "client_id": resolve(value.get("clientId", "")), "scope": resolve(value.get("scope", "")),
+              "credential_placement": "basic" if value.get("credentialsPlacement", "body") == "header" else "post",
+              "secret_reference": ", ".join(VARIABLE.findall(value.get("clientSecret") or "")) or "local client secret required"}
+    try:
+        parts = urlsplit(result["endpoint"])
+        if parts.scheme not in {"http", "https"} or not parts.hostname or parts.username or parts.password or parts.query or parts.fragment:
+            return None
+    except ValueError:
+        return None
+    if not result["client_id"] or "{{" in json.dumps(result):
+        return None
+    return result
+
+
+def _resolve_config(value, resolve):
+    if isinstance(value, dict):
+        return {key: _resolve_config(item, resolve) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_resolve_config(item, resolve) for item in value]
+    return resolve(value)
 
 
 def operation_matches(request, spec):
@@ -82,7 +154,7 @@ def operation_matches(request, spec):
     return [op["id"] for op in parsed["operations"] if op["method"] == request.get("method") and re.fullmatch(re.sub(r"\\\{[^{}]+\\\}", "[^/]+", re.escape(op["path"])), path)]
 
 
-def import_collection(files, *, environment=None, spec=None, credential_names=()):
+def import_collection(files, *, environment=None, spec=None, credential_names=(), global_variables=(), cancel_event=None):
     files = file_map(files)
     config = {}
     if "bruno.json" in files:
@@ -92,17 +164,58 @@ def import_collection(files, *, environment=None, spec=None, credential_names=()
             raise ValueError("bruno.json is not valid JSON.") from exc
         if not isinstance(config, dict) or str(config.get("version")) != "1" or config.get("type") != "collection":
             raise ValueError("Expected a Bruno bruno.json collection manifest, version 1.")
-    paths = [name for name in files if name.endswith(".bru")]
-    kinds = ["environment" if name.startswith("environments/") else "collection" if PurePosixPath(name).name in ("collection.bru", "folder.bru") else "request" for name in paths]
-    parsed = dict(zip(paths, parser("parse", [{"kind": kind, "value": files[name]} for name, kind in zip(paths, kinds, strict=True)]), strict=True))
-    envs = sorted(name[len("environments/"):-4] for name in paths if name.startswith("environments/"))
+    from .bruno_yaml import definition as yaml_definition
+    from .bruno_yaml import unsupported_features
+    paths, kinds, parsed = [], [], {}
+    parse_items = []
+    for name in files:
+        if name == "bruno.json":
+            continue
+        yaml = name.endswith((".yml", ".yaml"))
+        basename = PurePosixPath(name).name
+        kind = ("environment" if name.startswith("environments/") else "collection"
+                if basename in {"collection.bru", "folder.bru", "opencollection.yml", "opencollection.yaml", "folder.yml", "folder.yaml"} else "request")
+        parser_kind = ("yamlEnvironment" if kind == "environment" else "yamlCollection" if basename.startswith("opencollection.")
+                       else "yamlFolder" if kind == "collection" else "yamlRequest") if yaml else kind
+        if yaml:
+            unsupported_features(files[name], parser_kind)
+        paths.append(name)
+        kinds.append(kind)
+        parse_items.append({"kind": parser_kind, "value": files[name]})
+    values = []
+    for offset in range(0, len(parse_items), 200):
+        values.extend(parser("parse", parse_items[offset:offset + 200], cancel_event=cancel_event))
+    for name, item, value in zip(paths, parse_items, values, strict=True):
+        if item["kind"] == "yamlCollection":
+            config = value["brunoConfig"]
+            if config.get("opencollection") != "1.0.0":
+                raise ValueError("Only OpenCollection 1.0.0 collections verified with Bruno 4.2.1 are supported.")
+        converted = yaml_definition(value, item["kind"]) if item["kind"].startswith("yaml") else value
+        if item["kind"].startswith("yaml") and (unsupported := unsupported_features(files[name], item["kind"])):
+            converted["unsupported_yaml_features"] = unsupported
+        canonical = ("collection.bru" if item["kind"] == "yamlCollection" else str(PurePosixPath(name).with_suffix(".bru"))
+                     if item["kind"] in {"yamlFolder", "yamlEnvironment"} else name)
+        if canonical in parsed:
+            raise ValueError("Ambiguous BRU and YAML metadata for the same scope.")
+        parsed[canonical] = converted
+    envs = sorted(name[len("environments/"):-4] for name in parsed if name.startswith("environments/"))
     if envs and environment is None:
         return {"requires_environment": True, "environments": envs, "requests": [], "warnings": ["Explicitly choose an environment, or No environment, before resolving requests."], "requests_sent": 0}
     if environment and environment not in envs:
         raise ValueError("Selected environment is absent. Upload its .bru file or choose No environment.")
     env = parsed.get(f"environments/{environment}.bru", {})
+    if env.get("extends"):
+        entries = [{**item, "name": name[len("environments/"):-4], "uid": name} for name, item in parsed.items() if name.startswith("environments/")]
+        env = parser("parse", [{"kind": "resolveEnvironment", "value": {"environments": entries,
+            "targetEnvironment": {**env, "name": environment, "uid": environment}, "merge": True}}], cancel_event=cancel_event)[0]
+        if env.get("missingInheritedEnvironmentName") or env.get("cyclicInheritancePath") or not isinstance(env.get("extends"), str):
+            env["unresolvedInheritance"] = True
+        else:
+            env = {key: item for key, item in env.items() if key not in {"extends", "name", "uid", "missingInheritedEnvironmentName", "cyclicInheritancePath"}}
     collection = parsed.get("collection.bru", {})
-    source = sanitise({"manifest": config, "definitions": parsed}, credential_names)
+    raw_source = {"manifest": config, "definitions": parsed, "global_variables": list(global_variables)}
+    source = sanitise(raw_source, credential_names)
+    source_secrets = tuple(set(_redacted_values(raw_source, source)))
     results = []
     for path, kind in zip(paths, kinds, strict=True):
         if kind != "request":
@@ -120,7 +233,8 @@ def import_collection(files, *, environment=None, spec=None, credential_names=()
             if key in parsed:
                 ancestors.append(parsed[key])
         scopes = [collection, *ancestors, definition]
-        variables = _vars((collection.get("vars") or {}).get("req"))
+        variables = _vars(global_variables)
+        variables.update(_vars((collection.get("vars") or {}).get("req")))
         variables.update(_vars(env.get("variables")))
         for scope in [*ancestors, definition]:
             variables.update(_vars((scope.get("vars") or {}).get("req")))
@@ -154,14 +268,30 @@ def import_collection(files, *, environment=None, spec=None, credential_names=()
                 name = resolve(h["name"])
                 # Credentials become references; never materialize an auth header.
                 if sensitive(name, credential_names):
-                    auth_refs.append({"header": name, "reference": VARIABLE.findall(str(h.get("value", ""))) or ["local identity required"]})
+                    reference = {"header": name, "reference": VARIABLE.findall(str(h.get("value", ""))) or ["local identity required"]}
+                    if name.lower() in {"authorization", "proxy-authorization"}:
+                        scheme = re.match(r"^\s*(Bearer|Basic|Digest|Negotiate|NTLM)\s+", str(h.get("value", "")), re.I)
+                        reference["scheme"] = scheme[1].lower() if scheme else "unresolved"
+                    auth_refs.append(reference)
                 else:
-                    headers = {k: v for k, v in headers.items() if k.lower() != name.lower()}
                     headers[name] = resolve(h.get("value", ""))
-            if scope is not definition and (scope.get("auth") or {}).get("mode") not in (None, "inherit"):
+            if scope is collection:
+                inherited_auth = scope.get("auth") or {"mode": "none"}
+            elif scope is not definition and (scope.get("auth") or {}).get("mode") not in (None, "none", "inherit"):
                 inherited_auth = scope["auth"]
+        # CLI 4.2.1 merges inherited headers with a case-sensitive Map; Axios
+        # then collapses case variants in insertion order. Updating an existing
+        # spelling does not move it after a later, differently cased spelling.
+        collapsed = {}
+        for name, value in headers.items():
+            if any(key.lower() == name.lower() and key != name for key in collapsed):
+                warnings.append("Case-variant inherited headers use Bruno CLI 4.2.1 insertion-order precedence; review the resolved header value.")
+            collapsed = {key: val for key, val in collapsed.items() if key.lower() != name.lower()}
+            collapsed[name] = value
+        headers = collapsed
         mode = http.get("auth", "none")
         auth = inherited_auth if mode == "inherit" else {"mode": mode, **(definition.get("auth") or {})}
+        oauth_mapping = _oauth_mapping(auth, resolve)
         if auth.get("mode") not in (None, "none"):
             auth_refs.append({"mode": auth.get("mode"), "variables": VARIABLE.findall(json.dumps(auth)), "mapping": "local identity required"})
             warnings.append("Authentication must be mapped to a Namazu identity; no token acquisition or signing is performed.")
@@ -185,10 +315,12 @@ def import_collection(files, *, environment=None, spec=None, credential_names=()
                     json.loads(body)
                 except (ValueError, TypeError):
                     blockers.append("JSON body is unresolved or invalid; interpolation cannot be represented faithfully.")
-            headers.setdefault("Content-Type", {"json": "application/json", "text": "text/plain", "xml": "application/xml"}[body_mode])
+            if not any(name.lower() == "content-type" for name in headers):
+                headers["Content-Type"] = {"json": "application/json", "text": "text/plain", "xml": "application/xml"}[body_mode]
         elif body_mode == "form-urlencoded":
             body = urlencode([(resolve(v["name"]), resolve(v.get("value", ""))) for v in (definition.get("body") or {}).get("formUrlEncoded", []) if v.get("enabled", True)])
-            headers.setdefault("Content-Type", "application/x-www-form-urlencoded")
+            if not any(name.lower() == "content-type" for name in headers):
+                headers["Content-Type"] = "application/x-www-form-urlencoded"
         elif body_mode != "none":
             blockers.append("Unsupported body mode: file, multipart, binary and GraphQL bodies are not converted or read.")
         if env.get("extends") or env.get("inherits") or env.get("parent"):
@@ -208,15 +340,32 @@ def import_collection(files, *, environment=None, spec=None, credential_names=()
         if any(scope.get("settings") for scope in scopes) or config.get("clientCertificates") or config.get("proxy"):
             warnings.append("Bruno transport/settings are not applied. Review Namazu TLS, redirect, timeout, proxy and rate settings separately.")
         for scope in scopes:
-            unknown = set(scope) - {"meta", "http", "headers", "params", "auth", "body", "vars", "script", "tests", "assertions", "settings", "docs"}
+            unknown = set(scope) - {"meta", "http", "headers", "params", "auth", "body", "vars", "script", "tests", "assertions", "settings", "docs", "examples"}
             if unknown:
                 blockers.append("Unsupported definition features: " + ", ".join(sorted(unknown)))
-        request = {"method": method, "url": url, "headers": headers, "body": body}
-        safe = sanitise({"source": {"parsed": parsed, "variables": variables}, "request": request}, credential_names)["request"]
+            if scope.get("examples"):
+                warnings.append("Saved examples are retained as inert definitions, not independently observed network evidence.")
+        request = {"method": method, "url": url, "headers": headers, "body": body,
+                   "body_mode": body_mode, "has_body": body is not None,
+                   "content_type": next((value for name, value in headers.items() if name.lower() == "content-type"), None)}
+        safe = sanitise({"variables": variables, "request": request}, credential_names, extra_secrets=source_secrets)["request"]
         if MARKER in json.dumps(safe):
             blockers.append("Redacted request values require local substitution before baseline preparation.")
-        results.append({"id": path, "name": source["definitions"][path].get("meta", {}).get("name") or path, "source_ref": path, "request": safe, "authentication": sanitise(auth_refs, credential_names), "unresolved": sorted(missing), "warnings": list(dict.fromkeys(warnings)), "blockers": list(dict.fromkeys(blockers)), "can_prepare": not blockers, "operation_matches": operation_matches(safe, spec)})
-    return {"collection": source["manifest"].get("name") or "Selected Bruno requests", "environment": environment or None, "environments": envs, "requests": results, "source": source, "requests_sent": 0, "warnings": ["Definitions are templates, not captured wire evidence or an authoritative response contract. Imports never execute requests, scripts or dynamic expressions."]}
+        results.append({"id": path, "name": source["definitions"][path].get("meta", {}).get("name") or path,
+                        "source_ref": path, "folder": str(PurePosixPath(path).parent) if PurePosixPath(path).parent != PurePosixPath(".") else "",
+                        "sequence": definition.get("meta", {}).get("seq"), "definition": source["definitions"][path],
+                        "variables": sanitise(variables, credential_names, extra_secrets=source_secrets),
+                        "request": safe, "authentication": sanitise(auth_refs, credential_names), "authentication_mode": auth.get("mode") or "none",
+                        "authentication_config": sanitise({"auth": _resolve_config(auth, resolve)}, credential_names, extra_secrets=source_secrets)["auth"],
+                        "oauth_client_credentials": sanitise({"oauth_client_credentials": oauth_mapping}, credential_names, extra_secrets=source_secrets)["oauth_client_credentials"] if oauth_mapping else None,
+                        "unresolved": sorted(missing), "warnings": list(dict.fromkeys(warnings)), "blockers": list(dict.fromkeys(blockers)),
+                        "can_prepare": not blockers, "operation_matches": operation_matches(safe, spec)})
+    return {"source_kind": "bruno-collection", "format": "bruno-request-definitions", "format_version": 1,
+            "parser_version": PARSER_VERSION, "filestore_version": FILESTORE_VERSION,
+            "definition_hash": hashlib.sha256(json.dumps({"files": files, "environment": environment, **({"global_variables": list(global_variables)} if global_variables else {})}, sort_keys=True, ensure_ascii=False).encode()).hexdigest(),
+            "response_contract": False, "collection": source["manifest"].get("name") or "Selected Bruno requests",
+            "environment": environment or None, "environments": envs, "requests": results, "source": source, "requests_sent": 0,
+            "warnings": ["Definitions are templates, not captured wire evidence or an authoritative response contract. Imports never execute requests, scripts or dynamic expressions."]}
 
 
 def export_collection(requests, *, credential_names=()):
@@ -264,19 +413,33 @@ def export_collection(requests, *, credential_names=()):
                 warnings.append(f"Request {index}: supply the complete {name} value locally, including any Bearer/Basic prefix.")
             out_headers.append({"name": name, "value": value, "enabled": True})
         body = request.get("body", request.get("request_body"))
+        content_type = next((v for k, v in headers.items() if k.lower() == "content-type"), request.get("content_type") or "")
+        if not isinstance(content_type, str) or any(char in content_type for char in "\r\n\x00"):
+            raise ValueError("Export requires a valid single-line Content-Type.")
+        media = content_type.lower()
+        body_encoding = request.get("body_encoding")
+        if body_encoding not in (None, "raw", "json-value"):
+            raise ValueError("Choose raw body text or an explicit JSON value representation for export.")
+        explicit_json_value = body_encoding == "json-value" or request.get("definition_only") is True
+        has_body = body is not None or request.get("has_body") is True
+        if body is None and "has_body" not in request:
+            warnings.append(f"Request {index}: body presence was not retained; no body is reconstructed from missing evidence.")
         mode, body_obj = "none", None
-        if body is not None:
-            if not isinstance(body, (str, dict, list, int, float, bool)):
+        if has_body:
+            if body is None and "json" not in media:
+                raise ValueError("An explicit null body requires a JSON media type; missing bytes are not reconstructed.")
+            if body is not None and not isinstance(body, (str, dict, list, int, float, bool)):
                 raise ValueError("Binary/file bodies cannot be exported.")
-            body = body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)
+            body = body if isinstance(body, str) and not (explicit_json_value and "json" in media) else json.dumps(body, ensure_ascii=False)
             secret_index = 0
             while MARKER in body:
                 secret_index += 1
                 body = body.replace(MARKER, variable(f"BODY_SECRET_{secret_index}"), 1)
-            content_type = next((v for k, v in headers.items() if k.lower() == "content-type"), "")
-            if "multipart/" in content_type or "octet-stream" in content_type:
+            if content_type and not any(header["name"].lower() == "content-type" for header in out_headers):
+                out_headers.append({"name": "Content-Type", "value": content_type, "enabled": True})
+            if "multipart/" in media or "octet-stream" in media:
                 raise ValueError("Multipart and binary bodies cannot be exported faithfully. Select a text/JSON request.")
-            mode = "json" if "json" in content_type else "xml" if "xml" in content_type else "text"
+            mode = "json" if "json" in media else "xml" if "xml" in media else "text"
             if mode == "json":
                 warnings.append(f"Request {index}: Bruno CLI reserializes JSON; whitespace and exact wire bytes may differ.")
             body_obj = {mode: body}

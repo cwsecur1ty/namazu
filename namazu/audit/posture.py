@@ -12,7 +12,9 @@ import time
 from datetime import datetime, timezone
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from . import probes
 from .model import Exchange, finding
+from .response_compare import edge_block_markers
 from .transport import BudgetExhausted, Executor
 
 WEAK_PROTOCOLS = {"SSLv2", "SSLv3", "TLSv1", "TLSv1.1"}
@@ -179,8 +181,9 @@ def trace_enabled(executor: Executor, *, base_url: str, endpoint: str, headers: 
                 "that value back in the response body."),
         detail=(f"TRACE returned HTTP 200 and the response body contained the probe header "
                 f"({probe_header}: {marker}), so the server reflects the request it received."),
-        impact=("Reflects headers the client sent, including cookies and Authorization, which historically "
-                "enabled Cross-Site Tracing. It also serves no purpose in production."),
+        impact="TRACE reflected the supplied probe marker. Request reflection can expose values sent in a request.",
+        limitations="The marker proves reflection only. Browser access, credential reflection and a "
+                    "Cross-Site Tracing consequence were not demonstrated.",
         remediation="Disable TRACE (and TRACK) at the web server, load balancer and application framework.",
         evidence={"status": probe.status, "echoed_header": f"{probe_header}: {marker}"},
         exchanges=[probe], scope="host",
@@ -189,23 +192,27 @@ def trace_enabled(executor: Executor, *, base_url: str, endpoint: str, headers: 
 
 def framing_controls(baseline: Exchange, endpoint: str) -> list:
     """Only meaningful when the API hands a browser something renderable."""
-    if "html" not in baseline.content_type:
+    content_type = baseline.header("content-type").split(";", 1)[0].strip().lower()
+    if (content_type not in {"text/html", "application/xhtml+xml"} or edge_block_markers(baseline)
+            or baseline.header("content-disposition").lower().startswith("attachment")):
         return []
     frame_options = baseline.header("x-frame-options")
     csp = baseline.header("content-security-policy")
     if frame_options or "frame-ancestors" in csp.lower():
         return []
     return [finding(
-        "clickjacking.missing-frame-controls", "HTML response allows framing by any site",
-        "low", "confirmed", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
-        detail=(f"The response is {baseline.content_type} but sets neither X-Frame-Options nor a "
+        "clickjacking.missing-frame-controls", "HTML response has no declared framing restriction",
+        "info", "confirmed", category="hardening", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
+        detail=(f"The response is {content_type} but sets neither X-Frame-Options nor a "
                 "Content-Security-Policy frame-ancestors directive."),
-        impact="Any site can frame this page and overlay it, so clicks can be redirected to actions here.",
+        impact="A framing restriction may protect browser pages with sensitive interactive actions.",
+        limitations="No browser framing attempt, authenticated interaction, sensitive action or clickjacking "
+                    "consequence was demonstrated. An HTML error page alone does not establish that risk.",
         remediation="Send Content-Security-Policy: frame-ancestors 'none' (or an explicit allow-list).",
-        evidence={"content_type": baseline.content_type,
+        evidence={"content_type": content_type,
                   "x_frame_options": frame_options or None,
                   "content_security_policy": csp or None},
-        exchanges=[baseline], scope="host",
+        exchanges=[baseline],
     )]
 
 
@@ -220,10 +227,11 @@ def downgrade_redirect(baseline: Exchange, endpoint: str) -> list:
         return []
     return [finding(
         "transport.downgrade-redirect", "HTTPS endpoint redirects to plain HTTP",
-        "high", "confirmed", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
+        "low", "confirmed", category="hardening", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
         detail=f"The HTTPS request returned HTTP {baseline.status} with Location: {location}.",
-        impact=("The client is sent to an unencrypted destination, so the next request, carrying the same "
-                "credentials, travels in clear text and can be intercepted or rewritten."),
+        impact="A client that follows this redirect makes its next request over an unencrypted connection.",
+        limitations="The redirect was not followed. Client redirect policy, credential forwarding and "
+                    "the content of a subsequent HTTP request were not established.",
         remediation="Redirect only to https:// targets and send Strict-Transport-Security.",
         evidence={"status": baseline.status, "location": location}, exchanges=[baseline], scope="host",
     )]
@@ -244,7 +252,7 @@ def pagination_enforced(executor: Executor, *, baseline: Exchange, endpoint: str
     """Ask for an absurd page size and see whether the server caps it."""
     names = [p.get("name") for p in (operation.get("parameters") or [])
              if p.get("in") == "query" and p.get("name") in PAGINATION_NAMES]
-    if not names or baseline.method != "GET" or not executor.affordable(1):
+    if not names or baseline.method != "GET" or not probes.successful(baseline) or not executor.affordable(1):
         return []
     name = names[0]
     probe = executor.send("GET", _set_query(baseline.url, name, "100000"),
@@ -278,7 +286,7 @@ def pagination_enforced(executor: Executor, *, baseline: Exchange, endpoint: str
 def rate_limiting(executor: Executor, *, baseline: Exchange, endpoint: str, headers: dict,
                   burst: int = 8) -> list:
     """A short burst: enough to see a limiter, far too few to be a load test."""
-    if baseline.method not in ("GET", "HEAD") or not executor.affordable(burst):
+    if baseline.method not in ("GET", "HEAD") or not probes.successful(baseline) or not executor.affordable(burst):
         return []
     if any(baseline.header(name) for name in RATE_HEADERS):
         return []  # The server already advertises a limit.
@@ -323,14 +331,28 @@ def review(executor: Executor, *, baseline: Exchange, endpoint: str, headers: di
            operation: dict, base_url: str, do_rate_limit: bool = False) -> list:
     """Run the posture probes that need traffic."""
     out: list = []
-    out += downgrade_redirect(baseline, endpoint)
-    out += framing_controls(baseline, endpoint)
+    out += probes.run(executor, "redirect-downgrade", lambda: downgrade_redirect(baseline, endpoint),
+                      family="posture", baseline=baseline, endpoint=endpoint, offline=True)
+    out += probes.run(executor, "framing", lambda: framing_controls(baseline, endpoint),
+                      family="posture", baseline=baseline, endpoint=endpoint, offline=True)
     try:
-        out += trace_enabled(executor, base_url=base_url, endpoint=endpoint, headers=headers)
-        out += pagination_enforced(executor, baseline=baseline, endpoint=endpoint,
-                                   headers=headers, operation=operation)
+        out += probes.run(executor, "trace", lambda: trace_enabled(
+            executor, base_url=base_url, endpoint=endpoint, headers=headers),
+            family="posture", baseline=baseline, endpoint=endpoint)
+        page_missing = ([] if baseline.method == "GET" else ["GET method"])
+        page_missing += ([] if probes.successful(baseline) else ["successful-positive-control"])
+        page_missing += ([] if any(p.get("in") == "query" and p.get("name") in PAGINATION_NAMES
+                                   for p in operation.get("parameters", [])) else ["pagination input"])
+        out += probes.run(executor, "pagination-bound", lambda: pagination_enforced(
+            executor, baseline=baseline, endpoint=endpoint, headers=headers, operation=operation),
+            family="posture", baseline=baseline, endpoint=endpoint, missing=page_missing,
+            applicable="pagination input" not in page_missing and baseline.method == "GET")
         if do_rate_limit:
-            out += rate_limiting(executor, baseline=baseline, endpoint=endpoint, headers=headers)
+            missing = ([] if baseline.method in ("GET", "HEAD") else ["read-only-method"])
+            missing += ([] if probes.successful(baseline) else ["successful-positive-control"])
+            out += probes.run(executor, "bounded-rate-observation", lambda: rate_limiting(
+                executor, baseline=baseline, endpoint=endpoint, headers=headers),
+                family="posture", baseline=baseline, endpoint=endpoint, missing=missing)
     except BudgetExhausted:
         pass
     return out

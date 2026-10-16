@@ -1,0 +1,19 @@
+meta {
+  name: Same request
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/space path/café?layer={{layer}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

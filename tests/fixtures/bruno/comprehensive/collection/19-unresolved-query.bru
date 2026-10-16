@@ -1,0 +1,19 @@
+meta {
+  name: Unresolved static input
+  type: http
+  seq: 21
+}
+
+get {
+  url: {{baseUrl}}/echo?unresolved={{missingValue}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

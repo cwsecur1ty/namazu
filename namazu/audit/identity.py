@@ -49,13 +49,14 @@ CREDENTIAL_HEADERS = frozenset({
 CLIENT_CLAIMS = ("client_id", "azp", "appid", "oid")
 
 
-def strip_credentials(headers: dict) -> dict:
+def strip_credentials(headers: dict, names=()) -> dict:
     """``headers`` with every credential this tool recognises removed."""
+    credential_names = CREDENTIAL_HEADERS | {str(name).lower() for name in names}
     return {name: value for name, value in (headers or {}).items()
-            if str(name).lower() not in CREDENTIAL_HEADERS}
+            if str(name).lower() not in credential_names}
 
 
-def _credentials(headers: dict) -> tuple[set[str], set[str]]:
+def _credentials(headers: dict, names=()) -> tuple[set[str], set[str]]:
     """Credential material these headers carry, as (token values, cookies).
 
     The two are kept apart because they compare differently. A token header
@@ -65,6 +66,7 @@ def _credentials(headers: dict) -> tuple[set[str], set[str]]:
     """
     tokens: set[str] = set()
     cookies: set[str] = set()
+    credential_names = CREDENTIAL_HEADERS | {str(name).lower() for name in names}
     for name, value in (headers or {}).items():
         lowered = str(name).lower()
         if not isinstance(value, str) or not value.strip():
@@ -72,7 +74,7 @@ def _credentials(headers: dict) -> tuple[set[str], set[str]]:
         if lowered == "cookie":
             cookies |= {item.strip() for item in value.split(";") if item.strip()}
             continue
-        if lowered not in CREDENTIAL_HEADERS:
+        if lowered not in credential_names:
             continue
         text = value.strip()
         tokens.add(text)
@@ -99,7 +101,7 @@ def subject(headers: dict) -> str | None:
     return None
 
 
-def same_principal(sent: dict, other: dict) -> str | None:
+def same_principal(sent: dict, other: dict, names=()) -> str | None:
     """Why ``other`` is the same caller as ``sent``, or None when it is not.
 
     Only positive evidence counts. Absence of evidence returns None and the
@@ -116,8 +118,8 @@ def same_principal(sent: dict, other: dict) -> str | None:
     """
     if not sent or not other:
         return None
-    held_tokens, held_cookies = _credentials(sent)
-    offered_tokens, offered_cookies = _credentials(other)
+    held_tokens, held_cookies = _credentials(sent, names)
+    offered_tokens, offered_cookies = _credentials(other, names)
     if offered_tokens & held_tokens:
         return "both identities send the same credential"
     # Nothing of its own: whatever this request is, it is not a second account

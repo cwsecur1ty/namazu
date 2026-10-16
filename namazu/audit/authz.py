@@ -16,10 +16,10 @@ import re
 import secrets
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from . import jwtlab
+from . import jwtlab, probes
 from .identity import same_principal, strip_credentials, subject
 from .model import Exchange, body_signature, finding, mark, similarity
-from .transport import BudgetExhausted, Executor
+from .transport import Executor
 
 ADMIN_PATH = re.compile(r"(?i)/(admin|administrator|manage|management|internal|private|sudo|root|"
                         r"superuser|console|backoffice|ops|system|config|settings/all)(/|$)")
@@ -94,33 +94,52 @@ def probe(executor: Executor, *, baseline: Exchange, endpoint: str, operation: d
           notes: list | None = None) -> list:
     """Run the authorization battery around an already-captured baseline."""
     findings: list = []
-    method = baseline.method
-    if method not in ("GET", "HEAD"):
-        return findings
     declared_auth = any(isinstance(entry, dict) and entry for entry in (operation.get("security") or []))
     authed = bool(identity_a)
-
-    try:
-        anonymous_findings, anonymous = _anonymous_replay(
-            executor, baseline, endpoint, declared_auth, authed, base_headers)
-        findings += anonymous_findings
-        if identity_b:
-            findings += _cross_identity(executor, baseline, endpoint, identity_b, base_headers,
-                                        declared_auth, anonymous, notes)
-        findings += _identifier_swap(executor, baseline, endpoint, base_headers, authed)
-        findings += _cors_reflection(executor, baseline, endpoint, base_headers)
-        findings += _method_tampering(executor, baseline, endpoint, base_headers)
-        if authed:
-            findings += _jwt_replay(executor, baseline, endpoint, identity_a, base_headers,
-                                    anonymous)
-    except BudgetExhausted:
-        pass
+    read_missing = [] if baseline.method in ("GET", "HEAD") else ["read-only-method"]
+    positive_missing = read_missing + ([] if probes.successful(baseline)
+                                       else ["successful-positive-control"])
+    anonymous = None
+    with probes.track(executor, "anonymous-replay", family="authorization", baseline=baseline,
+                      endpoint=endpoint, missing=positive_missing) as receipt:
+        if not receipt["missing_prerequisites"]:
+            anonymous_findings, anonymous = _anonymous_replay(
+                executor, baseline, endpoint, declared_auth, authed, base_headers)
+            findings += anonymous_findings
+    missing_cross = positive_missing + ([] if identity_b else ["second-identity"])
+    if identity_b and (reason := same_principal(base_headers, identity_b, getattr(executor, "redacted_names", ()))):
+        missing_cross.append(f"distinct second identity: {reason}")
+        if notes is not None:
+            notes.append(f"The cross-identity read did not run: {reason}. A boundary between "
+                         "two accounts can only be tested with two different accounts.")
+    findings += probes.run(executor, "cross-identity-replay", lambda: _cross_identity(
+        executor, baseline, endpoint, identity_b, base_headers, declared_auth, anonymous, notes),
+        family="cross-identity", baseline=baseline, endpoint=endpoint, missing=missing_cross)
+    findings += probes.run(executor, "identifier-swap", lambda: _identifier_swap(
+        executor, baseline, endpoint, base_headers, authed), family="authorization",
+        baseline=baseline, endpoint=endpoint,
+        missing=positive_missing + ([] if object_references(baseline.url) else ["object identifier"]),
+        applicable=bool(object_references(baseline.url)))
+    findings += probes.run(executor, "cors-reflection", lambda: _cors_reflection(
+        executor, baseline, endpoint, base_headers), family="posture", baseline=baseline,
+        endpoint=endpoint, missing=read_missing)
+    findings += probes.run(executor, "method-tampering", lambda: _method_tampering(
+        executor, baseline, endpoint, base_headers), family="access-bypass", baseline=baseline,
+        endpoint=endpoint, missing=read_missing + ([] if baseline.status in (401, 403)
+                                                  else ["denied baseline"]),
+        applicable=baseline.status in (401, 403))
+    findings += probes.run(executor, "jwt-replay", lambda: _jwt_replay(
+        executor, baseline, endpoint, identity_a, base_headers, anonymous), family="jwt",
+        baseline=baseline, endpoint=endpoint, missing=positive_missing
+        + ([] if jwtlab.bearer_token(identity_a) else ["JWT credential"])
+        + ([] if anonymous is not None and anonymous.ok else ["anonymous control response"]),
+        applicable=bool(jwtlab.bearer_token(identity_a)))
     return findings
 
 
 def _anonymous_replay(executor, baseline, endpoint, declared_auth, authed, base_headers):
     """Does the route answer with no credentials at all? Returns (findings, exchange)."""
-    stripped = strip_credentials(base_headers)
+    stripped = strip_credentials(base_headers, getattr(executor, "redacted_names", ()))
     if authed and stripped == base_headers:
         return [], None
     if not authed and not declared_auth:
@@ -203,12 +222,12 @@ def _cross_identity(executor, baseline, endpoint, identity_b, base_headers, decl
         return skipped(
             "the same data came back with no credentials at all, so the finding here is missing "
             "authentication, reported on its own, rather than a broken boundary between two accounts")
-    reason = same_principal(base_headers, identity_b)
+    reason = same_principal(base_headers, identity_b, getattr(executor, "redacted_names", ()))
     if reason:
         return skipped(f"{reason}. A boundary between two accounts can only be tested with two "
                        "different accounts")
 
-    headers = {**strip_credentials(base_headers), **identity_b}
+    headers = {**strip_credentials(base_headers, getattr(executor, "redacted_names", ())), **identity_b}
     # Named in the evidence when the credentials are readable, so a reader can
     # check for themselves that two different callers were compared.
     principals = {key: value for key, value in
@@ -333,8 +352,9 @@ def _cors_reflection(executor, baseline, endpoint, base_headers) -> list:
     credentials = probe_exchange.header("access-control-allow-credentials").lower() == "true"
     if allowed == probe_origin:
         return [finding(
-            "cors.origin-reflected", "CORS reflects any Origin it is sent",
-            "high" if credentials else "medium", "confirmed",
+            "cors.origin-reflected", "CORS reflects the tested Origin",
+            "low" if credentials else "info", "confirmed", category="hardening",
+            confirmed_claim="The response repeated the one tested Origin in Access-Control-Allow-Origin.",
             owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
             method=("Repeated the baseline request with an Origin header for a host that cannot be "
                     "registered, then read Access-Control-Allow-Origin and "
@@ -342,25 +362,30 @@ def _cors_reflection(executor, baseline, endpoint, base_headers) -> list:
             detail=(f"Sending Origin: {probe_origin} came back as Access-Control-Allow-Origin: "
                     f"{allowed}"
                     + (" together with Access-Control-Allow-Credentials: true." if credentials
-                       else ", so the allow-list is not actually checked.")),
-            impact=("Any website a victim visits can read this API's authenticated responses."
-                    if credentials else "Any website can read this response cross-origin."),
-            remediation="Compare the Origin against a fixed allow-list and echo it only on a match.",
+                       else ".")),
+            impact="The tested origin may warrant review against the intended browser origin policy.",
+            limitations="One reflected origin does not establish acceptance of every origin. No browser "
+                        "read, preflight, victim credential delivery or sensitive content disclosure was "
+                        "demonstrated. Cookie SameSite policy and authentication method affect exploitability.",
+            remediation="Compare the tested Origin with the intended allow-list and verify browser behaviour "
+                        "using an authorized identity and meaningful content assertions.",
             evidence={"sent_origin": probe_origin, "allow_origin": allowed,
                       "allow_credentials": credentials},
-            scope="host", exchanges=[probe_exchange],
+            exchanges=[probe_exchange],
         )]
     if allowed == "null":
         return [finding(
             "cors.null-origin", "CORS allows the null origin",
-            "medium", "confirmed", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
+            "info", "confirmed", category="hardening", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
             method=("Repeated the baseline request with a probe Origin header and read the "
                     "Access-Control-Allow-Origin value that came back."),
             detail="The server answered with Access-Control-Allow-Origin: null, which sandboxed iframes "
                    "and some redirects can present.",
-            impact="An attacker-controlled sandboxed document can read this response.",
-            remediation="Never allow the literal null origin.",
-            evidence={"allow_origin": allowed}, scope="host", exchanges=[probe_exchange],
+            impact="The null origin value needs review against the intended browser clients.",
+            limitations="The probe did not demonstrate a browser read from a null-origin document, "
+                        "credential delivery or sensitive content access.",
+            remediation="Allow the literal null origin only if an explicit reviewed use case requires it.",
+            evidence={"allow_origin": allowed}, exchanges=[probe_exchange],
         )]
     return []
 
@@ -375,19 +400,20 @@ def _method_tampering(executor, baseline, endpoint, base_headers) -> list:
                              headers=base_headers, identity="identity A")
         if head.ok and 200 <= head.status < 300:
             out.append(finding(
-                "authz.method-bypass", "A denied route answers a different method",
-                "high", "confirmed", owasp="API5:2023 Broken Function Level Authorization",
+                "authz.method-bypass", "Access-control lead: a denied route answers HEAD",
+                "info", "possible", category="informational", verification="observed",
+                owasp="API5:2023 Broken Function Level Authorization",
                 endpoint=endpoint,
                 method=("Sent HEAD to the same URL that refused the original method, and compared the two "
                         "statuses."),
                 detail=(f"{baseline.method} returned HTTP {baseline.status}, but HEAD on the same URL "
-                        f"returned HTTP {head.status}. The authorization rule is bound to the verb rather "
-                        "than the resource."),
-                impact="An attacker switches verbs to skip the check; response headers alone often leak "
-                       "existence, size and metadata.",
+                        f"returned HTTP {head.status}. This status difference does not establish "
+                        "that HEAD discloses protected data or shares the original authorization rule."),
+                impact="Compare the observed headers with an authorized control to assess whether protected metadata is exposed.",
+                limitations="No authorized positive control or protected-resource equivalence was established.",
                 remediation="Apply authorization to the route, not to individual methods.",
                 evidence={"denied_method": baseline.method, "denied_status": baseline.status,
-                          "allowed_method": "HEAD", "allowed_status": head.status},
+                          "allowed_method": "HEAD", "allowed_status": head.status, "signal_only": True},
                 exchanges=[baseline, head],
             ))
     if executor.affordable(1):
@@ -397,17 +423,20 @@ def _method_tampering(executor, baseline, endpoint, base_headers) -> list:
         )
         if override.ok and override.status != baseline.status and 200 <= override.status < 400:
             out.append(finding(
-                "authz.method-override-honoured", "Server honours X-HTTP-Method-Override",
-                "medium", "probable", owasp="API5:2023 Broken Function Level Authorization",
+                "authz.method-override-honoured", "Access-control lead: method-override header changes the response",
+                "info", "possible", category="informational", verification="observed",
+                owasp="API5:2023 Broken Function Level Authorization",
                 endpoint=endpoint,
                 method=("Repeated the request with an X-HTTP-Method-Override header and compared the status "
                         "with the unmodified request."),
                 detail=(f"Adding X-HTTP-Method-Override: HEAD changed the response from HTTP "
-                        f"{baseline.status} to HTTP {override.status}. A gateway or framework in front of "
-                        "the handler is rewriting the method from a client-supplied header."),
-                impact="Method-based rules at a proxy or WAF can be bypassed, including for write verbs.",
+                        f"{baseline.status} to HTTP {override.status}. This is a response-difference "
+                        "lead; it does not prove a method rewrite or identify the processing layer."),
+                impact="An authorized control is needed to determine whether this difference exposes protected data.",
+                limitations="Neither method rewriting nor an authorization bypass was demonstrated.",
                 remediation="Ignore method-override headers, or strip them at the edge before routing.",
-                evidence={"baseline_status": baseline.status, "override_status": override.status},
+                evidence={"baseline_status": baseline.status, "override_status": override.status,
+                          "signal_only": True},
                 exchanges=[baseline, override],
             ))
     return out
@@ -415,7 +444,11 @@ def _method_tampering(executor, baseline, endpoint, base_headers) -> list:
 
 def _jwt_replay(executor, baseline, endpoint, identity_a, base_headers,
                 anonymous=None) -> list:
-    """Forge a token offline, then replay it on a read-only route."""
+    """Replay forged tokens; offline inspection is a separate engine check."""
+    if not probes.successful(baseline) or baseline.method not in ("GET", "HEAD"):
+        return []
+    if anonymous is None or not anonymous.ok:
+        return []
     token = jwtlab.bearer_token(identity_a)
     if not token:
         return []
@@ -424,25 +457,6 @@ def _jwt_replay(executor, baseline, endpoint, identity_a, base_headers,
         return []
     out: list = []
     header_name = next((name for name in identity_a if name.lower() == "authorization"), None)
-
-    offline = [w for w in report["weaknesses"] if w["id"] in ("weak-secret", "remote-key-url", "kid-injectable",
-                                                              "no-expiry", "sensitive-claim", "long-lifetime")]
-    for weakness in offline:
-        severity = weakness["severity"]
-        out.append(finding(
-            f"jwt.{weakness['id']}", f"Supplied JWT weakness: {weakness['id'].replace('-', ' ')}",
-            severity, "confirmed", owasp="API2:2023 Broken Authentication", endpoint=endpoint,
-            detail=weakness["detail"] + " This was determined offline; no request was sent for it.",
-            impact=("The signing key is recoverable, so tokens can be minted for any user."
-                    if weakness["id"] == "weak-secret" else
-                    "Weakens the guarantees the token is supposed to provide."),
-            remediation=("Rotate to a high-entropy secret of at least 256 bits, or move to asymmetric signing."
-                         if weakness["id"] == "weak-secret" else
-                         "Set a short exp, pin the key source, and keep sensitive data out of the payload."),
-            evidence={"algorithm": report["algorithm"], "key_id": report.get("key_id"),
-                      "cracked_secret": report.get("cracked_secret"),
-                      "claims": report.get("privilege_claims")},
-        ))
 
     if not header_name or not executor.affordable(2):
         return out
@@ -503,13 +517,13 @@ def _jwt_replay(executor, baseline, endpoint, identity_a, base_headers,
             owasp="API2:2023 Broken Authentication", endpoint=endpoint,
                 method=("Recovered the signing secret offline from a wordlist, re-signed the claims with "
                         "raised privilege values, and replayed the read-only request with the forged token."),
-                detail=(f"The signing secret “{secret or '(empty)'}” was recovered offline, used to sign a "
+                detail=("The signing secret (value redacted) was recovered offline, used to sign a "
                         f"token with raised privilege claims, and the server returned HTTP "
                         f"{probe_exchange.status}. This is a full authentication bypass."),
                 impact="Any identity and any role can be claimed by forging a token offline.",
                 remediation="Rotate the signing key to a high-entropy value immediately and invalidate "
                             "existing tokens.",
-                evidence={"secret": secret, "escalated_claims": escalated, "status": probe_exchange.status},
+                evidence={"secret": "<credential>", "escalated_claims": escalated, "status": probe_exchange.status},
                 exchanges=[baseline, probe_exchange],
             ))
             return out

@@ -12,6 +12,7 @@ from .engine import (
     PROFILES,
     audit_inventory,
     audit_operation,
+    audit_plan,
     summarize,
 )
 from .model import Exchange, Finding
@@ -23,5 +24,6 @@ __all__ = [
     "Finding",
     "audit_inventory",
     "audit_operation",
+    "audit_plan",
     "summarize",
 ]

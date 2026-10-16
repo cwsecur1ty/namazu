@@ -1,0 +1,19 @@
+meta {
+  name: Edge block
+  type: http
+  seq: 19
+}
+
+get {
+  url: {{baseUrl}}/edge
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 403
+}
+
+settings {
+  timeout: 200
+}

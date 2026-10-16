@@ -33,7 +33,8 @@
     audit: { findings: [], running: false, cancelled: false, done: 0, total: 0,
              requests: 0, notes: [], discovery: null, finding: null, startedAt: null,
              log: [], logEntry: null, logTruncated: false, statuses: [],
-             coverage: {}, baselines: [], replays: {}, correlation: null },
+             coverage: {}, baselines: [], replays: {}, correlation: null,
+             plans: [], fieldCoverage: [], probes: [], requestBreakdown: {}, phase: null },
     // Per operation: a saved request known to work, and what a successful
     // response looks like. Both are what turn a baseline that never reached a
     // resource into one that did. Persisted, because an operator works out the
@@ -41,7 +42,10 @@
     examples: {},
     sequence: { steps: [], result: null },
     matrix: { rows: [], result: null },
+    setup: { stage: "api", targetSelected: false, identityRevision: 0, preparedRevision: -1 },
+    toolVersion: null,
   };
+  const desktopEmptyAudit = JSON.stringify(state.audit);
 
   const SEVERITIES = ["critical", "high", "medium", "low", "info"];
   // What the server uses when Requests in flight is left on the default.
@@ -50,7 +54,7 @@
     passive: "One request per endpoint. Everything else is read from the contract and that single response.",
     readonly: "Adds authorization, CORS, TLS, method and input probes. Only GET, HEAD and OPTIONS are sent; nothing is written.",
     thorough: "Everything read-only, with more parameters probed per endpoint and a short rate-limit burst. More requests per endpoint.",
-    writes: "Adds mass-assignment, write-authorization and request-body injection probes. Every one of these creates or modifies data on the target, and the report says how many.",
+    writes: "Adds bounded request-body and write-authorization probes. POSTs may generate content, incur costs or change data. Review each operation and arrange cleanup; successful writes are not assumed.",
   };
 
 
@@ -254,7 +258,12 @@
       if (!rows().length) addRow();
     }
 
-    function changed() { trailing(); onChange?.(); }
+    function changed() {
+      for (const row of rows()) {
+        row.querySelector(".kv-value").type = secretHeaderName(row.querySelector(".kv-name").value) ? "password" : "text";
+      }
+      trailing(); onChange?.();
+    }
 
 
 
@@ -272,7 +281,7 @@
       nameInput.value = name;
       nameInput.setAttribute("aria-label", `${noun} name`);
       const valueInput = el("input", "kv-value");
-      valueInput.type = "text";
+      valueInput.type = secretHeaderName(name) ? "password" : "text";
       valueInput.placeholder = "Value";
       valueInput.autocomplete = "off";
       valueInput.spellcheck = false;
@@ -417,13 +426,29 @@
     if (name === "runner") renderQueue();
     if (name === "history") renderHistory();
     if (name === "audit") renderFindings();
+    if (state.setup?.mounted) {
+      const auth = $("req-auth");
+      if (name === "source") {
+        $("setup-auth-mount").append(auth);
+        auth.hidden = false;
+        auth.removeAttribute("role");
+        auth.removeAttribute("aria-labelledby");
+        renderSetup();
+      } else {
+        state.setup.authHome.append(auth);
+        auth.setAttribute("role", "tabpanel");
+        auth.setAttribute("aria-labelledby", "req-auth-tab");
+        auth.hidden = $("req-auth-tab").getAttribute("aria-selected") !== "true";
+      }
+      renderRunContext();
+    }
   }
 
 
 
   /* ───────────────────────── busy + status ───────────────────────── */
 
-  const BUSY_IDS = ["send-request", "prepare-request", "regenerate", "format-body", "import-submit", "sample-import", "content-type", "empty-import", "empty-sample"];
+  const BUSY_IDS = ["send-request", "prepare-request", "save-request-baseline", "regenerate", "format-body", "import-submit", "sample-import", "content-type", "empty-import", "empty-sample"];
   function setBusy(value, activeId) {
     if (value && !state.busy) state.busyFocus = document.activeElement;
     state.busy = value;
@@ -456,6 +481,28 @@
     const value = source === "mirror" ? $("allow-writes-mirror").checked : $("allow-writes").checked;
     $("allow-writes").checked = value;
     $("allow-writes-mirror").checked = value;
+    if (!value && state.audit.running && state.audit.context?.profile === "writes") {
+      if (state.audit.runId) {
+        // Withdraw write authorisation on the server: further state-changing
+        // requests are refused from now on; the read-only work keeps running
+        // and nothing already sent is recalled.
+        if (!state.audit.writesWithdrawn) {
+          state.audit.writesWithdrawn = true;
+          const note = "Write authorisation withdrawn. No further state-changing request will be dispatched; requests already sent are not recalled. Partial evidence is retained.";
+          state.audit.notes.push(note); announce(note); auditProgress();
+          api(`/api/runs/${encodeURIComponent(state.audit.runId)}/withdraw-writes`, {}, "POST").catch(() => {});
+        }
+      } else if (!state.audit.cancelled) {
+        // Planning phase, still in the browser: stop before any traffic.
+        state.audit.cancelled = true;
+        const note = "Write permission withdrawn. Planning stopped; no target requests were sent.";
+        state.audit.notes.push(note);
+        $("cancel-audit").disabled = true;
+        $("cancel-audit").textContent = "Stopping…";
+        announce(note);
+        auditProgress();
+      }
+    }
     updateStatusBar();
     updateProfileNote();
   }
@@ -485,7 +532,14 @@
 
 
 
-  const headerKv = createKv("header-rows", { noun: "Header", onChange: () => { updateHeaderCount(); markRequestDirty(); } });
+  const headerKv = createKv("header-rows", { noun: "Header", onChange: () => {
+    updateHeaderCount(); markRequestDirty();
+    if (state.setup?.mounted) {
+      state.setup.identityRevision++;
+      state.setup.authentication = {};
+      renderSetup();
+    }
+  } });
 
   const importKv = createKv("import-header-rows", { noun: "Header" });
 
@@ -537,6 +591,17 @@
     }
     return headers;
   }
+  function credentialNames() {
+    const declared = Object.values(state.spec?.security_schemes || {})
+      .filter(scheme => scheme.type === "apiKey").map(scheme => scheme.name).filter(Boolean);
+    const selected = $("auth-mode")?.value === "apikey" ? $("apikey-name")?.value.trim() : "";
+    return [...new Set([...declared, selected].filter(Boolean))];
+  }
+  function secretHeaderName(name) {
+    const normalized = String(name).trim().toLowerCase();
+    return /authorization|cookie|api.?key|token|secret|password/i.test(normalized)
+      || credentialNames().some(item => item.toLowerCase() === normalized);
+  }
   function renderAuthState() {
     const mode = $("auth-mode").value;
     $("auth-bearer").hidden = mode !== "bearer";
@@ -561,8 +626,8 @@
       active = applied;
     } else if (mode === "apikey") {
       const name = $("apikey-name").value.trim();
-      text = name ? `Adds  ${name}: ••••` : "Enter a header name to send an API key.";
-      active = Boolean(name);
+      active = Boolean(name && $("apikey-value").value);
+      text = active ? `Adds  ${name}: ••••` : "Enter a header name and value to send an API key.";
     }
     $("auth-preview").textContent = text;
     $("auth-dot").hidden = !active;
@@ -570,6 +635,11 @@
       ? "Sent with single requests and runner requests. The Auth tab overwrites any matching header here."
       : "Sent with single requests and runner requests. Auth settings are applied on top of these.";
     markRequestDirty();
+    if (state.setup?.mounted) {
+      state.setup.identityRevision++;
+      state.setup.authentication = {};
+      renderSetup();
+    }
   }
 
 
@@ -648,6 +718,8 @@
 
 
       state.spec = spec;
+      state.desktopContext = null;
+      state.desktopRevision = (state.desktopRevision || 0) + 1;
 
       state.operation = null;
       loadExamples();
@@ -671,7 +743,11 @@
       $("ctx-title").title = spec.title || "Untitled API";
       const apiVersion = spec.api_version || "";
       $("ctx-version").textContent = apiVersion ? `v${String(apiVersion).replace(/^v/i, "")}` : (spec.version || "OpenAPI");
-      $("base-url").value = spec.base_url || "";
+      const choices = spec.setup?.server_choices || spec.servers || [];
+      const needsChoice = spec.setup?.target_selection_required || choices.length > 1;
+      $("base-url").value = needsChoice ? "" : (spec.setup?.suggested_target || spec.base_url || "");
+      state.setup.targetSelected = Boolean($("base-url").value);
+      state.baseOverride = true;
       $("server-options").replaceChildren(...(spec.servers || []).map((server) => {
         const option = el("option");
         option.value = typeof server === "string" ? server : server.url;
@@ -716,12 +792,13 @@
 
 
 
-      activateSection("endpoints");
-
       const first = spec.operations[0];
-      if (first) await selectOperation(first.id);
+      if (first) await selectOperation(first.id, {prepare: state.setup.targetSelected, focus: false});
       else { showView("view-empty"); updateEmptyState(); $("endpoint-search").focus(); }
+      state.setup.loadedSpec = null;
+      openSetup("api");
       announce(`Imported ${spec.title || "API"} with ${spec.operations.length} operations.`);
+      window.dispatchEvent(new CustomEvent("namazu:contract-imported", {detail: {spec}}));
     } catch (error) {
       message("import-error", errorText(error));
       activateSection("source");
@@ -1134,11 +1211,13 @@
 
   function connectionPayload() {
     const base = $("base-url").value.trim();
+    if (!base || state.setup?.targetSelected === false) throw new Error("Choose the API target in Setup before preparing or sending requests.");
     if (base && !/^https?:\/\//i.test(base)) throw new Error("The base URL must begin with http:// or https://.");
     return {
       spec: state.spec,
-      ...(base && state.baseOverride ? { base_url: base } : {}),
+      ...(base ? { base_url: base } : {}),
       headers: requestHeaders(),
+      credential_names: credentialNames(),
       ...routePayload(),
       timeout: numericTimeout("request-timeout"),
       allow_mutating: $("allow-writes").checked,
@@ -1348,6 +1427,38 @@
     if (state.history.length > limit) state.history.length = limit;
 
     renderHistory();
+  }
+
+  async function saveEditorBaseline() {
+    if (state.busy || !state.operation) return;
+    const operation = state.operation;
+    try {
+      const payload = requestPayload();
+      const spec = state.spec;
+      const identityRevision = state.setup.identityRevision;
+      const signature = JSON.stringify(payload);
+      const unchanged = () => state.operation === operation && state.spec === spec
+        && state.setup.identityRevision === identityRevision && JSON.stringify(requestPayload()) === signature;
+      setBusy(true, "save-request-baseline");
+      const built = await api("/api/prepare", payload);
+      if (!unchanged()) throw new Error("The request, target or identity changed. Review the current request and save it again.");
+      const saved = state.examples[operation.id] || {};
+      const prepared = await api("/api/readiness/prepare", {request: {method: built.method, url: built.url,
+        headers: built.headers || {}, ...(built.has_body ? {body: built.body} : {})},
+        base_url: payload.base_url, operation: operation.id, identity_ref: "primary",
+        credential_names: credentialNames(), expectation: saved.expectation || {status: "200"},
+        assertions: saved.assertions || saved.expectation?.business_assertions || []});
+      if (!unchanged()) throw new Error("The request, target or identity changed. Review the current request and save it again.");
+      state.examples[operation.id] = {example: {url: prepared.request.url, body: prepared.request.body,
+        headers: prepared.request.headers, content_type: built.content_type || payload.content_type, has_body: built.has_body},
+        expectation: prepared.expectation, identity_ref: "primary", assertions: prepared.assertions};
+      state.audit.readiness = {prepared};
+      state.setup.preparedRevision = state.setup.identityRevision;
+      saveExamples(); renderBaselineEditor();
+      $("setup-baseline-mount").replaceChildren();
+      toast("Request saved for this operation's audit. No target request sent. Define success assertions in Setup.");
+    } catch (error) { message("work-error", errorText(error)); }
+    finally { setBusy(false); }
   }
 
 
@@ -2456,7 +2567,7 @@
 
     const chosen = operations.filter((op) => state.selected.has(op.id));
 
-    return chosen.length ? chosen : operations;
+    return chosen;
   }
 
 
@@ -2464,11 +2575,10 @@
   function visibleFindings() {
     const query = $("finding-search").value.trim().toLowerCase();
     const severity = $("severity-filter").value;
-    const confidence = $("confidence-filter").value;
+    const evidenceLevel = $("confidence-filter").value;
     return state.audit.findings.filter((item) => {
       if (severity !== "all" && item.severity !== severity) return false;
-      if (confidence === "confirmed" && item.confidence !== "confirmed") return false;
-      if (confidence === "probable" && item.confidence === "possible") return false;
+      if (evidenceLevel !== "all" && presentationLevel(item) !== evidenceLevel) return false;
       if (!query) return true;
       return `${item.title} ${item.endpoint} ${item.owasp} ${item.id} ${item.parameter || ""}`
         .toLowerCase().includes(query);
@@ -2499,7 +2609,7 @@
       chip.type = "button";
       chip.dataset.sev = name;
       chip.append(el("span", "n", tally[name]), el("span", "", name));
-      chip.setAttribute("aria-label", `${tally[name]} ${name} findings. Filter to this severity.`);
+      chip.setAttribute("aria-label", `${tally[name]} ${name} records. Filter to this severity.`);
       chip.addEventListener("click", () => {
         $("severity-filter").value = active === name ? "all" : name;
         renderFindings();
@@ -2518,8 +2628,9 @@
     $("rail-findings").textContent = all.length;
     $("rail-findings").hidden = all.length === 0;
     $("audit-filters").hidden = all.length === 0;
-    $("export-audit").disabled = all.length === 0 && !state.audit.bruno;
-    $("export-audit-top").disabled = all.length === 0 && !state.audit.bruno;
+    const exportable = auditHasReport();
+    $("export-audit").disabled = !exportable;
+    $("export-audit-top").disabled = !exportable;
 
     renderSeverityBar();
 
@@ -2527,32 +2638,40 @@
 
     if (!all.length) {
       list.append(el("p", "list-empty", state.audit.running
-        ? "Running…" : "No findings yet. Run an audit to populate this list."));
+        ? "Audit in progress. Results appear as evidence is recorded."
+        : "No finding records. Review test observations, coverage and blockers in the report."));
       return;
     }
     const shown = visibleFindings();
     if (!shown.length) {
-      list.append(el("p", "list-empty", "No finding matches this filter."));
+      list.append(el("p", "list-empty", "No result matches this filter."));
       return;
     }
-    for (const item of shown) {
-      const row = el("button", `finding-row${state.audit.finding?.key === item.key ? " active" : ""}`);
-      row.type = "button";
-      row.dataset.sev = item.severity;
-      row.disabled = state.busy;
-      row.append(el("span", "edge"));
-      const main = el("div", "finding-main");
-      main.append(el("div", "finding-name", item.title));
-      const meta = el("div", "finding-meta");
-      meta.append(el("span", `conf ${item.confidence}`, item.confidence));
-      const tag = sourceTag(item);
-      if (tag) meta.append(tag);
-      meta.append(el("span", "ep", item.endpoint || item.owasp || ""));
-      main.append(meta);
-      row.append(main);
-      row.title = `${item.severity} · ${item.confidence} · ${item.endpoint}`;
-      row.addEventListener("click", () => showFinding(item));
-      list.append(row);
+    for (const group of findingSections(shown)) {
+      if (!group.items.length) continue;
+      const heading = el("h3", "finding-group-title", group.title);
+      heading.append(el("span", "finding-group-count", String(group.items.length)));
+      list.append(heading);
+      for (const item of group.items) {
+        const row = el("button", `finding-row${state.audit.finding?.key === item.key ? " active" : ""}`);
+        row.type = "button";
+        row.dataset.sev = item.severity;
+        row.dataset.evidence = presentationLevel(item);
+        row.disabled = state.busy;
+        row.append(el("span", "edge"));
+        const main = el("div", "finding-main");
+        main.append(el("div", "finding-name", item.title));
+        const meta = el("div", "finding-meta");
+        meta.append(el("span", "evidence-label", presentationLabel(item)));
+        const tag = sourceTag(item);
+        if (tag) meta.append(tag);
+        meta.append(el("span", "ep", item.endpoint || item.owasp || ""));
+        main.append(meta);
+        row.append(main);
+        row.title = `${presentationLabel(item)} · ${item.severity} · ${item.endpoint}`;
+        row.addEventListener("click", () => showFinding(item));
+        list.append(row);
+      }
     }
   }
 
@@ -2607,7 +2726,8 @@
     "Issue detail": true, "Issue background": false, "How this was found": true,
     "Impact": true, "Limitations": true, "Classification": true, "Evidence": true,
     "Proof of concept": true, "Check it yourself": true, "Remediation": true,
-    "Remediation background": false, "References": false,
+    "Remediation background": false, "References": false, "Test plan": false,
+    "Run totals": false, "Request breakdown": false, "Readiness": false, "Run notes": false,
   };
 
   function sectionOpen(key) {
@@ -2653,10 +2773,10 @@
     showView("view-finding");
     const source = findingSource(item);
     $("finding-severity").textContent = source
-      ? `${item.severity} · ${item.confidence} · ${source}`
-      : `${item.severity} · ${item.confidence}`;
-    $("finding-severity").className = "chip";
-    $("finding-severity").dataset.sev = item.severity;
+      ? `${presentationLabel(item)} · ${source}` : presentationLabel(item);
+    $("finding-severity").className = "chip evidence-label";
+    delete $("finding-severity").dataset.sev;
+    $("finding-severity").dataset.evidence = presentationLevel(item);
     $("finding-title").textContent = item.title;
     const axes = $("finding-axes");
     axes.replaceChildren();
@@ -2693,7 +2813,8 @@
     for (const [label, value] of [
       ["Endpoint", item.endpoint], ["Parameter", item.parameter],
       ["Classification", item.owasp], ["Weakness", item.cwe], ["Check", item.id],
-      ["Confidence", item.confidence], ["Changed data", item.mutating ? "yes" : "no"],
+      ["Recorded severity", item.severity], ["Evidence level", presentationLabel(item)],
+      ["Changed data", item.mutating ? "yes" : "no"],
     ]) {
       if (!value) continue;
       const row = el("div");
@@ -2720,7 +2841,7 @@
     }
     if (item.commands && !item.proof?.length) {
       card("Check it yourself", [
-        el("p", "hint", "This finding comes from the contract, so there is no request to replay. "
+        el("p", "hint", "This observation comes from the specification, so there is no request to replay. "
           + "These commands print the same part of the document."),
         commandBlock(item.commands, item.highlights),
       ]);
@@ -2744,7 +2865,7 @@
     }
     renderFindings();
     $("finding-title").focus();
-    announce(`Showing finding: ${item.title}.`);
+    announce(`Showing ${presentationLabel(item).toLowerCase()}: ${item.title}.`);
   }
 
   /**
@@ -2760,26 +2881,21 @@
     if (statuses.length < 2) return null;
     const notFound = statuses.filter((status) => status === 404).length;
     const unauthorised = statuses.filter((status) => status === 401 || status === 403).length;
-    const base = $("base-url").value.trim();
-    const servers = [...($("server-options").children || [])].map((option) => option.value);
-
     if (notFound / statuses.length >= 0.8) {
-      const suggestion = servers.find((server) => server && server !== base);
       return {
         kind: "bad",
-        text: `${notFound} of ${statuses.length} operations returned 404. That usually means the base `
-          + `URL is missing the path the API is served under, rather than the operations being absent. `
-          + `The contract paths are appended to the base URL exactly as written.`
-          + (suggestion ? ` The contract lists ${suggestion}; the run used ${base || "(empty)"}.` : ""),
+        text: `${notFound} of ${statuses.length} recorded baselines returned 404. Check the run's base `
+          + `URL and contract paths. The status alone does not establish why an operation was unavailable.`
+          + (audit.context?.base_url ? ` The run used ${redactUrl(audit.context.base_url)}.` : ""),
       };
     }
     if (unauthorised / statuses.length >= 0.8) {
       return {
         kind: "bad",
-        text: `${unauthorised} of ${statuses.length} operations returned 401 or 403. The audit is `
-          + `running unauthenticated or with a credential the API rejected. Configure OAuth 2 under `
-          + `Auth, or add the credential header, then run again. Findings from this run describe an `
-          + `API you were never let into.`,
+        text: `${unauthorised} of ${statuses.length} operations returned 401 or 403. Those responses `
+          + `do not establish successful access or downstream input validation. Inspect the recorded `
+          + `baseline and missing prerequisites; the status alone does not identify which server layer `
+          + `refused the request or whether a 403 rejected the credential.`,
       };
     }
     return null;
@@ -2787,24 +2903,49 @@
 
   function renderAuditReport() {
     const body = $("audit-report-body");
+    const view = $("view-audit-report");
+    const scroll = view.scrollTop;
     body.replaceChildren();
     const audit = state.audit;
     if (audit.bruno && window.NamazuBruno) {
       window.NamazuBruno.renderReport(audit.bruno, body, () => { showTraffic(); revealWork(); });
       return;
     }
-    if (!audit.total && !audit.findings.length) {
+    if (!auditHasReport()) {
       body.append(el("p", "pane-empty",
-        "No audit has run yet. Choose a profile on the left and select Run audit."));
+        "No audit has run yet. Review setup, then choose a profile and review the audit plan. Opening a saved report sends no target requests."));
       return;
     }
+
+    body.append(runProvenanceCard());
+
+    const plan = testPlanCard();
+    if (["planning", "review"].includes(audit.phase) && plan) body.append(reportCard("Test plan", plan,
+      { collapsible: false, key: "Test plan" }));
+    if (["planning", "review"].includes(audit.phase)) { view.scrollTop = scroll; return; }
+    if (audit.running && !audit.log.length) {
+      body.append(el("p", "hint", "Waiting for the current operation's evidence. The plan describes intended work; no completed coverage is claimed before receipts arrive."));
+      view.scrollTop = scroll; return;
+    }
+
+    if (window.NamazuAssessmentView) body.append(window.NamazuAssessmentView.render(audit, {
+      onReview: refreshAssessment,
+      onAction: setupAction,
+    }));
+
+    if (window.NamazuAuditResultsView) body.append(window.NamazuAuditResultsView.render(audit, {
+      onPolicyChange(policy) { audit.response_comparison = policy; audit.assessment = null; renderAuditReport(); },
+      onAction: setupAction,
+    }));
 
     const diagnosis = runDiagnostics();
     if (diagnosis) {
       body.append(reportCard("Check the run setup",
         [el("div", "prose caution prewrap", diagnosis.text)]));
     }
-    const tally = severityTally(audit.findings);
+    const demonstrated = audit.findings.filter(isVulnerability);
+    const observations = audit.findings.filter((item) => !isVulnerability(item));
+    const tally = severityTally(demonstrated);
 
     const grid = el("div", "tally");
     for (const name of SEVERITIES) {
@@ -2814,13 +2955,18 @@
       grid.append(cell);
     }
 
-    body.append(reportCard("Severity", [grid]));
+    const security = [el("p", "hint", `${demonstrated.length} records demonstrate security impact; `
+      + `${observations.length} other records are specification observations, behaviour observations or leads. `
+      + "Test receipts do not create findings. Review individual records in the sidebar.")];
+    if (demonstrated.length) security.push(grid);
+    else security.push(el("p", "prose", "No security impact was demonstrated in these records. This does not establish that the target is secure."));
+    if (!audit.assessment) body.append(reportCard("Security findings and observations", security));
 
 
 
     const owasp = {};
 
-    for (const item of audit.findings) if (item.owasp) owasp[item.owasp] = (owasp[item.owasp] || 0) + 1;
+    for (const item of demonstrated) if (item.owasp) owasp[item.owasp] = (owasp[item.owasp] || 0) + 1;
     const entries = Object.entries(owasp).sort((a, b) => b[1] - a[1]);
     if (entries.length) {
       const max = entries[0][1];
@@ -2836,26 +2982,36 @@
 
 
 
-    const confirmed = audit.findings.filter((item) => item.confidence === "confirmed").length;
-
     const coverage = el("dl", "facts");
+    const inventoryAttempts = audit.assessment?.request_accounting?.inventory?.request_attempts || audit.requestBreakdown?.inventory || 0;
     for (const [label, value] of [
-      ["Profile", `${auditProfile()}: ${PROFILE_NOTES[auditProfile()]}`],
-      ["Endpoints audited", `${audit.done} of ${audit.total}`],
+      ["Recorded profile", audit.context?.profile || "Not recorded"],
+      ["Endpoints audited", audit.imported && !audit.total ? "Operation completion totals not retained" : `${audit.done} of ${audit.total}`],
       ["Requests sent", String(audit.requests)],
-      ["Findings", `${audit.findings.length} (${confirmed} confirmed)`],
-      ["Second identity", Object.keys(identityB()).length
-        ? "supplied" : "not supplied, so cross-identity access was not tested at all"],
+      ["Finding / observation records", String(audit.findings.length)],
+      ["Second identity configured for this run", typeof audit.context?.second_identity === "boolean"
+        ? audit.context.second_identity ? "Yes; actual execution is recorded per check" : "No"
+        : "Not recorded; consult the individual check prerequisites"],
       ["Surface sweep", audit.discovery
         ? `${(audit.discovery.shadow || []).length} undocumented, ${(audit.discovery.exposed || []).length} exposed`
-        : "not run"],
+        : inventoryAttempts ? `${inventoryAttempts} inventory attempts retained; discovery summary unavailable`
+        : "No discovery summary retained"],
     ]) {
       const row = el("div");
       row.append(el("dt", "", label), el("dd", "", value));
       coverage.append(row);
     }
 
-    body.append(reportCard("Run totals", [coverage]));
+    body.append(reportCard("Run totals", [coverage], {collapsible: true, key: "Run totals"}));
+
+    const breakdown = requestBreakdownCard();
+    if (breakdown) body.append(reportCard("Request breakdown", breakdown, {collapsible: true, key: "Request breakdown"}));
+    if (!window.NamazuAuditResultsView) {
+      const fields = fieldCoverageCard();
+      if (fields) body.append(reportCard("Per-field coverage", fields));
+    }
+    if (!["planning", "review"].includes(audit.phase) && plan) body.append(reportCard("Test plan", plan,
+      { collapsible: true, key: "Test plan" }));
 
     const baselines = baselineCard();
     if (baselines) {
@@ -2877,29 +3033,144 @@
         { collapsible: true, key: "Duplicates" }));
     }
 
-    if (audit.notes.length) {
+    const displayedNotes = auditNotes(audit).notes;
+    if (displayedNotes.length) {
       const list = el("ul", "note-list");
 
-      for (const note of [...new Set(audit.notes)]) list.append(el("li", "", note));
+      for (const note of [...new Set(displayedNotes)]) list.append(el("li", "", note));
 
-      body.append(reportCard("Run notes", [list]));
+      body.append(reportCard("Run notes", [list], {collapsible: true, key: "Run notes"}));
     }
+    if (window.NamazuReadiness) {
+      const preparation = el("div");
+      mountReadiness(preparation);
+      body.append(reportCard("Prepare successful baseline and follow-up tests", [preparation],
+        {collapsible: true, key: "Readiness"}));
+    }
+    view.scrollTop = scroll;
+  }
+
+  function runProvenanceCard() {
+    const audit = state.audit, card = el("section", "run-provenance");
+    const reassessment = audit.offlineReassessment || audit.imported?.offline;
+    const kind = reassessment ? "Offline reassessment" : audit.imported ? "Imported historical run" : audit.phase === "review" || audit.phase === "planning" ? "Audit plan" : "Live local audit run";
+    card.append(el("h3", "", kind), el("p", "hint", audit.imported || reassessment
+      ? "Viewing retained evidence. No target requests were sent during this action; this is not a fresh test of the API."
+      : `${audit.currentActionRequests || 0} recorded target request attempts during this action. ${audit.accountingUncertain ? "The interrupted operation's accounting is incomplete." : ""}`));
+    const manifest = audit.assessment?.provenance?.contract;
+    const snapshots = Object.entries(audit.contractSnapshots || {});
+    const facts = el("dl", "facts");
+    for (const [label, value] of [["Target", audit.context?.base_url ? redactUrl(audit.context.base_url) : "Not recorded"],
+      ["Environment", audit.context?.environment || "Not recorded"], ["Active / recorded identity", audit.context?.identity_label || "Not recorded"],
+      ["Run time", audit.startedAt || "Not started / not recorded"], ["Run state", audit.runStatus || "Not recorded"],
+      ["Tool version at run time", audit.context?.tool_version || "Not recorded in this export"],
+      ["Contract snapshot", snapshots.length ? `${snapshots.length} operation response contract(s); SHA-256 ${manifest?.hash || "per operation below"}` : ["planning", "review"].includes(audit.phase) ? "Response contract snapshots will be retained with executed operations" : "Unavailable in this export; the contract cannot be reconstructed from responses"]]) {
+      const row = el("div"); row.append(el("dt", "", label), el("dd", "break", value)); facts.append(row);
+    }
+    card.append(facts);
+    if (snapshots.length) {
+      const details = el("details", "disclosure"); details.append(el("summary", "", "Contract snapshot hashes and scope"), el("p", "hint", "These snapshots contain response contracts and their local references. They are not complete original API specifications. Hashes describe the redacted snapshots."));
+      snapshots.forEach(([operation, snapshot]) => details.append(el("p", "mono break", `${operation}: ${snapshot.integrity?.hash || "Hash not recorded in this older snapshot"}`)));
+      (manifest?.operations || []).filter(row => row.hash_status === "mismatch").forEach(row => details.append(el("p", "caution", `${row.operation}: stored hash does not match the retained snapshot.`)));
+      card.append(details);
+    }
+    return card;
+  }
+
+  async function refreshAssessment(explicit = true) {
+    const audit = state.audit;
+    const assessment = await api("/api/audit/assess", auditExportPayload());
+    if (state.audit !== audit) return;
+    audit.assessment = assessment;
+    if (explicit && audit.imported) audit.offlineReassessment = true;
+    renderAuditReport();
+    auditProgress();
+  }
+
+  function preparedBaselineError(prepared, operation, baseUrl) {
+    if (!operation) return "Select the matching operation before saving its baseline.";
+    if (!["primary", "identity a", "a"].includes(String(prepared?.identity_ref || "").toLowerCase())) {
+      return "Saved audit baselines use the primary Auth identity. Set the preparation reference to primary, or use the Access matrix for another configured identity. No identity was remapped.";
+    }
+    const request = prepared?.request;
+    if (!request || request.method !== operation.method) return "Select the prepared request's method and operation before saving.";
+    try {
+      const target = new URL(request.url), base = new URL(baseUrl);
+      const route = base.pathname.replace(/\/$/, "") + operation.path;
+      const pattern = route.split(/(\{[^{}]+\})/).map((part) => /^\{/.test(part)
+        ? "[^/]+" : part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("");
+      if (target.origin !== base.origin || !new RegExp(`^${pattern}$`).test(target.pathname)) {
+        return "The prepared URL does not match the selected operation and base URL. Select that operation before saving.";
+      }
+    } catch { return "Set a valid base URL and prepared request URL before saving."; }
+    return "";
+  }
+
+  function mountReadiness(container) {
+    if (!container || !window.NamazuReadiness) return;
+    const baseline = state.audit.baselines?.find((row) => row.operation_id === state.operation?.id)
+      || state.audit.baselines?.[0];
+    window.NamazuReadiness.mount(container, {
+      api, initial: state.audit.readiness || {},
+      context: () => ({operation: state.operation ? `${state.operation.method} ${state.operation.path}` : baseline?.endpoint || "",
+        base_url: $("base-url")?.value || state.audit.context?.base_url || state.spec?.base_url || "",
+        baseline_exchange: baseline?.exchange || null,
+        profile: auditProfile(), allow_mutating: Boolean($("allow-writes")?.checked),
+        scope_urls: [$("base-url")?.value || state.audit.context?.base_url || state.spec?.base_url].filter(Boolean),
+        budget: 10, requests_per_second: 1,
+        identity_refs: ["primary", ...(Object.keys(identityB()).length ? ["secondary"] : [])],
+        credential_names: credentialNames(), identity_revision: state.setup.identityRevision,
+        incomplete_cases: (state.audit.log || []).flatMap((entry, index) => entry.error
+          ? [{...entry, evidence_pointer: `#/requests/${index}`}] : []), constraints: []}),
+      onChange(value) { state.audit.readiness = value; state.audit.assessment = null; state.setup.preparedRevision = state.setup.identityRevision; renderSetup(); },
+      onUseBaseline(value) {
+        const error = preparedBaselineError(state.audit.readiness?.prepared, state.operation, $("base-url")?.value || state.spec?.base_url);
+        if (error) { toast(error); return; }
+        state.examples[state.operation.id] = value;
+        saveExamples(); renderBaselineEditor();
+        toast("Prepared request saved. Configure credentials on Auth, then explicitly run the baseline when ready.");
+      },
+    });
   }
 
 
 
   function auditProgress() {
     const audit = state.audit;
-    const percent = audit.total ? Math.round((audit.done / audit.total) * 100) : 0;
-    $("audit-progress").hidden = !audit.total;
-    $("audit-progress").setAttribute("aria-valuenow", String(percent));
-    $("audit-progress").firstElementChild.style.width = `${percent}%`;
+    // Conditional work has no fixed denominator. Show receipts and a budget, not a percentage.
+    $("audit-progress").hidden = true;
+    $("audit-progress").removeAttribute("aria-valuenow");
+    const log = audit.log || [];
+    const responses = log.filter(row => Number(row.response?.status ?? row.status) >= 100).length;
+    const cases = audit.probes || [];
+    const counts = {completed: 0, blocked: 0, skipped: 0, incomplete: 0};
+    for (const row of cases) {
+      const status = row.status || row.state || "";
+      if (/execution-error|error|timeout|incomplete/.test(status)) counts.incomplete++;
+      else if (/blocked/.test(status)) counts.blocked++;
+      else if (/skipped|budget-exhausted|not-sent|not-applicable/.test(status)) counts.skipped++;
+      else if (row.request_sent || row.requests_sent > 0) counts.completed++;
+    }
+    $("audit-live-status").hidden = !audit.running && !audit.cancelled && audit.runStatus !== "incomplete" && !audit.interrupted;
+    $("audit-live-status").textContent = `${audit.running ? "Phase: " + (audit.phase || "starting") : "Incomplete run; partial evidence retained"}. `
+      + `${audit.requests} attempts recorded; ${responses} responses received. ${counts.completed} executed cases, ${counts.blocked} blocked, ${counts.skipped} skipped, ${counts.incomplete} incomplete. `
+      + `${Number.isFinite(audit.context?.budget) ? Math.max(0, audit.context.budget - audit.requests) + " budget remaining." : "Request budget not recorded."} `
+      + (audit.running ? "Counters update when the current operation returns. Stop waits for that operation and retains its evidence." : "Planned cases without receipts remain unexecuted; they are not completed coverage.");
     $("audit-foot").textContent = audit.running
       ? `${audit.done}/${audit.total} · ${audit.requests} requests`
-      : audit.total ? `${audit.findings.length} findings · ${audit.requests} requests` : "Not run";
-    $("audit-state").hidden = !audit.total;
-    $("audit-state").textContent = audit.running ? "running" : audit.cancelled ? "stopped" : "finished";
-    $("audit-state").className = `chip${audit.running || audit.cancelled ? " warn" : ""}`;
+      : audit.total || audit.imported || audit.requests || log.length ? `${audit.requests} attempts · ${responses} responses` : "Not run";
+    $("audit-state").hidden = !auditHasReport();
+    $("audit-state").textContent = audit.disconnected
+      ? "disconnected viewer · reconnecting"
+      : audit.running
+      ? audit.phase === "planning" ? "planning · no target requests sent"
+        : audit.reopened ? "live run · observing" : "running"
+      : audit.interrupted ? `interrupted run · ${audit.runStatus || "state unknown"}`
+      : audit.phase === "review" ? "plan awaiting review"
+      : audit.imported ? `${audit.offlineReassessment || audit.imported?.offline ? "offline reassessment" : "historical run"} · ${audit.runStatus || "state unknown"}`
+      : audit.runStatus || (audit.cancelled ? "incomplete" : "state unknown");
+    $("audit-state").className = `chip${audit.running || audit.cancelled || audit.interrupted || audit.disconnected ? " warn" : ""}`;
+    if (state.setup?.mounted) renderSetup();
   }
 
 
@@ -3176,6 +3447,7 @@
   }
 
   function accessKey() {
+    if (state.desktopContext) return `access:${state.desktopContext.key}:${$("base-url").value || ""}`;
     return `access:${state.spec?.title || "api"}:${$("base-url").value || ""}`;
   }
 
@@ -3448,6 +3720,7 @@
   // two environments of the same API do not share an example that only exists
   // in one of them.
   function examplesKey() {
+    if (state.desktopContext) return `examples:${state.desktopContext.key}:${$("base-url").value || ""}`;
     return `examples:${state.spec?.title || "api"}:${$("base-url").value || ""}`;
   }
 
@@ -3488,10 +3761,12 @@
     const invented = generatedInputs(operation);
     $("baseline-saved-note").textContent = parts.length
       ? `Applies to ${operation.method} ${operation.path}.`
+        + (expectation.business_assertions?.length ? ` ${expectation.business_assertions.length} business assertions remain required; review them in baseline preparation.` : "")
       : invented.length
         ? `The contract documents no example for ${invented.join(", ")}, so the generated `
           + "request will carry placeholder values for them."
         : "";
+    mountReadiness($("baseline-preparation"));
   }
 
   // The same rule the server applies, so the panel can warn before a run
@@ -3589,7 +3864,8 @@
   // Reading an export has to tolerate one written by a different version:
   // fields this build has never heard of, and fields it expects that are not
   // there. Refusing to open a report is a worse failure than losing a field.
-  function importAudit(text, filename) {
+  async function importAudit(text, filename) {
+    if (state.audit.running || state.busy) { toast("Wait for the current operation to finish before opening another run."); return; }
     let payload;
     try { payload = JSON.parse(text); }
     catch (error) { toast(`That file is not JSON: ${errorText(error)}`); return; }
@@ -3597,22 +3873,57 @@
       toast("That file does not look like a Namazu audit export.");
       return;
     }
+    const importSequence = (state.importSequence || 0) + 1;
+    const previousAudit = state.audit;
+    state.importSequence = importSequence;
+    try { payload = await api("/api/audit/import", payload); }
+    catch (error) { toast(`The report could not be safely opened: ${errorText(error)}. No target requests were sent.`); return false; }
+    if (state.importSequence !== importSequence || state.audit !== previousAudit || state.audit.running || state.busy) return false;
     const findings = payload.findings.filter((item) => item && typeof item === "object");
+    let responseComparison = payload.response_comparison || null;
+    try { if (window.NamazuAuditResults) responseComparison = window.NamazuAuditResults.normalizePolicy(responseComparison); }
+    catch (error) { toast(`Unsupported response comparison policy: ${errorText(error)}`); return; }
     state.audit = {
       findings: findings.map((item) => ({ ...item, key: findingKey(item) })),
       bruno: payload.bruno || null,
       brunoOriginal: payload.bruno ? payload : null,
-      running: false, cancelled: false,
+      running: false, cancelled: Boolean(payload.run?.cancelled),
+      runStatus: payload.run?.status || payload.provenance?.source_run?.status || "unknown",
+      currentActionRequests: 0,
+      accountingUncertain: Boolean(payload.run?.accounting_uncertain),
+      rateLimited: Boolean(payload.run?.rate_limited),
       done: payload.scope?.endpoints_audited || 0,
       total: payload.scope?.endpoints_in_scope || 0,
       requests: payload.scope?.requests_sent || 0,
       notes: Array.isArray(payload.notes) ? payload.notes.slice() : [],
+      originalNotes: Array.isArray(payload.original_notes) ? payload.original_notes.slice() : null,
+      response_comparison: responseComparison,
+      assessment: payload.assessment || null,
+      contractSnapshots: payload.contract_snapshots || {},
+      responseReviews: payload.response_reviews || [],
+      readiness: payload.readiness || null,
       discovery: payload.scope?.surface_sweep || null,
       finding: null, log: [], logEntry: null, logTruncated: false, statuses: [],
       coverage: {}, baselines: [], replays: payload.replays || {},
+      plans: Array.isArray(payload.test_plans) ? payload.test_plans : [],
+      fieldCoverage: Array.isArray(payload.coverage?.fields) ? payload.coverage.fields : [],
+      probes: Array.isArray(payload.coverage?.probes) ? payload.coverage.probes : [],
+      requestBreakdown: payload.scope?.request_breakdown || {}, phase: null,
+      inventoryPlanned: Boolean(payload.scope?.inventory_planned),
       correlation: payload.duplicates || null,
       startedAt: payload.started_at || null,
-      imported: { file: filename, exported_at: payload.exported_at || "" },
+      finishedAt: payload.run?.finished_at || null,
+      imported: { file: filename, exported_at: payload.exported_at || "", offline: payload.provenance?.kind === "offline-reassessment",
+        countsKnown: {done: Number.isFinite(payload.scope?.endpoints_audited), total: Number.isFinite(payload.scope?.endpoints_in_scope),
+          requests: Number.isFinite(payload.scope?.requests_sent) || Number.isFinite(payload.recorded_request_attempts)
+            || (Array.isArray(payload.requests) && payload.requests.length > 0 && !payload.requests_truncated)} },
+      provenance: payload.provenance || null,
+      context: { profile: payload.scope?.profile || null, base_url: payload.api?.base_url || payload.provenance?.source_run?.target || null,
+        title: payload.api?.title || null, version: payload.api?.version || null,
+        tool_version: payload.tool_version || payload.provenance?.source_run?.tool_version || null,
+        environment: payload.run?.environment || payload.provenance?.source_run?.environment || null,
+        identity_label: payload.run?.identity_label || null, budget: payload.scope?.request_budget ?? null,
+        second_identity: typeof payload.scope?.second_identity === "boolean" ? payload.scope.second_identity : null },
     };
     // Coverage written by this version comes back as a list; anything else is
     // left empty rather than guessed at, and the note says so.
@@ -3622,14 +3933,21 @@
         check: entry.check, title: entry.title || entry.check, what: entry.what || "",
         states: entry.states || { [entry.state || "skipped"]: 1 },
         findings: entry.findings || 0,
+        requests: Number.isFinite(entry.requests) ? entry.requests : null,
         blockedOn: entry.blocked_on || [], reasons: entry.reasons || [],
+        reasonCodes: entry.reason_codes || [],
+        missingPrerequisites: entry.missing_prerequisites || [],
         remediation: entry.remediation || "",
       };
     }
     for (const row of payload.coverage?.baselines || []) {
       if (row && typeof row === "object") state.audit.baselines.push(row);
     }
-    if (payload.bruno) absorbLog({log: Array.isArray(payload.requests) ? payload.requests : []}, "Imported Bruno run");
+    absorbLog({ log: Array.isArray(payload.requests) ? payload.requests : [] }, "Saved audit");
+    if (payload.bruno && state.audit.imported?.countsKnown) state.audit.imported.countsKnown.requests = false;
+    if (!Number.isFinite(payload.scope?.requests_sent)) state.audit.requests = Number.isFinite(payload.recorded_request_attempts)
+      ? payload.recorded_request_attempts : Array.isArray(payload.requests) ? payload.requests.length : 0;
+    state.audit.logTruncated ||= Boolean(payload.requests_truncated);
     const missing = [];
     if (!payload.coverage) missing.push("coverage");
     if (!payload.evidence_levels) missing.push("the evidence legend");
@@ -3655,13 +3973,25 @@
     renderAuditReport();
     renderLog();
     auditProgress();
-    toast(`Opened ${findings.length} finding(s) from ${filename}.`);
-    announce(`Opened a saved audit with ${findings.length} findings.`);
+    if (window.NamazuAssessmentView) refreshAssessment(false).catch((error) => {
+      if (state.audit.imported?.file === filename) {
+        state.audit.notes.push(`Offline assessment unavailable: ${errorText(error)}. No target requests were sent.`);
+        renderAuditReport();
+      }
+    });
+    $("audit-review-controls").hidden = true;
+    if ($("saved-report-dialog").open) $("saved-report-dialog").close();
+    toast(`Opened historical evidence from ${filename}. No target requests sent.`);
+    announce("Saved report opened. No target requests were sent.");
+    return true;
   }
 
   const KNOWN_EXPORT_KEYS = new Set([
     "application", "export", "exported_at", "started_at", "api", "scope", "summary", "bruno",
     "notes", "findings", "note", "coverage", "replays", "duplicates", "evidence_levels",
+    "test_plans", "requests", "requests_truncated", "response_comparison", "original_notes",
+    "assessment", "contract_snapshots", "response_reviews", "readiness",
+    "provenance", "tool_version", "run", "import_review",
   ]);
 
   /* ───────────────────── evidence, coverage and replay ───────────────────── */
@@ -3670,22 +4000,22 @@
   // the page explains itself even when a finding was read from an export
   // written by a different version.
   const CATEGORY_LABEL = {
-    security: "Security weakness",
+    security: "Security concern",
     hardening: "Hardening concern",
     contract: "Contract defect",
     reliability: "Reliability defect",
     informational: "Informational observation",
   };
   const ORIGIN_LABEL = {
-    "static-declaration": "Read from the specification",
+    "static-declaration": "Specification observation",
     "runtime-observation": "Observed in a response",
     "external-report": "Reported by another tool",
   };
   const VERIFICATION_LABEL = {
     unverified: "Not verified",
-    observed: "Observed once",
-    reproduced: "Reproduced on replay",
-    "impact-demonstrated": "Impact demonstrated",
+    observed: "Observed behaviour",
+    reproduced: "Reproduced behaviour",
+    "impact-demonstrated": "Demonstrated security impact",
   };
   const REPLAY_LABEL = {
     reproduced: "Reproduced",
@@ -3697,6 +4027,8 @@
   const COVERAGE_LABEL = {
     completed: "Ran",
     blocked: "Blocked",
+    "budget-exhausted": "Budget exhausted",
+    "execution-error": "Execution error",
     skipped: "Not in this profile",
     inconclusive: "Inconclusive",
     "not-applicable": "Nothing to test",
@@ -3704,6 +4036,36 @@
   };
 
   function assessmentOf(item) { return item.assessment || {}; }
+
+  // Confidence describes certainty in a recorded claim. It cannot promote a
+  // specification statement or a repeated response to demonstrated impact.
+  function presentationLevel(item) {
+    const assessment = assessmentOf(item);
+    if (assessment.origin === "static-declaration"
+        || (!assessment.origin && String(item.id || "").startsWith("spec."))) return "specification";
+    return Object.hasOwn(VERIFICATION_LABEL, assessment.verification)
+      ? assessment.verification : "unverified";
+  }
+
+  function presentationLabel(item) {
+    const level = presentationLevel(item);
+    if (level === "specification") return "Specification observation";
+    return VERIFICATION_LABEL[level];
+  }
+
+  function isVulnerability(item) {
+    const assessment = assessmentOf(item);
+    return assessment.category === "security"
+      && assessment.origin === "runtime-observation"
+      && assessment.verification === "impact-demonstrated";
+  }
+
+  function findingSections(items) {
+    return [
+      {key: "vulnerabilities", title: "Demonstrated vulnerabilities", items: items.filter(isVulnerability)},
+      {key: "observations", title: "Observations and leads", items: items.filter((item) => !isVulnerability(item))},
+    ];
+  }
 
   // The chips under a finding's title. Deliberately four separate chips rather
   // than one line: the whole point is that these say different things and a
@@ -3733,13 +4095,13 @@
     const parts = [];
     if (assessment.confirmed_claim) {
       const claim = el("div", "claim");
-      claim.append(el("div", "claim-label", `What “${item.confidence}” means here`),
+      claim.append(el("div", "claim-label", "What the recorded evidence establishes"),
         el("p", "prose", assessment.confirmed_claim));
       parts.push(claim);
     }
     const facts = el("dl", "facts");
     const rows = [
-      ["Kind of defect", CATEGORY_LABEL[assessment.category] || assessment.category,
+      ["Assessment category", CATEGORY_LABEL[assessment.category] || assessment.category,
         assessment.category_meaning],
       ["Evidence came from", ORIGIN_LABEL[assessment.origin] || assessment.origin,
         assessment.origin_meaning],
@@ -3908,7 +4270,8 @@
         if (assessment.verification === "observed" || assessment.verification === "unverified") {
           assessment.verification = "reproduced";
           assessment.verification_meaning = VERIFICATION_LABEL.reproduced;
-          renderFindings();
+          if (state.audit.finding?.key === item.key) showFinding(item);
+          else renderFindings();
         }
       }
       announce(`Replay ${result.outcome} after ${result.attempts} attempts.`);
@@ -3921,6 +4284,170 @@
   }
 
   /* ── the coverage report ── */
+
+  function auditHasReport() {
+    return Boolean(state.audit.total || state.audit.findings.length || state.audit.requests
+      || state.audit.plans?.length || Object.keys(state.audit.coverage).length);
+  }
+
+  const PROBE_STATUS_LABEL = {
+    planned: "Planned",
+    "request-sent": "Request sent",
+    "field-specific-response": "Field-specific response observed (lead)",
+    "field-specific-response-observed": "Field-specific response observed (lead)",
+    "field-response-observed": "Field-specific response observed (lead)",
+    "response-difference": "Response difference (lead)",
+    "same-denial": "Same denial as baseline; downstream handling unknown",
+    "same-denial-as-baseline": "Same denial as baseline; downstream handling unknown",
+    "edge-block-observed": "Explicit edge block page; downstream handling unknown",
+    "blocked-prerequisite": "Blocked prerequisite",
+    blocked: "Blocked prerequisite",
+    "budget-exhausted": "Budget exhausted",
+    "execution-error": "Execution error",
+    "not-sent": "Not sent (duplicate or unchanged request)",
+    error: "Execution error",
+  };
+
+  function probeStatus(probe) {
+    if (probe.reason_code === "field-validation-observed") return "Field validation observation";
+    const status = probe.status || probe.outcome || probe.state || "planned";
+    return PROBE_STATUS_LABEL[status] || status.replaceAll("_", " ").replaceAll("-", " ");
+  }
+
+  function reportTable(headings, rows) {
+    const wrap = el("div", "audit-table-scroll");
+    const table = el("table", "audit-table");
+    const head = el("tr");
+    for (const heading of headings) {
+      const cell = el("th", "", heading);
+      cell.scope = "col";
+      head.append(cell);
+    }
+    const thead = el("thead");
+    thead.append(head);
+    const tbody = el("tbody");
+    for (const values of rows) {
+      const row = el("tr");
+      for (const value of values) row.append(el("td", "", value ?? "-"));
+      tbody.append(row);
+    }
+    table.append(thead, tbody);
+    wrap.append(table);
+    return wrap;
+  }
+
+  function prerequisiteText(value) {
+    if (Array.isArray(value)) return value.map(prerequisiteText).join("; ");
+    if (value && typeof value === "object") return value.reason || value.description || stringify(value);
+    return value || "None";
+  }
+
+  function budgetText(value) {
+    if (value && typeof value === "object") {
+      const limit = value.limit ?? value.total ?? value.max_requests ?? value.request_budget;
+      const remaining = value.remaining ?? value.available;
+      return `${limit ?? stringify(value)}${remaining !== undefined ? ` (${remaining} remaining)` : ""}`;
+    }
+    return value ?? "Not recorded";
+  }
+
+  function plannedRequestCount(probe) {
+    if (probe.conditional || probe.request_count_kind === "upper-bound") {
+      return Number.isFinite(probe.planned_requests) && probe.planned_requests > 0
+        ? `Up to ${probe.planned_requests} (conditional)` : "Conditional; shared remaining budget";
+    }
+    return probe.planned_requests ?? 0;
+  }
+
+  function planProbeRows(probes, operation, budget) {
+    return probes.map((probe) => [probe.operation || operation, probe.field_pointer || "-",
+      [probe.mutation || probe.check, probe.category].filter(Boolean).join(" · "),
+      [prerequisiteText(probe.prerequisite), probe.missing_prerequisites?.length
+        ? `Missing: ${prerequisiteText(probe.missing_prerequisites)}` : ""].filter(Boolean).join(" · "),
+      plannedRequestCount(probe),
+      `${budgetText(probe.budget ?? budget)} · ${probe.conditional ? "Conditional" : probeStatus(probe)}`
+        + (probe.reason_code && probe.reason_code !== "ready" ? ` · ${probe.reason_code}` : "")]);
+  }
+
+  function testPlanCard() {
+    const plans = state.audit.plans || [];
+    if (!plans.length) return null;
+    const parts = [el("p", "hint", "Generated before target traffic. Each schema case changes one field "
+      + "against the saved baseline; prerequisites and the request budget may prevent execution. "
+      + "Inventory requests are separate from endpoint tests.")];
+    if (state.audit.inventoryPlanned) parts.push(el("p", "hint",
+      "Inventory / calibration sweep: up to 60 requests, using its own budget; it does not test input fields."));
+    for (const entry of plans) {
+      const plan = entry.test_plan || entry;
+      const operation = entry.endpoint || plan.operation || entry.operation_id || "Operation";
+      const probes = Array.isArray(plan.probes) ? plan.probes : [];
+      const planned = plan.planned_requests ?? probes.reduce((sum, probe) => sum + (probe.planned_requests || 0), 0);
+      const budgeted = plan.budgeted_requests ?? (Number.isFinite(plan.budget) ? Math.min(planned, plan.budget) : planned);
+      parts.push(el("p", "plan-operation", `${operation} · ${planned} eligible schema cases; `
+        + `up to ${budgeted} schema requests within budget · `
+        + `operation budget ${budgetText(entry.request_budget ?? plan.budget)}`));
+      parts.push(el("p", "hint", `${plan.baseline_requests ?? 1} baseline request(s). `
+        + "Planned cases are not a traffic target. Conditional probes share the remaining operation budget; "
+        + "their upper bounds are not added to a promised request total."));
+      for (const note of plan.notes || []) parts.push(el("p", "hint", note));
+      if (entry.error) parts.push(el("p", "prose caution", `Planning failed: ${entry.error}. No endpoint requests will be sent.`));
+      const headings = ["Operation", "Field JSON pointer", "Mutation", "Prerequisite", "Planned requests", "Budget / plan state"];
+      if (probes.length) parts.push(reportTable(
+        headings, planProbeRows(probes, operation, plan.budget ?? entry.request_budget)));
+      else if (!entry.error) parts.push(el("p", "hint", "No schema-derived input cases in this plan."));
+      if (plan.supplemental_probes?.length) {
+        parts.push(el("p", "plan-operation", "Conditional input probes"));
+        parts.push(reportTable(headings,
+          planProbeRows(plan.supplemental_probes, operation, entry.request_budget ?? plan.budget)));
+      }
+      if (plan.supplemental_checks?.length) {
+        parts.push(el("p", "plan-operation", "Other conditional checks"));
+        parts.push(reportTable(["Operation", "Check", "Prerequisite", "Planned requests"],
+          plan.supplemental_checks.map((check) => [check.operation || operation, check.title || check.check,
+            [prerequisiteText(check.prerequisite), check.missing_prerequisites?.length
+              ? `Missing: ${prerequisiteText(check.missing_prerequisites)}` : ""].filter(Boolean).join(" · "),
+            plannedRequestCount({ ...check, conditional: true })])));
+      }
+    }
+    return parts;
+  }
+
+  function requestBreakdownCard() {
+    const counts = state.audit.requestBreakdown || {};
+    if (!Object.keys(counts).length) return null;
+    return [reportTable(["Request purpose", "Sent"], [
+      ["Inventory / calibration", counts.inventory || 0],
+      ["Endpoint baseline", counts.baseline || 0],
+      ["Endpoint schema input mutations", counts.schema_inputs || 0],
+      ["Other endpoint tests", counts.other_endpoint_tests || 0],
+      ["Other / unclassified requests", counts.unclassified || 0],
+      ["Total requests", state.audit.requests],
+    ])];
+  }
+
+  function fieldCoverageCard() {
+    const fields = state.audit.fieldCoverage || [];
+    const probes = state.audit.probes || [];
+    if (!fields.length && !probes.length) return null;
+    const parts = [el("p", "hint", "Request sent and downstream validation observed are separate facts. "
+      + "A uniform 403 is inconclusive. Explicit field validation rejections are observations; unexplained differences are leads, not vulnerabilities; "
+      + "it does not identify which server layer processed the value.")];
+    if (fields.length) parts.push(reportTable(
+      ["Operation", "Field JSON pointer", "Planned", "Sent", "Observed outcomes", "Category / reasons / missing prerequisites"],
+      fields.map((field) => [field.operation || field.endpoint, field.field_pointer,
+        field.planned_requests ?? field.planned ?? field.probes?.length ?? "-",
+        field.requests_sent ?? field.sent ?? "-",
+        Object.entries(field.status_counts || field.outcomes || field.states || field.statuses || {}).map(([status, count]) =>
+          `${probeStatus({ status })}: ${count}`).join("; ") || probeStatus(field),
+        [field.category, ...(field.reason_codes || []), ...(field.missing_prerequisites || [])].filter(Boolean).join("; ")])));
+    if (probes.length) parts.push(reportTable(
+      ["Operation", "Field JSON pointer", "Mutation", "Request sent", "Observation", "Reason / prerequisite"],
+      probes.map((probe) => [probe.operation || probe.endpoint, probe.field_pointer || "-", probe.mutation || probe.check,
+        probe.request_sent === true || probe.requests_sent > 0 ? "Yes" : "No",
+        [probeStatus(probe), probe.observation].filter(Boolean).join(" · "), [probe.reason_code, probe.reason,
+          prerequisiteText(probe.missing_prerequisites || probe.prerequisite)].filter(Boolean).join(" · ")])));
+    return parts;
+  }
 
   function coverageCard() {
     const held = Object.values(state.audit.coverage);
@@ -3962,10 +4489,11 @@
       chip.textContent = COVERAGE_LABEL[name] || name;
       right.append(chip);
       if (entry.findings) right.append(el("span", "n", `${entry.findings} found`));
+      right.append(el("span", "n", Number.isFinite(entry.requests) ? `${entry.requests} requests` : "Request count not retained"));
       row.append(right);
       if (entry.reasons.length) {
         const why = el("div", "cov-why");
-        why.append(el("p", "prose", entry.reasons[0]));
+        for (const reason of entry.reasons) why.append(el("p", "prose", reason));
         if (entry.blockedOn.length) {
           why.append(el("p", "hint", `Affected: ${entry.blockedOn.slice(0, 6).join(", ")}`
             + (entry.blockedOn.length > 6 ? ` and ${entry.blockedOn.length - 6} more` : "")));
@@ -4021,6 +4549,22 @@
   // blocked, with every endpoint it was blocked on, because the reader needs
   // to know which routes were not covered rather than how many.
   function absorbCoverage(result, label) {
+    if (result.response_comparison) state.audit.response_comparison = result.response_comparison;
+    const operation = result.endpoint || label;
+    if (result.test_plan) {
+      const index = state.audit.plans.findIndex((entry) => entry.endpoint === operation);
+      const entry = { endpoint: operation, operation_id: result.operation_id,
+        request_budget: result.request_budget, test_plan: result.test_plan };
+      if (index < 0) state.audit.plans.push(entry);
+      // Keep the plan shown before execution, including conditional checks.
+      // Actual outcomes belong in the independent probe receipts below.
+    }
+    for (const field of result.field_coverage || result.coverage?.fields || []) {
+      state.audit.fieldCoverage.push({ operation, ...field });
+    }
+    for (const probe of result.probes || result.coverage?.probes || []) {
+      state.audit.probes.push({ operation, ...probe });
+    }
     if (result.baseline_verdict) {
       state.audit.baselines.push({
         endpoint: result.endpoint || label,
@@ -4029,25 +4573,38 @@
         reason: result.baseline_verdict.reason,
         remediation: result.baseline_verdict.remediation,
         usable: result.baseline_verdict.usable,
+        positive_control: result.baseline_verdict.positive_control,
+        operation_id: result.operation_id,
+        exchange: result.baseline || null,
       });
     }
     for (const entry of result.coverage?.checks || []) {
       const held = state.audit.coverage[entry.check] || {
         check: entry.check, title: entry.title, what: entry.what,
-        states: {}, findings: 0, blockedOn: [], reasons: [], remediation: "",
+        states: {}, findings: 0, requests: 0, blockedOn: [], reasons: [], remediation: "",
+        reasonCodes: [], missingPrerequisites: [],
       };
       held.states[entry.state] = (held.states[entry.state] || 0) + 1;
       held.findings += entry.findings || 0;
-      if (entry.state === "blocked" || entry.state === "inconclusive") {
+      held.requests = (held.requests || 0) + (entry.requests || 0);
+      for (const reason of entry.missing_prerequisites || []) {
+        const text = prerequisiteText(reason);
+        if (!held.reasons.includes(text)) held.reasons.push(text);
+        if (!held.missingPrerequisites.includes(text)) held.missingPrerequisites.push(text);
+      }
+      for (const reason of entry.reason_codes || (entry.reason_code ? [entry.reason_code] : [])) {
+        if (!held.reasonCodes.includes(reason)) held.reasonCodes.push(reason);
+      }
+      if (entry.reason && !held.reasons.includes(entry.reason)) held.reasons.push(entry.reason);
+      if (["blocked", "inconclusive", "execution-error", "budget-exhausted"].includes(entry.state)) {
         held.blockedOn.push(result.endpoint || label);
-        if (entry.reason && !held.reasons.includes(entry.reason)) held.reasons.push(entry.reason);
         held.remediation = held.remediation || entry.remediation || "";
       }
       state.audit.coverage[entry.check] = held;
     }
   }
 
-  const COVERAGE_ORDER = ["blocked", "inconclusive", "completed", "skipped", "not-applicable",
+  const COVERAGE_ORDER = ["execution-error", "budget-exhausted", "blocked", "inconclusive", "completed", "skipped", "not-applicable",
     "attempted"];
 
   // The worst state wins the label. A check completed on four endpoints and
@@ -4058,8 +4615,100 @@
     return "skipped";
   }
 
+  function auditNotes(audit) {
+    const original = Array.isArray(audit.notes) ? audit.notes.slice() : [];
+    const checks = Array.isArray(audit.coverage?.checks) ? audit.coverage.checks
+      : Object.values(audit.coverage || {}).filter((row) => row?.check);
+    const probes = audit.probes || audit.coverage?.probes || [];
+    const baselines = audit.baselines || audit.coverage?.baselines || [];
+    const plans = audit.plans || audit.test_plans || [];
+    const aliases = new Map(), operations = new Set();
+    for (const row of [...baselines, ...plans]) {
+      const endpoint = row.endpoint || row.operation || row.operation_id;
+      if (!endpoint) continue;
+      operations.add(endpoint);
+      for (const key of [endpoint, row.operation_id, row.operation]) if (key) aliases.set(key, endpoint);
+    }
+    const operationOf = (value) => aliases.get(value) || value;
+    for (const row of probes) {
+      const operation = operationOf(row.operation || row.endpoint);
+      if (operation) operations.add(operation);
+    }
+    const blocked = new Map(), titles = new Map(checks.map((row) => [row.check, row.title || row.check]));
+    const add = (operation, family) => {
+      if (!operation || !family) return;
+      if (!blocked.has(operation)) blocked.set(operation, new Set());
+      blocked.get(operation).add(family);
+    };
+    if (operations.size === 1 && checks.length) {
+      // A final operation ledger outranks partial blocked receipts in a family
+      // that also ran. Counting every blocked receipt would overcount posture.
+      const operation = [...operations][0];
+      blocked.set(operation, new Set());
+      for (const row of checks) {
+        const states = row.states || (row.state ? { [row.state]: 1 } : {});
+        if (row.state === "blocked" || (states.blocked && Object.keys(states).filter((key) => states[key]).length === 1)) {
+          add(operation, row.check);
+        }
+      }
+    } else {
+      const families = new Map();
+      for (const row of probes) {
+        const operation = operationOf(row.operation || row.endpoint), family = row.family;
+        if (!operation || !family) continue;
+        const key = JSON.stringify([operation, family]);
+        if (!families.has(key)) families.set(key, { operation, family, blocked: false, sent: false });
+        const held = families.get(key);
+        held.blocked ||= row.status === "blocked-prerequisite" || row.status === "blocked";
+        held.sent ||= row.request_sent === true || Number(row.requests || row.requests_sent || 0) > 0;
+      }
+      for (const row of families.values()) if (row.blocked && !row.sent) add(row.operation, row.family);
+      for (const row of checks) {
+        const states = row.states || (row.state ? { [row.state]: 1 } : {});
+        if (!states.blocked || Object.keys(states).some((key) => key !== "blocked" && states[key])) continue;
+        for (const endpoint of row.blockedOn || row.blocked_on || []) add(operationOf(endpoint), row.check);
+      }
+    }
+    // Only replace Namazu's exact generated aggregate notes. The originals are
+    // retained separately in exports; unrelated operator notes stay visible.
+    const legacy = /^(?:(.+): )?(?:The baseline was [a-z-]+ rather than a success, so )?\d+ check families did not run and are reported as blocked, not as clean: .+\. Nothing in this result says those areas are sound\.$/;
+    const replaced = new Set();
+    const notes = original.filter((note) => {
+      const match = typeof note === "string" ? note.match(legacy) : null;
+      if (!match) return true;
+      const operation = operationOf(match[1] || (operations.size === 1 ? [...operations][0] : ""));
+      if (!blocked.has(operation)) return true;
+      replaced.add(operation);
+      return false;
+    });
+    for (const operation of replaced) {
+      const families = [...blocked.get(operation)].sort();
+      const names = families.map((family) => titles.get(family) || family).join(", ");
+      notes.push(`${operation}: Recorded final coverage shows ${families.length} blocked check families`
+        + `${names ? `: ${names}` : ""}. Missing prerequisites remain untested; no security conclusion follows.`);
+    }
+    return { notes: [...new Set(notes)], reconciled: replaced.size > 0,
+      originalNotes: Array.isArray(audit.originalNotes) ? audit.originalNotes.slice()
+        : Array.isArray(audit.original_notes) ? audit.original_notes.slice()
+          : replaced.size ? original : null };
+  }
+
   function absorb(result, label) {
+    if (result.contract_snapshot) {
+      state.audit.contractSnapshots ||= {};
+      state.audit.contractSnapshots[result.endpoint || label] = result.contract_snapshot;
+    }
+    if (result.response_review) {
+      state.audit.responseReviews ||= [];
+      state.audit.responseReviews.push({endpoint: result.endpoint || label, response_review: result.response_review});
+    }
+    state.audit.assessment = null;
     state.audit.requests += result.requests_sent || 0;
+    const counts = result.request_breakdown || { unclassified: result.requests_sent || 0 };
+    for (const [purpose, count] of Object.entries(counts)) {
+      if (typeof count !== "number" || purpose === "total") continue;
+      state.audit.requestBreakdown[purpose] = (state.audit.requestBreakdown[purpose] || 0) + count;
+    }
     for (const note of result.notes || []) state.audit.notes.push(`${label}: ${note}`);
     absorbCoverage(result, label);
     for (const item of result.findings || []) {
@@ -4084,18 +4733,15 @@
     if (state.busy || state.audit.running || !state.spec) return;
     message("work-error", "");
     const profile = auditProfile();
-    if (profile === "writes" && !$("allow-writes").checked) {
-      activateSection("audit");
-      toast("Turn on Allow writes in the top bar before running write probes.");
-      return;
-    }
     let connection;
-    try { connection = connectionPayload(); }
+    try { connection = connectionPayload(); auditLimits(); }
     catch (error) { toast(errorText(error)); return; }
 
 
 
     const operations = auditScope();
+    if (!operations.length) { toast("Select at least one operation, or explicitly choose all operations. No scope was expanded."); return; }
+    const planningFingerprint = auditFingerprint();
 
     const payload = {
       spec: state.spec,
@@ -4106,6 +4752,9 @@
       ...routePayload(),
       timeout: connection.timeout,
       concurrency: auditConcurrency(),
+      request_budget: Math.min(auditLimits().budget, PROFILE_BUDGET[profile]),
+      requests_per_second: auditLimits().rate,
+      response_comparison: state.audit.response_comparison || null,
     };
 
 
@@ -4115,14 +4764,26 @@
       requests: 0, notes: [], discovery: null, finding: null,
       log: [], logEntry: null, logTruncated: false, statuses: [],
       coverage: {}, baselines: [], replays: {}, correlation: null,
-      startedAt: new Date().toISOString(),
+      plans: [], fieldCoverage: [], probes: [], requestBreakdown: {}, phase: "planning",
+      contractSnapshots: {}, responseReviews: [], assessment: null,
+      readiness: state.audit.readiness || null,
+      response_comparison: payload.response_comparison,
+      inventoryPlanned: $("audit-inventory").checked,
+      context: { profile, base_url: connection.base_url, title: state.spec.title,
+        version: state.spec.version, second_identity: Object.keys(payload.identities.secondary).length > 0,
+        environment: $("setup-environment").value.trim(), identity_label: $("setup-identity-name").value || "Primary identity",
+        tool_version: state.toolVersion, budget: auditLimits().budget, rate: auditLimits().rate,
+        concurrency: auditConcurrency() || PROFILE_CONCURRENCY[profile] },
+      startedAt: null, runStatus: "planning", currentActionRequests: 0,
+      identityRevision: state.setup?.identityRevision,
     };
 
     activateSection("audit");
     showView("view-audit-report");
     $("cancel-audit").hidden = false;
     $("cancel-audit").disabled = false;
-    $("cancel-audit").textContent = "Stop after current";
+    $("cancel-audit").textContent = "Stop planning";
+    $("audit-review-controls").hidden = true;
     setBusy(true);
     $("run-audit").disabled = true;
     renderFindings();
@@ -4134,45 +4795,45 @@
 
 
     try {
-      if ($("audit-inventory").checked) {
-        $("session-state").textContent = "Auditing: surface sweep";
-        try {
-          const sweep = await api("/api/audit/inventory", { ...payload, profile: "readonly" });
-          state.audit.discovery = sweep.discovery;
-          absorb(sweep, "Surface sweep");
-          absorbLog(sweep, "surface sweep");
-        } catch (error) {
-          state.audit.notes.push(`Surface sweep: ${errorText(error)}`);
-        }
-        renderFindings();
-        renderAuditReport();
-        auditProgress();
-      }
+      // Planning is local to the contract: do every operation before sending
+      // any inventory or endpoint traffic, so the complete plan is visible.
+      const plannedOperations = [];
       for (const op of operations) {
         if (state.audit.cancelled) break;
-        $("session-state").textContent = `Auditing ${state.audit.done + 1} of ${operations.length}`;
+        $("session-state").textContent = `Planning ${op.method} ${op.path}`;
+        const saved = state.examples[op.id] || {};
+        const operationPayload = {
+          ...payload, operation_id: op.id,
+          ...(saved.example ? { example: saved.example } : {}),
+          ...(saved.expectation ? { expectation: saved.expectation } : {}),
+        };
         try {
-          const saved = state.examples[op.id] || {};
-          const result = await api("/api/audit", {
-            ...payload, operation_id: op.id,
-            ...(saved.example ? { example: saved.example } : {}),
-            ...(saved.expectation ? { expectation: saved.expectation } : {}),
-          });
-
-          absorb(result, `${op.method} ${op.path}`);
-          absorbLog(result, `${op.method} ${op.path}`);
-          if (Number.isFinite(result.baseline_status)) state.audit.statuses.push(result.baseline_status);
+          const plan = await api("/api/audit/plan", operationPayload);
+          state.audit.plans.push({ endpoint: `${op.method} ${op.path}`, ...plan });
+          plannedOperations.push({ op, operationPayload });
         } catch (error) {
-          state.audit.notes.push(`${op.method} ${op.path}: ${errorText(error)}`);
+          const reason = errorText(error);
+          state.audit.plans.push({ endpoint: `${op.method} ${op.path}`, error: reason, test_plan: { probes: [] } });
+          state.audit.notes.push(`${op.method} ${op.path}: planning failed; endpoint skipped: ${reason}`);
         }
-        state.audit.done++;
-        renderFindings();
         renderAuditReport();
-        auditProgress();
-        announce(`Audited ${state.audit.done} of ${operations.length}.`);
+      }
+      renderFindings();
+      renderAuditReport();
+      if (!state.audit.cancelled) {
+        if (auditFingerprint() !== planningFingerprint) {
+          state.audit.notes.push("Setup changed while planning. No target requests were sent. Review a new plan.");
+          state.audit.phase = null; state.audit.runStatus = "not-started";
+          toast("Setup changed while planning. Review a new plan before starting.");
+          return;
+        }
+        state.audit.pendingPlan = {payload, operations: plannedOperations, fingerprint: planningFingerprint};
+        state.audit.phase = "review"; state.audit.runStatus = "not-started";
+        showAuditReview();
       }
     } finally {
       state.audit.running = false;
+      if (state.audit.cancelled) { state.audit.phase = null; state.audit.runStatus = "not-started"; }
       $("cancel-audit").hidden = true;
       setBusy(false);
       updateProfileNote();
@@ -4180,12 +4841,269 @@
       renderAuditReport();
       auditProgress();
       announce(state.audit.cancelled
-        ? `Audit stopped with ${state.audit.findings.length} findings.`
-        : `Audit finished with ${state.audit.findings.length} findings.`);
+        ? "Planning stopped. No target requests were sent. Review a new plan when ready."
+        : state.audit.phase === "review" && state.audit.pendingPlan
+          ? "Plan prepared locally. Review it before sending any target requests."
+          : "No executable plan is available. Review the setup and prepare a new plan. No target requests were sent.");
     }
-    // After the finally block, so a tool failure cannot leave the audit itself
-    // looking as though it is still running.
-    if (!state.audit.cancelled) await runQueuedTools();
+  }
+
+  const PROFILE_BUDGET = {passive: 1, readonly: 90, thorough: 160, writes: 220};
+
+  function auditLimits() {
+    const budget = Number($("audit-budget").value), rate = Number($("audit-rate").value);
+    if (!Number.isInteger(budget) || budget < 1 || budget > 10000) throw new Error("Set a total request budget between 1 and 10000.");
+    if (!Number.isFinite(rate) || rate < 0.1 || rate > 100) throw new Error("Set a request rate between 0.1 and 100 per second.");
+    return {budget, rate};
+  }
+
+  function auditFingerprint() {
+    return JSON.stringify({connection: connectionPayload(), identities: identityB(), profile: auditProfile(),
+      concurrency: auditConcurrency(), limits: auditLimits(), operations: auditScope().map(op => op.id),
+      examples: state.examples, inventory: $("audit-inventory").checked, tools: $("tools-after-audit").checked,
+      environment: $("setup-environment").value, identity_label: $("setup-identity-name").value,
+      response_comparison: state.audit.response_comparison || null, oauth: $("auth-mode").value === "oauth2" ? oauthConfig() : null});
+  }
+
+  function showAuditReview() {
+    const audit = state.audit, pending = audit.pendingPlan;
+    if (!pending) return;
+    const operations = pending.operations.map(({op}) => `${op.method} ${op.path}`);
+    const writeOperations = pending.operations.filter(({op}) => !SAFE_METHODS.has(op.method));
+    const inventory = audit.inventoryPlanned ? Math.min(60, audit.context.budget) : 0;
+    $("audit-review-summary").textContent = `${operations.length} operations: ${operations.join(", ") || "none"}. `
+      + `Target: ${redactUrl(audit.context.base_url)}. Identity: ${audit.context.identity_label}. `
+      + `Inventory: ${inventory ? `up to ${inventory} requests` : "off"}. Endpoint tests share the remaining total budget of ${audit.context.budget}. `
+      + `At most ${Math.min(PROFILE_BUDGET[audit.context.profile], audit.context.budget)} requests per operation, ${audit.context.concurrency} in flight, ${audit.context.rate}/second. These are upper bounds, not a coverage target.`;
+    $("audit-review-writes").textContent = writeOperations.length
+      ? `${writeOperations.length} operation(s) can write or generate content. Costs and cleanup are not known from the schema. Confirm them with the API owner. ${audit.context.profile === "writes" ? "Review the exact scope below." : "This profile will skip unsafe endpoint requests."}`
+      : "This scope contains read operations. Review the planned families and their prerequisites below.";
+    $("audit-write-consent-row").hidden = audit.context.profile !== "writes";
+    $("audit-write-consent").checked = false;
+    $("audit-write-consent-text").textContent = `Authorise the write probes listed in this plan against ${redactUrl(audit.context.base_url)}, within the ${audit.context.budget}-request total budget.`;
+    $("audit-review-controls").hidden = false;
+  }
+
+  // The run is handed to the server, which owns the one budget, pacer, stop
+  // signal and write gate across the whole run and persists it as it goes. The
+  // browser stops being the orchestrator: it posts the reviewed plan, then
+  // polls for progress. Closing or reopening the tab no longer touches the run.
+  async function executeReviewedAudit() {
+    const audit = state.audit, pending = audit.pendingPlan;
+    if (state.busy || audit.running || !pending) return;
+    try {
+      if (auditFingerprint() !== pending.fingerprint) throw new Error("Setup or scope changed. Review a new audit plan before sending requests.");
+      if (audit.context.profile === "writes" && (!$("allow-writes").checked || !$("audit-write-consent").checked)) throw new Error("Enable Allow writes, review a new plan if needed, and authorise this plan's target and operations before starting.");
+    } catch (error) { toast(errorText(error)); return; }
+    const runConfig = buildRunConfig(pending, audit);
+    audit.pendingPlan = null; audit.phase = "starting"; audit.running = true; audit.runStatus = "running";
+    audit.startedAt = new Date().toISOString();
+    audit.cancelled = false; audit.rateLimited = false; audit.interrupted = false;
+    audit.writesWithdrawn = false; audit.disconnected = false; audit.reopened = false;
+    audit.absorbedCases = new Set(); audit.revision = 0; audit.runId = null;
+    // Execution starts clean; the plans captured during review stay for display.
+    audit.findings = []; audit.log = []; audit.probes = []; audit.fieldCoverage = [];
+    audit.baselines = []; audit.coverage = {}; audit.requestBreakdown = {};
+    audit.requests = 0; audit.done = 0; audit.statuses = [];
+    $("audit-review-controls").hidden = true; $("cancel-audit").hidden = false;
+    $("cancel-audit").disabled = false; $("cancel-audit").textContent = "Stop run";
+    renderAuditReport(); auditProgress();
+    let created;
+    try {
+      created = await api("/api/runs", runConfig);
+    } catch (error) {
+      audit.running = false; audit.runStatus = "not-started"; audit.phase = null;
+      $("cancel-audit").hidden = true; toast(errorText(error));
+      renderFindings(); renderAuditReport(); auditProgress();
+      return;
+    }
+    audit.runId = created.run_id;
+    ingestRunSnapshot(created);
+    renderFindings(); renderAuditReport(); auditProgress();
+    announce("The run is executing on the server. You can leave this page; reopen the run from Runs to watch it. Nothing is resent when you return.");
+    pollRun(created.run_id);
+  }
+
+  // Only fields the server's RunCreateInput accepts; request_budget is a
+  // per-operation relic of the old client loop and is dropped here.
+  function buildRunConfig(pending, audit) {
+    const {request_budget, ...rest} = pending.payload;
+    return {
+      ...rest,
+      budget: audit.context.budget,
+      inventory: Boolean(audit.inventoryPlanned),
+      operations: pending.operations.map(({op, operationPayload}) => ({
+        operation_id: op.id,
+        ...(operationPayload.example ? {example: operationPayload.example} : {}),
+        ...(operationPayload.expectation ? {expectation: operationPayload.expectation} : {}),
+      })),
+      context: {
+        title: audit.context.title, version: audit.context.version,
+        environment: audit.context.environment, identity_label: audit.context.identity_label,
+        base_url: audit.context.base_url, profile: audit.context.profile,
+        budget: audit.context.budget, rate: audit.context.rate, concurrency: audit.context.concurrency,
+      },
+    };
+  }
+
+  // Fold a server snapshot into the in-memory run. Cases are keyed by their
+  // stable id, so a duplicate or out-of-order snapshot cannot ingest the same
+  // case twice or inflate a count; the server owns the budget and the counters.
+  function ingestRunSnapshot(snapshot) {
+    const audit = state.audit;
+    if (typeof snapshot.revision === "number") audit.revision = snapshot.revision;
+    audit.absorbedCases ||= new Set();
+    for (const item of snapshot.cases || []) {
+      if (audit.absorbedCases.has(item.case_id)) continue;
+      audit.absorbedCases.add(item.case_id);
+      const result = item.result || {};
+      const label = item.scope === "inventory" ? "Surface sweep" : (result.endpoint || item.operation || item.case_id);
+      if (item.scope === "inventory") audit.discovery = result.discovery || audit.discovery;
+      absorb(result, label); absorbLog(result, label);
+      if (Number.isFinite(result.baseline_status)) audit.statuses.push(result.baseline_status);
+    }
+    if (typeof snapshot.requests_sent === "number") audit.requests = snapshot.requests_sent;
+    if (typeof snapshot.done === "number") audit.done = snapshot.done;
+    if (typeof snapshot.total === "number") audit.total = snapshot.total;
+    audit.running = Boolean(snapshot.active);
+    audit.phase = snapshot.active ? (snapshot.phase || "starting") : null;
+    audit.cancelled = Boolean(snapshot.cancelled);
+    audit.rateLimited = Boolean(snapshot.rate_limited);
+    audit.writesWithdrawn = Boolean(snapshot.writes_withdrawn);
+    audit.interrupted = Boolean(snapshot.interrupted);
+    audit.runStatus = snapshot.run_status || snapshot.status || audit.runStatus;
+    if (snapshot.context) audit.context = {...audit.context, ...snapshot.context};
+    if (typeof snapshot.budget === "number") audit.context.budget = snapshot.budget;
+    if (typeof snapshot.rate === "number" && snapshot.context && snapshot.context.rate === undefined) audit.context.rate = snapshot.rate;
+    for (const note of snapshot.notes || []) if (!audit.notes.includes(note)) audit.notes.push(note);
+    if (snapshot.finished_at) audit.finishedAt = snapshot.finished_at;
+  }
+
+  async function pollRun(runId) {
+    if (state.audit.runId !== runId) return;  // superseded by a newer run
+    let snapshot;
+    try {
+      snapshot = await api(`/api/runs/${encodeURIComponent(runId)}`, null, "GET");
+    } catch (error) {
+      // A dropped poll does not touch the run; it keeps going on the server.
+      state.audit.disconnected = true;
+      renderAuditReport(); auditProgress();
+      state.audit.pollTimer = setTimeout(() => pollRun(runId), 2000);
+      return;
+    }
+    if (state.audit.runId !== runId) return;
+    state.audit.disconnected = false;
+    if ((snapshot.revision || 0) > (state.audit.revision || 0) || !snapshot.active) {
+      ingestRunSnapshot(snapshot);
+      renderFindings(); renderAuditReport(); auditProgress();
+    }
+    if (snapshot.active) {
+      state.audit.pollTimer = setTimeout(() => pollRun(runId), 1000);
+    } else {
+      finishRunView(snapshot);
+    }
+  }
+
+  function finishRunView(snapshot) {
+    const audit = state.audit;
+    ingestRunSnapshot(snapshot);
+    audit.running = false; audit.pollTimer = null; audit.phase = null;
+    $("cancel-audit").hidden = true; updateProfileNote();
+    renderFindings(); renderAuditReport(); auditProgress();
+    announce(audit.runStatus === "finished"
+      ? "Run finished. Review established behaviour and remaining limitations."
+      : audit.interrupted ? "Run interrupted. Partial evidence retained."
+      : "Run incomplete. Partial evidence retained.");
+    if (typeof window !== "undefined" && window.NamazuAssessmentView) {
+      refreshAssessment().catch(error => {
+        audit.notes.push(`Offline assessment unavailable: ${errorText(error)}`); renderAuditReport(); });
+    }
+  }
+
+  // Reopen a run the server is keeping. Reading a run never starts, resumes or
+  // replays it. A run still running is observed live (reconnected viewer); a
+  // finished or interrupted run is opened as retained evidence through the same
+  // import path the saved-file reader uses, which is request-free by contract.
+  async function openServerRun(runId) {
+    if (state.busy) { toast("Finish the current action first."); return; }
+    if (state.audit.running && state.audit.runId && state.audit.runId !== runId) {
+      toast("A run is open. Stop it before opening another."); return;
+    }
+    if (state.audit.pollTimer) { clearTimeout(state.audit.pollTimer); state.audit.pollTimer = null; }
+    let snapshot;
+    try { snapshot = await api(`/api/runs/${encodeURIComponent(runId)}`, null, "GET"); }
+    catch (error) { toast(errorText(error)); return; }
+    if (snapshot.active) {
+      state.audit = {
+        findings: [], running: true, cancelled: Boolean(snapshot.cancelled), done: 0,
+        total: snapshot.total || 0, requests: 0, notes: [], discovery: null, finding: null,
+        startedAt: snapshot.started_at || null, log: [], logEntry: null, logTruncated: false,
+        statuses: [], coverage: {}, baselines: [], replays: {}, correlation: null, plans: [],
+        fieldCoverage: [], probes: [], requestBreakdown: {}, phase: snapshot.phase || "starting",
+        contractSnapshots: {}, responseReviews: [], assessment: null, readiness: null,
+        response_comparison: null, inventoryPlanned: Boolean(snapshot.inventory_planned),
+        context: snapshot.context || {}, runStatus: "running", currentActionRequests: 0,
+        runId, absorbedCases: new Set(), revision: 0, reopened: true,
+      };
+      ingestRunSnapshot(snapshot);
+      activateSection("audit"); showView("view-audit-report");
+      renderFindings(); renderAuditReport(); auditProgress();
+      $("cancel-audit").hidden = false; $("cancel-audit").disabled = false; $("cancel-audit").textContent = "Stop run";
+      announce("Reconnected to a live run. Observing its progress; nothing is resent.");
+      pollRun(runId);
+      return;
+    }
+    // Not active: open the retained evidence through the request-free importer.
+    let exported;
+    try { exported = await api(`/api/runs/${encodeURIComponent(runId)}/export`, null, "GET"); }
+    catch (error) { toast(errorText(error)); return; }
+    await importAudit(JSON.stringify(exported), `run ${runId.slice(0, 8)}`);
+    state.audit.runId = runId;
+    if (snapshot.interrupted) state.audit.interrupted = true;
+    auditProgress();
+  }
+
+  async function refreshRunsList() {
+    const container = $("runs-list");
+    if (!container) return;
+    let runs = [];
+    try { runs = (await api("/api/runs", null, "GET")).runs || []; }
+    catch (error) { container.textContent = `Could not list runs: ${errorText(error)}`; return; }
+    renderRunsList(runs);
+    const interrupted = runs.filter(run => run.interrupted || run.status === "interrupted");
+    const banner = $("runs-interrupted-banner");
+    if (banner) {
+      banner.hidden = interrupted.length === 0;
+      banner.textContent = interrupted.length
+        ? `${interrupted.length} run(s) were interrupted when the application last stopped. Open one to see what it had captured; nothing is resent.`
+        : "";
+    }
+  }
+
+  function renderRunsList(runs) {
+    const container = $("runs-list");
+    if (!container) return;
+    container.replaceChildren();
+    if (!runs.length) { container.append(el("p", "hint", "No runs are retained yet.")); return; }
+    for (const run of runs) {
+      const row = el("div", "run-row");
+      const label = run.interrupted || run.status === "interrupted" ? "interrupted"
+        : run.active ? "running" : run.status || "unknown";
+      row.append(el("span", `chip ${run.active ? "" : "muted"}`.trim(), label));
+      const name = run.title || run.target || run.run_id.slice(0, 8);
+      row.append(el("span", "run-name", `${name}`));
+      row.append(el("span", "run-meta hint", `${run.created_at || ""}`));
+      const open = el("button", "ghost", run.active ? "Observe" : "Open");
+      open.addEventListener("click", () => openServerRun(run.run_id));
+      row.append(open);
+      const remove = el("button", "ghost danger", "Delete");
+      remove.addEventListener("click", async () => {
+        try { await api(`/api/runs/${encodeURIComponent(run.run_id)}`, {}, "DELETE"); refreshRunsList(); }
+        catch (error) { toast(errorText(error)); }
+      });
+      row.append(remove);
+      container.append(row);
+    }
   }
 
 
@@ -4235,26 +5153,53 @@
     return out;
   }
 
-  function exportAudit() {
-    if (!state.audit.findings.length && !state.audit.bruno) return;
-    const payload = {
+  function auditExportPayload() {
+    return {
       application: "Namazu",
+      bruno: state.audit.bruno || undefined,
       export: "security-audit",
       exported_at: new Date().toISOString(),
+      tool_version: state.audit.context?.tool_version || null,
+      run: {status: state.audit.runStatus || "unknown", cancelled: Boolean(state.audit.cancelled),
+        rate_limited: Boolean(state.audit.rateLimited),
+        accounting_uncertain: Boolean(state.audit.accountingUncertain), finished_at: state.audit.finishedAt || null,
+        environment: state.audit.context?.environment || null, identity_label: state.audit.context?.identity_label || null},
+      provenance: {kind: state.audit.offlineReassessment || state.audit.imported?.offline ? "offline-reassessment" : state.audit.imported ? "imported-historical-run" : "live-run",
+        requests_sent_during_current_action: state.audit.imported ? 0 : state.audit.currentActionRequests || 0,
+        source_kind: state.audit.provenance?.kind || null,
+        source_run: {target: state.audit.context?.base_url ? redactUrl(state.audit.context.base_url) : null,
+          environment: state.audit.context?.environment || null, started_at: state.audit.startedAt,
+          tool_version: state.audit.context?.tool_version || null, status: state.audit.runStatus || "unknown"}},
       started_at: state.audit.startedAt,
-      api: { title: state.spec?.title, version: state.spec?.version,
-             base_url: redactUrl($("base-url").value) },
+      assessment: state.audit.assessment || null,
+      contract_snapshots: state.audit.contractSnapshots || {},
+      response_reviews: state.audit.responseReviews || [],
+      readiness: state.audit.readiness || null,
+      response_comparison: typeof window !== "undefined" && window.NamazuAuditResults
+        ? window.NamazuAuditResults.normalizePolicy(state.audit.response_comparison) : state.audit.response_comparison || null,
+      api: { title: state.audit.context?.title ?? null, version: state.audit.context?.version ?? null,
+             base_url: state.audit.context?.base_url ? redactUrl(state.audit.context.base_url) : null },
       scope: {
-        profile: auditProfile(),
-        endpoints_audited: state.audit.done,
-        endpoints_in_scope: state.audit.total,
-        requests_sent: state.audit.requests,
+        profile: state.audit.context?.profile ?? null,
+        endpoints_audited: state.audit.imported && !state.audit.imported.countsKnown?.done ? null : state.audit.done,
+        endpoints_in_scope: state.audit.imported && !state.audit.imported.countsKnown?.total ? null : state.audit.total,
+        requests_sent: state.audit.imported && !state.audit.imported.countsKnown?.requests ? null : state.audit.requests,
+        responses_received: (state.audit.log || []).filter(row => Number(row.response?.status ?? row.status) >= 100).length,
+        request_budget: state.audit.context?.budget ?? null,
+        request_breakdown: state.audit.requestBreakdown,
+        inventory_planned: Boolean(state.audit.inventoryPlanned),
         surface_sweep: state.audit.discovery,
-        second_identity: Object.keys(identityB()).length > 0,
+        second_identity: state.audit.context?.second_identity ?? null,
       },
       summary: { total: state.audit.findings.length, severity: severityTally(state.audit.findings),
                  category: categoryTally(state.audit.findings),
-                 verification: verificationTally(state.audit.findings) },
+                 verification: verificationTally(state.audit.findings),
+                 demonstrated_vulnerabilities: state.audit.findings.filter(isVulnerability).length,
+                 observations_and_leads: state.audit.findings.filter((item) => !isVulnerability(item)).length,
+                 demonstrated_severity: severityTally(state.audit.findings.filter(isVulnerability)),
+                 note: "Legacy total and severity include all finding and observation records. "
+                   + "Demonstrated vulnerability counts and severities include only runtime security "
+                   + "records with demonstrated impact. Observations and leads are counted separately." },
       // What was tested and what was not, in the export rather than only on
       // screen. A report that lists three findings and does not say that forty
       // checks were blocked is the failure this whole structure exists to fix.
@@ -4262,22 +5207,42 @@
         checks: Object.values(state.audit.coverage).map((entry) => ({
           check: entry.check, title: entry.title, what: entry.what,
           state: coverageState(entry), states: entry.states, findings: entry.findings,
+          requests: Number.isFinite(entry.requests) ? entry.requests : null,
           blocked_on: entry.blockedOn, reasons: entry.reasons,
+          reason_codes: entry.reasonCodes || [],
+          missing_prerequisites: entry.missingPrerequisites || [],
           remediation: entry.remediation,
         })),
         baselines: state.audit.baselines,
+        fields: state.audit.fieldCoverage,
+        probes: state.audit.probes,
+        results: typeof window !== "undefined" && window.NamazuAuditResults
+          ? window.NamazuAuditResults.exportResults(state.audit) : undefined,
         note: "A check shown as completed ran and reached a conclusion. It is not a statement "
-            + "that the target is sound, and a blocked check is not one either.",
+            + "that the target is sound, and a blocked check is not one either. A uniform denial "
+            + "leaves downstream validation unknown. Explicit edge block pages also leave downstream handling unknown. "
+            + "Field-specific validation rejections are observations; unexplained differences are leads. Neither "
+            + "establishes a vulnerability or which server layer processed a value. Diagnostic metadata changes "
+            + "are separate from application equivalence; original evidence and meaningful header changes are preserved.",
       },
+      test_plans: state.audit.plans,
+      requests: state.audit.log.map(({ key, ...entry }) => entry),
+      requests_truncated: Boolean(state.audit.logTruncated),
       replays: state.audit.replays,
       duplicates: state.audit.correlation,
-      notes: [...new Set(state.audit.notes)],
+      notes: auditNotes(state.audit).notes,
+      original_notes: auditNotes(state.audit).originalNotes,
       findings: state.audit.findings.map(({ key, ...item }) => item),
       evidence_levels: EVIDENCE_LEVELS,
-      note: "Proof-of-concept requests have credential headers and query values masked. Response "
-          + "excerpts may still contain sensitive data; review before sharing.",
+      note: "Captured requests and responses retain their original comparison values with credentials masked. "
+          + "Response bodies may still contain sensitive data; review before sharing.",
     };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(window.NamazuBruno ? window.NamazuBruno.exportEvidencePayload(state.audit, payload) : payload, null, 2)], { type: "application/json" }));
+  }
+
+  function exportAudit() {
+    if (!auditHasReport()) return;
+    const payload = window.NamazuBruno ? window.NamazuBruno.exportEvidencePayload(state.audit, auditExportPayload()) : auditExportPayload();
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
     const link = el("a");
     link.href = url;
     link.download = `namazu-audit-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
@@ -4314,23 +5279,50 @@
     $("baseline-save").addEventListener("click", saveBaseline);
     $("baseline-from-run").addEventListener("click", baselineFromRun);
     $("baseline-clear").addEventListener("click", clearBaseline);
-    $("import-audit").addEventListener("click", () => $("import-audit-file").click());
+    $("import-audit").addEventListener("click", () => $("saved-report-dialog").showModal());
     $("import-audit-file").addEventListener("change", async (event) => {
       const file = event.target.files?.[0];
       if (!file) return;
-      try { importAudit(await file.text(), file.name); }
+      try { await importAudit(await file.text(), file.name); }
       catch (error) { toast(`That file could not be read: ${errorText(error)}`); }
       // Cleared so choosing the same file again still fires a change event.
       event.target.value = "";
     });
     $("run-audit").addEventListener("click", runAudit);
-    $("cancel-audit").addEventListener("click", () => {
-      state.audit.cancelled = true;
+    $("cancel-audit").addEventListener("click", async () => {
       $("cancel-audit").disabled = true;
       $("cancel-audit").textContent = "Stopping…";
-      announce("The audit will stop once the current endpoint finishes.");
+      if (state.audit.runId && state.audit.running) {
+        // Server-owned run: stopping prevents any further request being
+        // dispatched, including inside the operation running now. A request
+        // already on the wire is not recalled; its response is still kept.
+        try {
+          await api(`/api/runs/${encodeURIComponent(state.audit.runId)}/stop`, {}, "POST");
+          state.audit.cancelled = true; auditProgress();
+          announce("Stopping the run. No further requests will be dispatched; requests already sent are not recalled and their responses are kept.");
+        } catch (error) { toast(errorText(error)); }
+      } else {
+        // Planning phase still runs in the browser (no target traffic yet).
+        state.audit.cancelled = true;
+        announce("Planning will stop. No target requests were sent.");
+      }
     });
-    $("tools-after-audit").checked = prefs.read("tools-after-audit", "") === "1";
+    if ($("runs-refresh")) $("runs-refresh").addEventListener("click", refreshRunsList);
+    if ($("runs-block")) $("runs-block").addEventListener("toggle", (event) => {
+      if (event.target.open) refreshRunsList();
+    });
+    if ($("runs-clear")) $("runs-clear").addEventListener("click", async () => {
+      try {
+        await api("/api/runs", {}, "DELETE");
+        toast("All retained runs were deleted from this machine.");
+        refreshRunsList();
+      } catch (error) { toast(errorText(error)); }
+    });
+    // Surface any run interrupted by a previous process stop, without opening it.
+    refreshRunsList();
+    $("tools-after-audit").checked = false;
+    $("tools-after-audit").disabled = true;
+    $("tools-after-audit").closest("label").hidden = true;
     $("tools-after-audit").addEventListener("change", () => {
       prefs.write("tools-after-audit", $("tools-after-audit").checked ? "1" : "0");
       // Opening the block is what normally loads the list; ticking the box
@@ -4398,10 +5390,8 @@
     $("oauth-redirect-note").textContent = grant === "authorization_code"
       ? `Register ${chosen} for this client. Namazu opens the authorization page in a new tab and `
         + "collects the code when the browser comes back, so this has to be a URL that reaches "
-        + "Namazu. If the authorization page answers with a block page from a security service, "
-        + "the redirect URI is the usual cause: an http:// URL containing “localhost” "
-        + "inside a query parameter matches a common WAF rule. Try the same port on 127.0.0.1, "
-        + "registering that form too."
+        + "Namazu. A redirect or token response does not establish permission to call the API. "
+        + "If acquisition fails, inspect the exact response and confirm the registered URI and grant with the identity provider."
       : "This grant runs entirely from the Namazu server; no browser redirect is involved.";
   }
 
@@ -4436,6 +5426,10 @@
     $("oauth-status").className = `verdict${kind === "ok" ? "" : kind === "bad" ? " invalid" : " unknown"}`;
 
     $("oauth-status").hidden = !text;
+    if (state.setup?.mounted && kind === "bad") {
+      state.setup.authentication = {status: "failed", error: true};
+      renderSetup();
+    }
   }
 
 
@@ -4492,18 +5486,21 @@
     }
     renderTokenFacts(token);
     markRequestDirty();
+    renderAuthState();
   }
 
 
 
   async function getToken(target = "primary") {
+    const desktopRevision = state.desktopRevision || 0;
     const config = oauthConfig();
     if (config.grant === "authorization_code") return authorizationCode(target);
     oauthStatus("Requesting a token…");
     try {
       const token = await api("/api/oauth/token", config);
+      if (desktopRevision !== (state.desktopRevision || 0)) return;
       applyToken(token, target);
-      oauthStatus(`Token received. ${token.expires_in ? `Valid for ${token.expires_in}s.` : ""}`, "ok");
+      oauthStatus(`Token obtained and attached. ${token.expires_in ? `The issuer reports a ${token.expires_in}s lifetime. ` : ""}API acceptance and resource permission are unverified.`, "ok");
     } catch (error) {
       oauthStatus(errorText(error), "bad");
     }
@@ -4512,6 +5509,7 @@
 
 
   async function authorizationCode(target) {
+    const desktopRevision = state.desktopRevision || 0;
     clearInterval(oauthState.pollTimer);
     oauthStatus("Starting the authorization request…");
     let started;
@@ -4521,6 +5519,7 @@
       oauthStatus(errorText(error), "bad");
       return;
     }
+    if (desktopRevision !== (state.desktopRevision || 0)) return;
     oauthState.window = window.open(started.authorize_url, "namazu-oauth", "width=620,height=760");
     oauthStatus(oauthState.window
       ? "Complete the sign-in in the authorization window. Namazu is waiting for the redirect."
@@ -4548,11 +5547,12 @@
         result = await api("/api/oauth/collect", { session: started.session });
       } catch { return; }
       if (result.status === "pending") return;
+      if (desktopRevision !== (state.desktopRevision || 0)) return;
       clearInterval(oauthState.pollTimer);
       try { oauthState.window?.close(); } catch { /* the tab may already be gone */ }
       if (result.status === "complete") {
         applyToken(result.token, target);
-        oauthStatus("Authorization complete. The token is now in use.", "ok");
+        oauthStatus("OAuth exchange complete; token attached. API acceptance and resource permission are unverified.", "ok");
       } else if (result.status === "error") {
         oauthStatus(result.error || "The authorization failed.", "bad");
       } else {
@@ -4847,14 +5847,21 @@
 
 
 
-    $("base-url").addEventListener("input", () => { state.baseOverride = true; markRequestDirty(); updateStatusBar(); });
+    $("base-url").addEventListener("input", () => {
+      state.baseOverride = true; state.setup.targetSelected = /^https?:\/\//i.test($("base-url").value);
+      $("allow-writes").checked = false; syncWrites(); markRequestDirty(); updateStatusBar(); renderSetup();
+    });
 
     $("base-reset").addEventListener("click", () => {
-      state.baseOverride = false;
-      $("base-url").value = state.operation?.servers?.[0] || state.spec?.base_url || "";
+      state.baseOverride = true;
+      const choices = state.spec?.setup?.server_choices || state.spec?.servers || [];
+      $("base-url").value = choices.length > 1 ? "" : (state.spec?.setup?.suggested_target || state.spec?.base_url || "");
+      state.setup.targetSelected = Boolean($("base-url").value);
+      $("allow-writes").checked = false; syncWrites();
       markRequestDirty();
       updateStatusBar();
-      announce("Base URL restored from the contract.");
+      if (!state.setup.targetSelected) openSetup("api");
+      announce(state.setup.targetSelected ? "Base URL restored from the contract." : "Choose one of the documented targets in Setup.");
     });
 
 
@@ -4897,6 +5904,7 @@
     $("regenerate").addEventListener("click", () => prepareRequest(true));
 
     $("prepare-request").addEventListener("click", () => prepareRequest(false));
+    $("save-request-baseline").addEventListener("click", saveEditorBaseline);
     $("send-request").addEventListener("click", sendRequest);
     $("content-type").addEventListener("change", () => prepareRequest(true));
     $("request-body").addEventListener("input", () => { markRequestDirty(); updateBodyMeta(); });
@@ -5010,6 +6018,183 @@
 
   /* ───────────────────────── start ───────────────────────── */
 
+  function setupModel() {
+    let body, parameters = {};
+    try { body = JSON.parse($("request-body").value); } catch { /* No usable body yet. */ }
+    try { if (state.operation) parameters = collectParameters(state.operation); } catch { /* List unresolved inputs. */ }
+    let configured = false;
+    try {
+      const names = new Set(credentialNames().map(name => name.toLowerCase()));
+      configured = Object.entries(requestHeaders()).some(([key, value]) => Boolean(value)
+        && (/authorization|api.?key|token|cookie/i.test(key) || names.has(key.toLowerCase())));
+    } catch { /* Invalid credentials stay unresolved. */ }
+    const baseline = !state.audit.imported && state.audit.identityRevision === state.setup.identityRevision && state.audit.context?.base_url === $("base-url").value
+      ? state.audit.baselines?.find((row) => row.operation_id === state.operation?.id) : null;
+    const prepared = state.setup.preparedRevision === state.setup.identityRevision
+      && !preparedBaselineError(state.audit.readiness?.prepared, state.operation, $("base-url").value)
+      ? state.audit.readiness?.prepared : null;
+    return window.NamazuSetup.deriveSetup({spec: state.spec, operation: state.operation,
+      base_url: $("base-url").value, target_selected: state.setup.targetSelected,
+      identity_ref: "primary", credentials_configured: configured,
+      authentication: state.setup.authentication, baseline, prepared,
+      second_identity: Object.keys(identityB()).length > 0,
+      permission_matrix: state.audit.readiness?.configuration?.permission_matrix || state.matrix.rows,
+      request: {body: state.examples[state.operation?.id]?.example?.body ?? body, parameters},
+      profile: auditProfile(), allow_writes: $("allow-writes").checked});
+  }
+
+  function openSetup(stage = "api") {
+    state.setup.stage = stage;
+    activateSection("source");
+    renderSetup();
+    revealWork();
+  }
+
+  function setupAction(action) {
+    const kind = typeof action === "string" ? action : action.kind || action.id;
+    if (["configure-identity", "identity"].includes(kind)) openSetup("identity");
+    else if (["configure-permissions", "permissions"].includes(kind)) {
+      activateSection("audit"); $("identity-b-block").open = true;
+      $("baseline-block").open = true;
+      $("identity-b-block").scrollIntoView({block: "nearest"});
+      if (narrowLayout()) $("shell").classList.add("mobile-panel");
+    } else if (["supply-test-data", "data", "define-success", "baseline", "prepare-replay", "replay"].includes(kind)) {
+      openSetup("data");
+      if (!["data", "supply-test-data"].includes(kind)) {
+        $("setup-baseline-details").open = true;
+        mountReadiness($("setup-baseline-mount"));
+      }
+    } else if (["inspect-exchange", "evidence"].includes(kind)) {
+      activateSection("audit"); showView("view-audit-log"); renderLog(); revealWork();
+    } else if (["plan", "review-plan"].includes(kind)) { activateSection("audit"); revealWork(); }
+    else openSetup("api");
+  }
+
+  function renderSetup() {
+    if (!state.setup?.mounted || !window.NamazuSetup) return;
+    const stage = state.setup.stage;
+    for (const name of ["api", "identity", "data", "readiness"]) {
+      $("setup-" + name).hidden = name !== stage;
+      const button = $("setup-tab-" + name);
+      button.setAttribute("aria-selected", String(name === stage)); button.tabIndex = name === stage ? 0 : -1;
+    }
+    const spec = state.spec;
+    $("setup-target").hidden = !spec;
+    if (spec && state.setup.loadedSpec !== spec) {
+      state.setup.loadedSpec = spec;
+      const choices = spec.setup?.server_choices || spec.servers || [];
+      $("setup-server").replaceChildren(el("option", "", "Choose a documented server"));
+      $("setup-server").firstElementChild.value = "";
+      choices.forEach(value => { const option = el("option", "", typeof value === "string" ? value : value.url); option.value = typeof value === "string" ? value : value.url; $("setup-server").append(option); });
+      $("setup-custom-target").value = $("base-url").value;
+      $("setup-server").value = $("base-url").value;
+      $("setup-target-note").textContent = choices.length > 1
+        ? "This specification lists multiple servers. Choose the environment you have permission to test; none has been selected for you."
+        : "Review the resolved API server. A custom URL must name the API, including its base path.";
+      $("setup-operation").replaceChildren(...spec.operations.map(op => { const option = el("option", "", `${op.method} ${op.path}`); option.value = op.id; return option; }));
+    }
+    if (state.operation) $("setup-operation").value = state.operation.id;
+    const model = setupModel();
+    state.setup.model = model;
+    $("setup-auth-fact").textContent = `${model.items.find(item => item.id === "credentials").detail} ${model.authentication.detail}`;
+    const rows = $("setup-readiness-items"); rows.replaceChildren();
+    model.items.forEach(item => {
+      const row = el("div", "setup-readiness-row");
+      const action = el("button", "link", ["established", "configured", "selected", "loaded", "verified"].includes(item.state) ? "Review" : "Configure");
+      action.type = "button"; action.setAttribute("aria-label", `${action.textContent}: ${item.label}`);
+      action.addEventListener("click", () => setupAction(item.action));
+      row.append(el("strong", "", item.label), pill(item.state.replaceAll("-", " ")), el("p", "", item.detail), action); rows.append(row);
+    });
+    const fields = $("setup-fields"); fields.replaceChildren();
+    if (!spec) fields.append(el("p", "hint", "Load an API specification to see its request fields."));
+    else if (!model.fields.length) fields.append(el("p", "hint", "This operation declares no writable request fields. You can still supply a known-good request."));
+    else {
+      const table = el("table", "setup-data-table"), head = el("tr"), thead = el("thead"), tbody = el("tbody");
+      ["Input", "Type / requirement", "Example or current value", "Needs attention"].forEach(text => { const th = el("th", "", text); th.scope = "col"; head.append(th); });
+      thead.append(head);
+      model.fields.forEach(field => {
+        const row = el("tr"), name = el("td", "", `${field.location} ${field.pointer || "/"}`);
+        if (field.description) name.append(el("p", "", field.description));
+        const example = field.examples[0];
+        row.append(name, el("td", "", `${field.type}; ${field.conditional ? "conditional" : field.required ? "required" : "optional"}`),
+          el("td", "", field.sensitive ? "Sensitive value masked" : example ? `${stringify(example.value)} (${example.source})` : field.provided ? "Value supplied in request editor" : "No example declared"),
+          el("td", "", field.probable_placeholder || example?.probable_placeholder ? "Probable example placeholder; confirm with API owner" : field.unresolved ? "Supply a value" : "Review for this resource")); tbody.append(row);
+      });
+      table.append(thead, tbody); const wrap = el("div", "audit-table-scroll"); wrap.append(table); fields.append(wrap);
+    }
+    model.warnings.forEach(warning => fields.append(el("p", "hint", typeof warning === "string" ? warning : warning.detail || stringify(warning))));
+    $("setup-owner-request").textContent = model.owner_request;
+    for (const [id, values] of [["setup-can-run", model.can_run], ["setup-requires", model.requires]]) $(id).replaceChildren(...values.map(value => el("li", "", value)));
+    $("setup-profile-suggestion").textContent = `Suggested starting profile: ${model.suggested_profile}. ${model.profile_reason} You can review and change it in Audit.`;
+    const label = $("setup-identity-name").value || "Primary identity";
+    const runState = state.audit.running ? "Audit running" : state.audit.imported ? "Historical report" : state.audit.cancelled ? "Run incomplete" : "Setup";
+    $("visible-session-context").textContent = `${label} · ${runState}`;
+    $("visible-session-context").title = `${label} · ${runState} · ${$("base-url").value || "Target not selected"}`;
+    renderRunContext();
+  }
+
+  function renderRunContext() {
+    const historical = Boolean(state.audit.imported && state.section === "audit");
+    const running = Boolean(state.audit.running);
+    const pinned = historical || running;
+    $("saved-target-context").hidden = !pinned;
+    $("saved-target-context").textContent = pinned ? `${running ? "Running against" : "Recorded target"}: ${state.audit.context?.base_url ? redactUrl(state.audit.context.base_url) : "not recorded"}` : "";
+    $("saved-target-context").title = $("saved-target-context").textContent;
+    $("topbar-context").hidden = !state.spec || pinned;
+    if (pinned) {
+      $("visible-session-context").textContent = `${state.audit.context?.identity_label || "Identity not recorded"} · ${running ? "Audit running" : state.audit.offlineReassessment || state.audit.imported?.offline ? "Offline reassessment" : "Historical"}`;
+      $("visible-session-context").title = `${$("visible-session-context").textContent} · ${$("saved-target-context").textContent}`;
+    }
+    $("audit-next-run-context").hidden = !historical;
+    $("audit-next-run-context").textContent = historical
+      ? `Next run setup: ${$("base-url").value ? redactUrl($("base-url").value) : "no target selected"}. These controls do not describe or change the historical run.` : "";
+  }
+
+  function wireSetup() {
+    state.setup.authHome = $("req-auth").parentElement;
+    state.setup.mounted = true;
+    document.querySelectorAll("[data-setup-step], [data-setup-next]").forEach(button => button.addEventListener("click", () => openSetup(button.dataset.setupStep || button.dataset.setupNext)));
+    $("setup-server").addEventListener("change", () => { $("setup-custom-target").value = $("setup-server").value; });
+    $("setup-select-target").addEventListener("click", async () => {
+      const value = $("setup-custom-target").value.trim();
+      try {
+        const url = new URL(value);
+        if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error("Use an HTTP or HTTPS API base URL without credentials, a query or a fragment.");
+        $("base-url").value = value; state.baseOverride = true; state.setup.targetSelected = true;
+        $("allow-writes").checked = false; syncWrites(); markRequestDirty(); updateStatusBar();
+        message("setup-target-error", "");
+        if (state.operation) await prepareRequest(true, true);
+        openSetup("identity");
+      } catch (error) { message("setup-target-error", errorText(error)); }
+    });
+    $("setup-operation").addEventListener("change", async () => { await selectOperation($("setup-operation").value, {prepare: state.setup.targetSelected, focus: false}); openSetup("data"); });
+    $("setup-identity-name").addEventListener("input", renderSetup);
+    $("setup-headers").addEventListener("click", () => { activateSection("endpoints"); requestTab("headers"); revealWork(); });
+    $("setup-second-identity").addEventListener("click", () => setupAction("permissions"));
+    $("setup-edit-request").addEventListener("click", () => { activateSection("endpoints"); requestTab(bodyContentTypes(state.operation).length ? "body" : "params"); revealWork(); });
+    $("setup-owner-copy").addEventListener("click", () => copyText($("setup-owner-request").textContent, "Request to the API owner"));
+    $("setup-baseline-details").addEventListener("toggle", () => { if ($("setup-baseline-details").open && !$("setup-baseline-mount").childNodes.length) mountReadiness($("setup-baseline-mount")); });
+    $("setup-use-profile").addEventListener("click", () => { $("audit-profile").value = state.setup.model.suggested_profile; updateProfileNote(); describeConcurrency(); toast("Suggested profile selected. Writes and traffic limits have not changed."); });
+    $("setup-review-audit").addEventListener("click", () => { activateSection("audit"); revealWork(); runAudit(); });
+    const openSaved = () => { message("saved-report-error", ""); $("saved-report-dialog").showModal(); };
+    $("setup-open-saved").addEventListener("click", openSaved);
+    $("saved-report-file").addEventListener("click", () => $("import-audit-file").click());
+    $("saved-report-open").addEventListener("click", async () => {
+      message("saved-report-error", "");
+      const text = $("saved-report-json").value;
+      try { const value = JSON.parse(text); if (!Array.isArray(value?.findings)) throw new Error("Paste a Namazu audit export containing a findings array."); }
+      catch (error) { message("saved-report-error", errorText(error)); return; }
+      $("saved-report-open").disabled = true;
+      try {
+        if (await importAudit(text, "pasted historical export")) { $("saved-report-dialog").close(); $("saved-report-json").value = ""; }
+        else message("saved-report-error", "Report not opened. Check the notice and try again when the local server is available.");
+      } finally { $("saved-report-open").disabled = false; }
+    });
+    $("start-reviewed-audit").addEventListener("click", executeReviewedAudit);
+    $("discard-audit-plan").addEventListener("click", () => { state.audit.pendingPlan = null; state.audit.phase = null; state.audit.runStatus = "not-started"; $("audit-review-controls").hidden = true; auditProgress(); });
+    api("/api/health", null, "GET").then(value => { state.toolVersion = value.version || null; }).catch(() => { /* The next explicit action reports connection failure. */ });
+  }
+
   function start() {
     setTheme(prefs.read("theme", "dark"));
     setLayout(prefs.read("layout", "cols"));
@@ -5056,12 +6241,107 @@
     wireAccess();
     wireOauth();
     wireLog();
+    wireSetup();
+    openSetup("api");
     $("spec-url").focus();
   }
 
 
 
+  // Narrow adapter for the desktop shell. The existing expert workflows keep
+  // their own session credentials; workspace bearer values never enter this UI.
+  function desktopScopeKey(workspace, contract, scope = {}) {
+    return [workspace.id, contract.id, contract.hash, contract.target, contract.identity?.profile_id || "none", contract.identity?.revision || 0, scope.environmentId || "default", scope.tabId || "expert"].join(":");
+  }
+  window.NamazuWorkbench = {
+    getSpec: () => state.spec,
+    getOperation: () => state.operation,
+    setTheme: theme => setTheme(theme, true),
+    openSection(name) { activateSection(name); },
+    openSetup,
+    openSavedReport() { $("setup-open-saved").click(); },
+    openBruno() { $("bruno-open").click(); },
+    showTraffic,
+    connectionOptions(workspace, contract, scope) {
+      if (!contract || state.desktopContext?.key !== desktopScopeKey(workspace, contract, scope)) return {timeout: 15, connection: {}};
+      const connection = routePayload(); if (!connection.client_key_password) delete connection.client_key_password;
+      return {timeout: numericTimeout("request-timeout"), connection};
+    },
+    browserPreferences() {
+      const allowed = /^namazu-(?:theme|layout|panel-w|req-basis|wrap|group-mode|history-limit|examples:.*|access:.*)$/;
+      return Object.fromEntries(Object.keys(localStorage).filter(key => allowed.test(key)).map(key => [key, localStorage.getItem(key)]));
+    },
+    restoreBrowserPreferences(preferences) {
+      const allowed = /^namazu-(?:theme|layout|panel-w|req-basis|wrap|group-mode|history-limit|examples:.*|access:.*)$/;
+      for (const [key, value] of Object.entries(preferences)) if (allowed.test(key) && typeof value === "string") localStorage.setItem(key, value);
+      setTheme(prefs.read("theme", "dark")); setLayout(prefs.read("layout", "cols"));
+      setPanelWidth(Number(prefs.read("panel-w", 290)) || 290); setRequestBasis(Number(prefs.read("req-basis", 50)) || 50);
+      setWrap(prefs.read("wrap", "1") !== "0"); loadExamples(); loadAccess();
+    },
+    applyBrowserTestData(key, value) {
+      if (!state.spec || !state.desktopContext) throw Error("Open a workspace operation before assigning imported test data.");
+      if (state.busy || state.audit.running || state.run.running) throw Error("Finish the active expert action before assigning imported test data.");
+      const parsed = JSON.parse(value);
+      if (key.startsWith("namazu-examples:")) {
+        const operations = new Set(state.spec.operations.map(operation => operation.id));
+        state.examples = Object.fromEntries(Object.entries(parsed).filter(([id]) => operations.has(id))); saveExamples(); renderBaselineEditor();
+      } else if (key.startsWith("namazu-access:")) {
+        state.matrix = {rows: parsed.matrix || [], result: null}; state.sequence = {steps: parsed.sequence || [], result: null}; saveAccess(); renderAccess(); renderMatrixResult(); renderSequenceResult();
+      }
+      state.setup.preparedRevision = -1; $("allow-writes").checked = false; syncWrites();
+    },
+    async useContract(workspace, contract, operationKey, scope = {}) {
+      if (state.busy || state.audit.running || state.run.running) throw Error("Finish the active expert action before switching its contract.");
+      const key = desktopScopeKey(workspace, contract, scope);
+      if (state.desktopContext?.key !== key || $("base-url").value !== contract.target) {
+        state.desktopRevision = (state.desktopRevision || 0) + 1;
+        state.desktopContext = {key, workspaceId: workspace.id, contractId: contract.id, hash: contract.hash};
+        state.spec = contract.spec; state.operation = null; state.schema = null; state.savedEntry = null;
+        state.selected = new Set(); state.collapsed = new Set(); state.history = []; state.seq = 0;
+        state.audit = JSON.parse(desktopEmptyAudit); state.run = {rows: [], total: 0, running: false, cancelled: false};
+        state.examples = {}; state.sequence = {steps: [], result: null}; state.matrix = {rows: [], result: null};
+        state.baseOverride = true; $("base-url").value = contract.target || "";
+        state.setup.targetSelected = Boolean(contract.target) && !contract.target_review_required;
+        state.setup.loadedSpec = null; state.setup.identityRevision++; state.setup.preparedRevision = -1;
+        $("topbar-context").hidden = false; $("writes-switch").hidden = false; $("allow-writes").checked = false;
+        $("ctx-title").textContent = contract.title; $("ctx-version").textContent = contract.version || "";
+        $("endpoint-count").textContent = contract.operations.length; $("schema-count").textContent = Object.keys(contract.spec.schemas || {}).length;
+        $("endpoint-search").value = ""; $("schema-search").value = ""; $("method-filter").value = "all";
+        headerKv.setAll({}); identityKv.setAll({}); $("auth-mode").value = "none";
+        for (const id of ["bearer-token", "basic-user", "basic-pass", "apikey-name", "apikey-value", "oauth-client-secret", "oauth-refresh-token", "oauth-password", "oauth-client-id", "oauth-username", "oauth-token-url", "oauth-authorize-url", "oauth-issuer", "oauth-scope", "oauth-audience"]) $(id).value = "";
+        for (const id of ["proxy-url", "ca-bundle", "client-cert", "client-key", "client-key-password"]) $(id).value = "";
+        $("verify-tls").checked = true; $("request-timeout").value = "15";
+        clearInterval(oauthState.pollTimer); oauthState.pollTimer = 0; oauthState.token = null; oauthState.refreshToken = "";
+        try { oauthState.window?.close(); } catch { /* The remote authentication window may already be closed. */ }
+        oauthState.window = null; $("oauth-token-facts").hidden = true; $("oauth-token-list").replaceChildren(); oauthStatus("");
+        renderAuthState(); updateIdentityState(); syncWrites(); loadExamples(); loadAccess();
+        renderContractFacts(contract.spec, contract.warnings || []); renderSecuritySchemes(); fillOauthPresets();
+        renderEndpoints(); renderSchemas(); renderHistory(); renderQueue(); renderRun(); renderAuditReport(); renderMatrixResult(); renderSequenceResult(); updateStatusBar();
+      }
+      const local = operationKey?.includes("::") ? operationKey.split("::").slice(1).join("::") : operationKey;
+      if (local || !state.operation) await selectOperation(local || contract.spec.operations[0]?.id, {prepare: false, focus: false});
+    },
+  };
   start();
+  function brunoExportRequest(row) {
+    const captured = row.result?.request || row.request || {};
+    const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+    const headers = captured.headers || row.request_headers || {};
+    const contentType = captured.content_type || Object.entries(headers).find(([key]) => key.toLowerCase() === "content-type")?.[1];
+    const request = {method: captured.method || row.method, url: captured.url || row.url, headers};
+    if (own(captured, "body")) request.body = captured.body;
+    else if (own(row, "request_body")) request.body = row.request_body;
+    if (typeof captured.has_body === "boolean") request.has_body = captured.has_body;
+    if (contentType) request.content_type = contentType;
+    // Runner/ordinary receipts contain semantic JSON values. Captured audit
+    // body text and imported definition text retain their raw representation.
+    const semantic = typeof captured.has_body === "boolean" && !captured.body_mode
+      && (Boolean(row.result?.request) || own(captured, "request_validation") || captured.definition_only === true);
+    if (captured.body_encoding === "json-value" || captured.body_encoding === "raw") request.body_encoding = captured.body_encoding;
+    else if (semantic && /^(?:application|text)\/(?:[^;]+\+)?json(?:\s*;|$)/i.test(contentType || "")) request.body_encoding = "json-value";
+    return request;
+  }
+
   if (window.NamazuBruno) window.NamazuBruno.mount({
     api,
     spec: () => state.spec ? {...state.spec, base_url: $("base-url").value || state.spec.base_url} : null,
@@ -5084,17 +6364,15 @@
     },
     requests: async () => {
       const rows = [...state.history, ...state.audit.log].map((row, index) => ({
-        id: `captured-${index}`, name: row.label || row.endpoint || row.url,
-        request: {method: row.method || row.request?.method, url: row.url || row.request?.url,
-          headers: row.request?.headers || row.request_headers || {}, body: row.request?.body ?? row.request_body ?? null},
+        id: `captured-${index}`, name: row.label || row.endpoint || row.result?.request?.url || row.request?.url || row.url,
+        request: brunoExportRequest(row),
       }));
       for (const [id, saved] of Object.entries(state.examples)) {
         const op = state.spec?.operations.find(operation => operation.id === id);
         if (op && saved.example?.url) rows.push({id: `baseline-${id}`, name: `Prepared baseline: ${id}`,
-          request: {method: op.method, ...saved.example}});
+          request: brunoExportRequest({request: {method: op.method, ...saved.example}})});
       }
       return rows;
     },
   });
 })();
-

@@ -1,0 +1,19 @@
+vars:pre-request {
+  baseUrl: http://127.0.0.1:9876
+  layer: collection
+  sharedToken: fixture-shared-token
+  disabledFallback: collection-value
+}
+
+headers {
+  X-Collection: inherited
+  X-Override: collection
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{sharedToken}}
+}

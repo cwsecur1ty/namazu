@@ -1,0 +1,27 @@
+meta {
+  name: Same request
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/echo?layer={{layer}}&message={{message}}
+  body: none
+  auth: inherit
+}
+
+headers {
+  X-Override: request
+}
+
+vars:pre-request {
+  layer: request
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

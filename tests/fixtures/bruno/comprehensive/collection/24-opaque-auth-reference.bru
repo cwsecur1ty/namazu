@@ -1,0 +1,27 @@
+meta {
+  name: Opaque auth reference
+  type: http
+  seq: 26
+}
+
+get {
+  url: {{baseUrl}}/echo?case=opaque-auth
+  body: none
+  auth: bearer
+}
+
+vars:pre-request {
+  opaque: fixture-opaque-auth-value
+}
+
+auth:bearer {
+  token: {{opaque}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

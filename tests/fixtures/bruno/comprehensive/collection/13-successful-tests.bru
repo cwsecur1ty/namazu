@@ -1,0 +1,23 @@
+meta {
+  name: Successful assertions and script tests
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{baseUrl}}/ok
+  body: none
+  auth: inherit
+}
+
+tests {
+  test("resource content", function () { expect(res.body.id).to.equal("local-widget"); });
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

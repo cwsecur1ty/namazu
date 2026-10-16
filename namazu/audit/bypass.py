@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 from urllib.parse import urlsplit, urlunsplit
 
+from . import probes
 from .model import Exchange, finding, mark, similarity
 from .transport import BudgetExhausted, Executor
 
@@ -68,7 +69,12 @@ def _is_data(exchange: Exchange) -> bool:
 
 def probe(executor: Executor, *, baseline: Exchange, endpoint: str, headers: dict) -> list:
     """Try to reach a refused route by changing the request rather than the caller."""
-    if baseline.status not in (401, 403) or baseline.method not in ("GET", "HEAD"):
+    missing = ([] if baseline.status in (401, 403) else ["denied baseline"])
+    missing += ([] if baseline.method in ("GET", "HEAD") else ["read-only-method"])
+    if missing:
+        for check in ("path-variants", "forwarding-headers"):
+            probes.run(executor, check, lambda: [], family="access-bypass",
+                       baseline=baseline, endpoint=endpoint, missing=missing)
         return []
     findings: list = []
     path = urlsplit(baseline.url).path
@@ -93,12 +99,15 @@ def _path_variants(executor, baseline, endpoint, headers, path) -> list:
     def one(branch, item):
         label, build = item
         variant = _rewrite(build, path, executor.signature)
-        if variant is None or not branch.affordable(1):
-            return None
-        return branch.send(
-            baseline.method, _with_path(baseline.url, variant),
-            label=f"access control bypass: {label}", headers=headers, identity="identity A",
-        )
+        with probes.track(branch, f"path:{label}", family="access-bypass", baseline=baseline,
+                          endpoint=endpoint, missing=[] if variant else ["distinct path variant"],
+                          applicable=bool(variant)):
+            if variant is None or not branch.affordable(1):
+                return None
+            return branch.send(
+                baseline.method, _with_path(baseline.url, variant),
+                label=f"access control bypass: {label}", headers=headers, identity="identity A",
+            )
 
     for (label, build), probe_exchange in zip(PATH_VARIANTS,
                                               executor.fan_out(PATH_VARIANTS, one),
@@ -107,33 +116,35 @@ def _path_variants(executor, baseline, endpoint, headers, path) -> list:
             continue
         variant = _rewrite(build, path, executor.signature)
         return [finding(
-            "authz.path-bypass", f"Refused route is reachable with a {label}",
-            "high", "confirmed", owasp="API5:2023 Broken Function Level Authorization",
+            "authz.path-bypass", f"Access-control lead: response changes with a {label}",
+            "info", "possible", category="informational", verification="observed",
+            owasp="API5:2023 Broken Function Level Authorization",
             endpoint=endpoint, parameter=label,
             method=(f"The baseline returned HTTP {baseline.status} for {path}. The same request to "
                     f"{variant}, differing only by a {label}, was sent and compared."),
             detail=(f"{path} returned HTTP {baseline.status}, but {variant} returned HTTP "
                     f"{probe_exchange.status} with a {len(probe_exchange.body)}-byte body. The two "
-                    "paths address the same resource; only the string differs."),
+                    "responses differ. A successful authorized control is needed to establish "
+                    "whether the variant returned the protected resource."),
             background=(
                 "Authorization is often enforced at a different layer from the one that resolves the "
                 "path: a gateway, a reverse proxy, or a framework filter matching on a literal string. "
                 "Where that layer normalises the path differently from the component behind it, a form "
                 "the filter does not recognise reaches a handler that resolves it to the protected "
                 "resource anyway."),
-            impact=("The access control on this route can be skipped by rewriting the path, so it "
-                    "protects a string rather than a resource."),
+            impact=("This is a lead for manual comparison with an authorized response. A status "
+                    "change alone does not establish an authorization bypass."),
+            limitations="The run did not establish resource equivalence or which server layer processed the variant.",
             remediation=("Normalise the path once, at the edge, before any authorization decision is "
                          "made, and apply the rule to the resolved route rather than to a literal "
                          "pattern. Reject requests whose normalised form differs from what was sent."),
             highlights=[
-                mark(variant, "attacker", "The path form that was allowed through."),
-                mark("only the string differs", "proof",
-                     "Both forms resolve to the same resource, so the control is not on the resource."),
+                mark(variant, "attacker", "The path form that produced a different response."),
             ],
             evidence={"documented_path": path, "bypass_path": variant, "variant": label,
                       "baseline_status": baseline.status, "bypass_status": probe_exchange.status,
-                      "bypass_length": len(probe_exchange.body)},
+                      "bypass_length": len(probe_exchange.body), "signal_only": True,
+                      "missing_positive_control": "authorized response for the same resource"},
             exchanges=[baseline, probe_exchange],
         )]
     return []
@@ -143,12 +154,14 @@ def _header_variants(executor, baseline, endpoint, headers, path) -> list:
     """Six forwarding headers an application sometimes trusts, one request each."""
     def one(branch, item):
         name, build = item
-        if not branch.affordable(1):
-            return None
-        return branch.send(
-            baseline.method, baseline.url, label=f"access control bypass: {name}",
-            headers={**headers, name: build(path)}, identity="identity A",
-        )
+        with probes.track(branch, f"header:{name}", family="access-bypass", baseline=baseline,
+                          endpoint=endpoint):
+            if not branch.affordable(1):
+                return None
+            return branch.send(
+                baseline.method, baseline.url, label=f"access control bypass: {name}",
+                headers={**headers, name: build(path)}, identity="identity A",
+            )
 
     for (name, build), probe_exchange in zip(HEADER_VARIANTS,
                                              executor.fan_out(HEADER_VARIANTS, one),
@@ -156,8 +169,9 @@ def _header_variants(executor, baseline, endpoint, headers, path) -> list:
         if probe_exchange is None or not _is_data(probe_exchange):
             continue
         return [finding(
-            "authz.header-bypass", f"Refused route is reachable by sending {name}",
-            "high", "confirmed", owasp="API5:2023 Broken Function Level Authorization",
+            "authz.header-bypass", f"Access-control lead: response changes with {name}",
+            "info", "possible", category="informational", verification="observed",
+            owasp="API5:2023 Broken Function Level Authorization",
             endpoint=endpoint, parameter=name,
             method=(f"The baseline returned HTTP {baseline.status}. The same request was repeated with "
                     f"{name}: {build(path)} added and nothing else changed."),
@@ -169,8 +183,9 @@ def _header_variants(executor, baseline, endpoint, headers, path) -> list:
                 "application behind them. The headers carry no authentication, so an application that "
                 "trusts them is trusting whatever the client sent, unless the edge strips and re-adds "
                 "them on every request."),
-            impact=("Any client can present the header and be treated as an internal or already "
-                    "authorized caller."),
+            impact=("This response difference merits comparison with an authorized response; "
+                    "it does not itself demonstrate access to protected data."),
+            limitations="No successful authorized control established resource equivalence or which server layer processed the header.",
             remediation=(f"Strip {name} and the other X-Forwarded and X-Original headers from inbound "
                          "requests at the edge, then set them yourself. Do not route or authorize on a "
                          "header value a client can choose."),
@@ -179,7 +194,8 @@ def _header_variants(executor, baseline, endpoint, headers, path) -> list:
             ],
             evidence={"header": name, "value": build(path), "baseline_status": baseline.status,
                       "bypass_status": probe_exchange.status,
-                      "bypass_length": len(probe_exchange.body)},
+                      "bypass_length": len(probe_exchange.body), "signal_only": True,
+                      "missing_positive_control": "authorized response for the same resource"},
             exchanges=[baseline, probe_exchange],
         )]
     return []

@@ -1,0 +1,37 @@
+{
+  "cli": "@usebruno/cli@4.2.1",
+  "parser": "@usebruno/lang@0.40.0",
+  "cli_package_sha256": "0b003e351daca5279914ff446b2afef10a94133719a8f62918d6f1f6c68d3b6f",
+  "generator": "tests/bruno_comprehensive_fixture.py",
+  "target": "owned ephemeral loopback ThreadingHTTPServer only",
+  "collection_requests": 36,
+  "iterations": 2,
+  "runs": [
+    {
+      "report": "report.json",
+      "exit_code": 1,
+      "command": "node @usebruno/cli/bin/bru.js run --env Local --env-var baseUrl=<owned-loopback> --iteration-count 2 --sandbox developer --noproxy --reporter-json report.json ",
+      "original_cli_output_sha256": "e1aa4c336ff947863e87bd56b5400215bb8289f737a42dffdc255c2a79bfbba8",
+      "normalized_output_sha256": "5c621cfae61967e1d2e7b756a58f34606b3b07743d384d6bd2849af48d88ff2d",
+      "logical_executions": 72,
+      "mock_network_attempts": 72,
+      "observed_responses": 70,
+      "no_response_executions": 2
+    },
+    {
+      "report": "omitted.json",
+      "exit_code": 1,
+      "command": "node @usebruno/cli/bin/bru.js run --env Local --env-var baseUrl=<owned-loopback> --iteration-count 2 --sandbox developer --noproxy --reporter-json omitted.json --reporter-skip-all-headers --reporter-skip-body",
+      "original_cli_output_sha256": "44f924c910c9ea4cdc474b870b7d7fb812eebc01f1ebc9e90ad362da6461a75b",
+      "normalized_output_sha256": "aeda560164804e50e8567c592a466da7a0d9cc52d517be2c68c35f207c910325",
+      "logical_executions": 72,
+      "mock_network_attempts": 72,
+      "observed_responses": 70,
+      "no_response_executions": 2
+    }
+  ],
+  "normalization": "Only ephemeral loopback base/port and absolute collection path are replaced. Actual CLI timings, generated UIDs and HTTP dates remain; fixture credentials are synthetic.",
+  "negative_inputs": "Hand-authored malformed and unsupported-format examples; not represented as CLI-generated reports and never executed.",
+  "parser_boundary": "25-empty-text.bru intentionally records official parser handling of an empty text block followed by assertions; it becomes nonempty literal text. 33-empty-text-mode.bru is the genuine zero-byte text-mode request.",
+  "coverage_boundary": "Interoperability and accounting regressions only; not API security coverage."
+}

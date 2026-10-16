@@ -11,11 +11,13 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+.test-*/
 pytest-cache-files-*/
 .coverage
 htmlcov/
 
 # Tool output
+.local-reports/
 *.har
 namazu-audit-*.json
 namazu-log-*.json
@@ -28,5 +30,9 @@ namazu-results-*.json
 Thumbs.db
 .hypothesis/
 .schemathesis/
-.local-reports/
 node_modules/
+
+# Reproducible Windows desktop build caches (release sources stay tracked)
+desktop/.tools/
+desktop/**/bin/
+desktop/**/obj/

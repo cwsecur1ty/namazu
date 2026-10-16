@@ -1,0 +1,19 @@
+meta {
+  name: Empty text mode without a block
+  type: http
+  seq: 35
+}
+
+post {
+  url: {{baseUrl}}/echo?case=empty-text
+  body: text
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

@@ -1,0 +1,19 @@
+meta {
+  name: Same request
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/echo?layer={{layer}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

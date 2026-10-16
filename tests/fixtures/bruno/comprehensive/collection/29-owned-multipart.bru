@@ -1,0 +1,24 @@
+meta {
+  name: Owned fixture multipart
+  type: http
+  seq: 31
+}
+
+post {
+  url: {{baseUrl}}/echo?case=multipart
+  body: multipart-form
+  auth: inherit
+}
+
+body:multipart-form {
+  title: café 雪
+  upload: @file(assets/local payload.txt) @contentType(text/plain)
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

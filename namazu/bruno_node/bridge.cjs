@@ -13,14 +13,14 @@ process.stdin.on('end', () => {
     const {action, items} = JSON.parse(input);
     if (!['parse', 'serialize'].includes(action) || !Array.isArray(items) || items.length > 500) throw Error();
     const result = items.map(item => {
-      const allowed = action === 'parse' ? ['request','collection','environment'] : ['requestText','environmentText'];
+      const allowed = action === 'parse' ? ['request','collection','environment','yamlRequest','yamlCollection','yamlFolder','yamlEnvironment','resolveEnvironment','sortLists'] : ['requestText','environmentText'];
       if (!allowed.includes(item.kind)) throw Error();
       return parser[item.kind](item.value);
     });
     process.stdout.write(JSON.stringify({result}));
   } catch {
     // Parser exceptions can include original credential-bearing source lines.
-    process.stdout.write(JSON.stringify({error:'Invalid or unsupported Bruno syntax. Check the selected .bru files with @usebruno/lang 0.40.0.'}));
+    process.stdout.write(JSON.stringify({error:'Invalid or unsupported Bruno syntax. Check the definitions with @usebruno/lang 0.40.0 or @usebruno/filestore 0.13.0.'}));
     process.exitCode = 1;
   }
 });

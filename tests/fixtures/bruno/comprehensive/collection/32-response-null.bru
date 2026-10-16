@@ -1,0 +1,19 @@
+meta {
+  name: Null response value
+  type: http
+  seq: 34
+}
+
+get {
+  url: {{baseUrl}}/scalar-null
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

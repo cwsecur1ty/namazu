@@ -1,0 +1,19 @@
+meta {
+  name: Timeout
+  type: http
+  seq: 20
+}
+
+get {
+  url: {{baseUrl}}/timeout
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

@@ -1,0 +1,23 @@
+meta {
+  name: JSON false
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/echo?case=false
+  body: json
+  auth: inherit
+}
+
+body:json {
+  false
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

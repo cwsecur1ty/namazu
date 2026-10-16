@@ -22,6 +22,13 @@ MAX_BYTES = 8 * 1024 * 1024
 MAX_EXECUTIONS = 2000
 ASSERTION_KEYS = ("assertionResults", "testResults", "preRequestTestResults", "postResponseTestResults")
 MARKER = "<credential>"
+AUTH_CONTAINERS = {"auth", "authentication", "bearer", "basic", "digest", "apikey", "oauth1", "oauth2", "awsv4", "ntlm", "wsse", "akamaiedgegrid"}
+AUTH_METADATA = {"mode", "type", "enabled", "inherit", "key", "placement", "granttype", "scope", "region", "service",
+                 "callbackurl", "authorizationurl", "accesstokenurl", "refreshtokenurl", "credentialsplacement",
+                 "tokenplacement", "tokenheaderprefix", "signaturemethod", "privatekeytype", "version", "realm", "domain", "pkce", "includebodyhash",
+                 "header", "reference", "mapping", "variables", "scheme", "clientid", "credentialsid", "tokensource", "tokenquerykey", "autofetchtoken", "autorefreshtoken",
+                 "token_endpoint", "endpoint", "client_id", "secret_reference", "credential_placement", "grant"}
+AUTH_CONTAINERS.update({"oauth_client_credentials", "authentication_config"})
 
 
 def bounded(value):
@@ -56,6 +63,8 @@ def sanitise(value, names=(), extra_secrets=()):
     if not isinstance(names, (list, tuple, set)) or len(names) > 100 or any(not isinstance(n, str) or len(n) > 120 for n in names):
         raise ValueError("Credential names must be an array of at most 100 names, each at most 120 characters.")
     names = {str(n).lower() for n in names}
+    aliases = set()
+    variable_rows = []
     metadata = {
         "method": {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "get", "post", "put", "patch", "delete", "head", "options", "trace"},
         "status": {"pass", "fail", "error", "skipped", "success", "failed", "passed", "imported"},
@@ -63,43 +72,83 @@ def sanitise(value, names=(), extra_secrets=()):
         "classification": {"application-denial", "validation-observation", "explicit-edge-block", "security-lead", "demonstrated-vulnerability"},
         "source_kind": {"bruno-cli-report"}, "outcome": {"pass", "fail", "unknown"},
         "purpose": {"resource", "content"}, "operator": {"equals", "contains", "absent"},
+        "mode": {"none", "inherit", "bearer", "basic", "digest", "apikey", "oauth1", "oauth2", "awsv4", "ntlm", "wsse", "akamai-edgegrid"},
+        "auth": {"none", "inherit", "bearer", "basic", "digest", "apikey", "oauth1", "oauth2", "awsv4", "ntlm", "wsse", "akamai-edgegrid"},
+        "scheme": {"bearer", "basic", "digest", "negotiate", "ntlm", "unresolved"},
+        "body_mode": {"none", "json", "text", "xml", "form-urlencoded", "multipart-form", "file", "graphql", "sparql"},
     }
+    metadata["authentication_mode"] = metadata["auth"]
     secrets = {str(s) for s in extra_secrets if s}
     def learn(name, val):
+        if str(name).lower() == "authentication_mode" and isinstance(val, str) and val in metadata["auth"]:
+            return
+        if str(name).lower() in AUTH_CONTAINERS:
+            if isinstance(val, str) and val in metadata["auth"]:
+                return
+            if isinstance(val, dict):
+                for field, child in val.items():
+                    if field.lower() not in AUTH_METADATA:
+                        learn(field, child)
+                return
         if isinstance(val, (dict, list)):
             for child in val.values() if isinstance(val, dict) else val:
                 learn(name, child)
         if isinstance(val, (str, int, float)) and not isinstance(val, bool):
             text = str(val)
+            aliases.update(match.strip().lower() for match in re.findall(r"\{\{([^{}]+)\}\}", text)
+                           if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", match.strip()))
             if text and text != MARKER and "{{" not in text:
                 secrets.add(text)
                 if str(name).lower() in {"authorization", "proxy-authorization"} and " " in text:
                     secrets.add(text.split(" ", 1)[1])
                 if str(name).lower() in {"cookie", "set-cookie"}:
                     secrets.update(part.partition("=")[2].strip() for part in text.split(";") if "=" in part)
-    def collect(item):
+    def collect(item, auth_context=False):
         if isinstance(item, dict):
+            if isinstance(item.get("name"), str) and "value" in item:
+                variable_rows.append((item["name"].lower(), item["value"]))
             if sensitive(item.get("name", ""), names) or item.get("secret") is True:
                 learn(item.get("name", ""), item.get("value"))
             for key, child in item.items():
-                if sensitive(key, names):
+                if sensitive(key, names) and not (auth_context and key.lower() in AUTH_METADATA):
                     learn(key, child)
-                collect(child)
+                collect(child, auth_context or (key.lower() in AUTH_CONTAINERS and isinstance(child, (dict, list))))
         elif isinstance(item, list):
             for child in item:
-                collect(child)
+                collect(child, auth_context)
         elif isinstance(item, str):
             if item.lstrip().startswith(("{", "[")):
                 with contextlib.suppress(ValueError, RecursionError):
                     collect(json.loads(item))
             try:
-                query = urlsplit(item).query if item.startswith(("http://", "https://")) else item
+                if item.startswith(("http://", "https://")):
+                    parts = urlsplit(item)
+                    if parts.username:
+                        learn("username", parts.username)
+                    if parts.password:
+                        learn("password", parts.password)
+                    query = parts.query
+                else:
+                    query = item
             except ValueError:
                 query = ""
             for key, val in parse_qsl(query, keep_blank_values=True):
                 if sensitive(key, names):
                     learn(key, val)
+            for match in re.finditer(r"(?im)^([!#$%&'*+.^_`|~0-9A-Za-z-]+):[ \t]*([^\r\n]+)", item):
+                if sensitive(match[1], names):
+                    learn(match[1], match[2])
     collect(value)
+    # Credential aliases may have harmless names, and may refer to another
+    # static variable. Learn them before serialising any environment/source.
+    for _ in range(40):
+        previous = set(aliases)
+        for name, val in variable_rows:
+            if name in aliases:
+                learn(name, val)
+        if aliases == previous:
+            break
+    names.update(aliases)
     variants = sorted({v for s in secrets if s for v in (s, quote(s, safe=""), quote_plus(s), json.dumps(s)[1:-1])}, key=len, reverse=True)
     def text(item):
         for secret in variants:
@@ -114,11 +163,14 @@ def sanitise(value, names=(), extra_secrets=()):
         if isinstance(item, dict):
             out = {}
             for name, child in item.items():
-                if preserve_metadata and isinstance(child, str) and ((name == "exchange_id" and re.fullmatch(r"bruno-[0-9a-f]{16}-\d+-\d+", child)) or child in metadata.get(name, ())):
+                if preserve_metadata and isinstance(child, str) and ((name == "exchange_id" and re.fullmatch(r"bruno-[0-9a-f]{16}-\d+-\d+", child)) or (name in {"source", "source_id", "source_redacted_hash", "definition_hash", "content_hash"} and re.fullmatch(r"[0-9a-f]{64}", child)) or child in metadata.get(name, ())):
                     out[name] = child
                 elif name in {"script", "tests", "docs"} and isinstance(child, (dict, str)):
                     out[name] = "[source omitted; never executed]"
-                elif sensitive(name, names) or (name == "value" and (sensitive(item.get("name", ""), names) or item.get("secret") is True)):
+                elif preserve_metadata and ((name.lower() in AUTH_CONTAINERS and isinstance(child, (dict, list))) or
+                                             (key.lower() in AUTH_CONTAINERS and name.lower() in AUTH_METADATA)):
+                    out[name] = clean(child, name, preserve_metadata)
+                elif sensitive(name, names) or (name == "value" and (key.lower() == "apikey" or sensitive(item.get("name", ""), names) or item.get("secret") is True)):
                     out[name] = MARKER
                 else:
                     out[name] = clean(child, name, preserve_metadata)
@@ -128,7 +180,9 @@ def sanitise(value, names=(), extra_secrets=()):
         if isinstance(item, str):
             if item.lstrip().startswith(("{", "[")):
                 try:
-                    return json.dumps(clean(json.loads(item), preserve_metadata=preserve_metadata), ensure_ascii=False)
+                    parsed = json.loads(item)
+                    cleaned = clean(parsed, preserve_metadata=preserve_metadata)
+                    return item if cleaned == parsed else json.dumps(cleaned, ensure_ascii=False)
                 except (ValueError, RecursionError):
                     pass
             if item.startswith(("http://", "https://")):
@@ -201,10 +255,13 @@ def import_report(report, *, version=CLI_VERSION, credential_names=(), collectio
         raise ValueError("Import at most 2,000 executions per report.")
     source = sanitise(copy.deepcopy(report), credential_names)
     collection_name = sanitise({"source": report, "label": collection_name}, credential_names)["label"]
-    source_id = hashlib.sha256(json.dumps(source, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    source_id = hashlib.sha256(json.dumps(report, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    source_redacted_hash = hashlib.sha256(json.dumps(source, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     requests, executions = [], []
     assertion_counts = {key: {"pass": 0, "fail": 0, "unknown": 0} for key in ASSERTION_KEYS}
     unknown_attempts = 0
+    warnings = []
+    assertion_missing = {key: 0 for key in ASSERTION_KEYS}
     for iteration_pos, iteration in enumerate(report):
         for result_pos, result in enumerate(iteration["results"]):
             ref = f"/{iteration_pos}/results/{result_pos}"
@@ -221,8 +278,10 @@ def import_report(report, *, version=CLI_VERSION, credential_names=(), collectio
                 raise ValueError(f"{ref}/request/url: expected a resolved URL string or null.")
             safe = source[iteration_pos]["results"][result_pos]
             eid = f"bruno-{source_id[:16]}-{iteration_pos}-{result_pos}"
-            skipped = result.get("skipped") is True or status == "skipped"
             responded = type(status) is int
+            skipped = (result.get("skipped") is True or status == "skipped") and not responded
+            if result.get("skipped") is True and responded:
+                warnings.append(f"{ref}: source says skipped but includes an HTTP response; the response is retained and the skip claim is inconsistent.")
             # Even a resolved URL plus a timeout does not prove dispatch: the
             # reporter may fail during scripts or connection establishment.
             attempt = False if skipped else True if responded else None
@@ -238,6 +297,7 @@ def import_report(report, *, version=CLI_VERSION, credential_names=(), collectio
             assertions = {}
             for key in ASSERTION_KEYS:
                 values = result.get(key)
+                assertion_missing[key] += int(values is None)
                 if values is not None and (not isinstance(values, list) or any(not isinstance(v, dict) for v in values)):
                     raise ValueError(f"{ref}/{key}: expected an array of assertion/test outcomes.")
                 assertions[key] = safe.get(key)
@@ -258,5 +318,12 @@ def import_report(report, *, version=CLI_VERSION, credential_names=(), collectio
             "provenance": {"kind": "imported-bruno-run", "label": "Imported Bruno run", "imported_at": imported, "requests_sent_during_current_action": 0, "source_run": {"tool_version": CLI_VERSION, "version_basis": "operator-selected; reporter is unversioned", "started_at": None, "status": "historical"}},
             "scope": {"requests_sent": None, "responses_received": responses, "endpoints_audited": None, "endpoints_in_scope": None},
             "findings": [], "requests": requests, "coverage": {"checks": [], "baselines": [], "fields": [], "probes": []},
-            "bruno": {"format": "cli-json-4.2.1", "source_id": source_id, "source": source, "collection": collection_name, "executions": executions, "assertion_counts": assertion_counts, "recorded_executions": len(executions), "observed_responses": responses, "dispatch_unknown": unknown_attempts},
+            "bruno": {"format": "cli-json-4.2.1", "source_id": source_id, "source_hash_basis": "original-canonical-json", "source_redacted_hash": source_redacted_hash,
+                      "source_redacted": source != report, "source": source, "collection": collection_name, "executions": executions,
+                      "assertion_counts": assertion_counts, "assertion_evidence_missing": assertion_missing,
+                      "recorded_iterations": len(report), "iteration_indexes": [row["iterationIndex"] for row in report],
+                      "recorded_executions": len(executions), "observed_responses": responses, "dispatch_unknown": unknown_attempts,
+                      "recorded_skipped": sum(row["request_sent"] is False for row in executions),
+                      "observed_execution_dispatches": sum(row["request_sent"] is True for row in executions),
+                      "wire_attempts": None, "warnings": warnings},
             "notes": ["Imported Bruno run. Zero target requests sent during import, viewing or export.", "CLI results are logical executions, not a complete wire-attempt ledger. Redirect/retry counts and execution time are unknown. Repeated iterations remain distinct.", "Bruno assertions are reported separately. Passes, failures and HTTP 2xx are not security findings or successful business baselines.", "No baseline comparisons or field mutations were inferred. Application denials leave downstream handling unknown; omitted data cannot be reconstructed from templates."]}

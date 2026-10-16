@@ -5,6 +5,7 @@ import json
 import secrets
 import time
 from contextlib import nullcontext
+from types import SimpleNamespace
 from urllib.parse import urlencode
 
 import httpx
@@ -29,9 +30,32 @@ def normalize_spec(spec: dict) -> dict:
     return parse_spec(spec)
 
 
-def prepare_request(spec: dict, operation_id: str, **options) -> dict:
+def credential_names_for(spec: dict, configured=()) -> set[str]:
+    if not isinstance(configured, (list, tuple, set)) or any(not isinstance(name, str) for name in configured):
+        raise ValueError("Credential names must be a list of names, without credential values.")
+    names = {name.strip().lower() for name in configured if name.strip()}
+    if len(names) > 100 or any(len(name) > 256 for name in names):
+        raise ValueError("Provide at most 100 credential names, each at most 256 characters.")
+    document = spec.get("document") or spec
+    schemes = (document.get("components") or {}).get("securitySchemes") or document.get("securityDefinitions") or {}
+    names.update(str(scheme["name"]).lower() for scheme in schemes.values()
+                 if isinstance(scheme, dict) and scheme.get("type") == "apiKey" and scheme.get("name"))
+    return names
+
+
+def redact_evidence(value, *, sources=(), credential_names=()):
+    # Imported lazily: audit checks use this module's contract reviewer too.
+    from .audit.readiness import _sanitise
+
+    return _sanitise(value, credential_names=credential_names, preserve_metadata=True,
+                     secret_sources=sources, learn_value=False)
+
+
+def prepare_request(spec: dict, operation_id: str, *, credential_names=(), **options) -> dict:
     parsed = normalize_spec(spec)
-    return build_request(parsed, operation_id, **options)
+    built = build_request(parsed, operation_id, **options)
+    names = credential_names_for(parsed, credential_names)
+    return redact_evidence({**built, "credential_names": sorted(names)}, sources=[built], credential_names=names)
 
 
 # RFC 6839 structured syntax suffixes. A media type ending in one of these is
@@ -155,9 +179,13 @@ def _form_value(value):
 def execute_request(spec: dict, operation_id: str, *, allow_mutating: bool = False,
                     timeout: float = 15, verify_tls: bool = True,
                     client: httpx.Client | None = None, user_agent: str | None = None,
-                    connection: Connection | None = None, **options) -> dict:
+                    connection: Connection | None = None, credential_names=(),
+                    prepared_request: dict | None = None, expectation: dict | None = None, **options) -> dict:
     parsed = normalize_spec(spec)
-    built = build_request(parsed, operation_id, **options)
+    names = credential_names_for(parsed, credential_names)
+    # A server-validated workbench draft can edit the exact URL and method.
+    # Existing browser/CLI callers continue through the original builder.
+    built = dict(prepared_request) if prepared_request is not None else build_request(parsed, operation_id, **options)
     operation = next(op for op in parsed["operations"] if op["id"] == operation_id)
     if built["method"] not in {"GET", "HEAD", "OPTIONS"} and not allow_mutating:
         raise ValueError("Confirm allow_mutating to send POST, PUT, PATCH, DELETE or other mutating methods")
@@ -172,6 +200,8 @@ def execute_request(spec: dict, operation_id: str, *, allow_mutating: bool = Fal
         value = built["body"]
         if media in {"application/json", "text/json"} or media.endswith("+json"):
             payload["content"] = json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8")
+        elif media == "application/x-www-form-urlencoded" and built.get("definition_only") and built.get("raw_form_body") and isinstance(value, str):
+            payload["content"] = value.encode("utf-8")
         elif media in ("application/x-www-form-urlencoded", "multipart/form-data"):
             if not isinstance(value, dict):
                 raise ValueError("Form request bodies must be JSON objects containing field values")
@@ -221,6 +251,12 @@ def execute_request(spec: dict, operation_id: str, *, allow_mutating: bool = Fal
         text = data.decode("utf-8", errors="replace")
         decoding_warning = "Response declares an unsupported text encoding; captured text cannot be fully validated"
     validation = review_response(parsed, operation, status, response_headers, text, truncated)
+    if built.get("definition_only"):
+        validation = {"valid": None, "errors": [], "checks": [], "warnings": [
+            "This Bruno collection defines requests, not an authoritative response contract. Response contract validation is unavailable."]}
+    elif built.get("contract_match") is False:
+        validation = {"valid": None, "errors": [], "checks": [], "warnings": [
+            "The edited method or path differs from the selected contract operation; response contract validation is not established."]}
     if decoding_warning:
         if validation["valid"] is True:
             validation["valid"] = None
@@ -228,7 +264,20 @@ def execute_request(spec: dict, operation_id: str, *, allow_mutating: bool = Fal
         validation["checks"].append({"name": "Response text encoding", "valid": None})
     if status in (301, 302, 303, 307, 308):
         validation["warnings"].append("Redirect returned without following it; the request was sent exactly once")
-    return {"request": {**built, "headers": dict(request.headers)},
+    extra = {}
+    if expectation is not None:
+        from .audit.baseline import Expectation, check
+        expected = Expectation.from_dict(expectation)
+        observed = SimpleNamespace(status=status, body=text, header=lambda name: response_headers.get(name.lower(), ""))
+        valid, failures = check(expected, observed) if expected.asserted() else (None, [])
+        extra["assertions"] = {"configured": expected.asserted(), "valid": valid,
+                               "failures": failures, "negative": expected.negative,
+                               "note": "This exchange establishes only the configured checks for this contract, target and identity."}
+        if truncated or decoding_warning:
+            extra["assertions"].update(valid=None, note="Incomplete response capture prevents a complete assertion assessment.")
+    return redact_evidence({"request": {**built, "headers": dict(request.headers)},
             "response": {"status": status, "headers": response_headers, "body": text,
                          "elapsed_ms": round((time.monotonic() - started) * 1000, 2), "truncated": truncated},
-            "validation": validation}
+            "validation": validation, "credential_names": sorted(names), **extra},
+            sources=[{"request_headers": dict(request.headers), "request_body": built.get("body"),
+                      "response_headers": response_headers, "response_body": text}], credential_names=names)

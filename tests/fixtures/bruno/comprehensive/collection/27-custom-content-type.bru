@@ -1,0 +1,27 @@
+meta {
+  name: Explicit content type casing
+  type: http
+  seq: 29
+}
+
+post {
+  url: {{baseUrl}}/echo?case=content-type
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {"label":"one"}
+}
+
+headers {
+  content-type: application/problem+json
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

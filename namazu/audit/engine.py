@@ -18,12 +18,13 @@ from __future__ import annotations
 from urllib.parse import urlsplit
 
 from ..discovery import connection_for
-from ..runner import normalize_spec
+from ..runner import credential_names_for, normalize_spec, redact_evidence
 from ..signature import Signature
 from ..spec import build_request
 from . import (
     authz,
     bypass,
+    campaign,
     catalogue,
     contract,
     coverage,
@@ -39,13 +40,16 @@ from . import (
     baseline as baseline_module,
 )
 from . import identity as identity_resolver
-from .model import Finding, finding
+from .model import Exchange, Finding, finding
+from .response_compare import comparison_facts, normalize_policy
 from .transport import (
     MAX_CONCURRENCY,
     Budget,
     BudgetExhausted,
+    Cancelled,
     Executor,
     MutationRefused,
+    RateLimited,
     build_client,
 )
 
@@ -64,6 +68,116 @@ PROFILES = {
                "body_fields": 3},
 }
 DEFAULT_PROFILE = "readonly"
+
+
+def _limit(settings, request_budget=None):
+    ceiling = settings["requests_per_operation"]
+    return min(ceiling, max(1, int(request_budget))) if request_budget is not None else ceiling
+
+
+def _check_example_scope(built, target):
+    original, saved = urlsplit(target), urlsplit(built["url"])
+    if ((original.scheme, original.hostname, original.port) != (saved.scheme, saved.hostname, saved.port)
+            or saved.username or saved.password):
+        raise ValueError("Saved request URL must remain within the selected target origin.")
+    prefix = original.path.rstrip("/")
+    if prefix and saved.path != prefix and not saved.path.startswith(prefix + "/"):
+        raise ValueError("Saved request URL must remain within the selected base URL path.")
+
+
+def _schema_plan(parsed, operation, built, settings, allow_mutating, request_budget, credential_names=()):
+    return campaign.plan_campaign(parsed, operation, built, enabled=settings["inputs"],
+                                  allow_mutating=bool(settings["writes"] and allow_mutating),
+                                  budget=max(0, request_budget - 1), credential_names=credential_names)
+
+
+def _supplemental_plan(operation, built, settings, budget, credential_names=(), writable_body_pointers=None):
+    baseline = Exchange(label="planned baseline", method=built["method"], url=built["url"],
+                        request_headers=built["headers"], request_body=_body_text(built))
+    fields = []
+    if settings["inputs"] and baseline.method in ("GET", "HEAD"):
+        fields += inputs.points(baseline, documented_query=_declared(operation, "query"),
+                                documented_header=_declared(operation, "header"),
+                                documented_cookie=_declared(operation, "cookie"),
+                                documented_path=_declared(operation, "path"),
+                                path_template=operation["path"], max_fields=settings.get("max_fields", 3),
+                                credential_names=credential_names)
+    if settings["writes"] and baseline.method in ("POST", "PUT", "PATCH"):
+        fields += inputs._body_points(baseline, settings.get("body_fields", 3), credential_names=credential_names,
+                                      allowed_body_pointers=writable_body_pointers)
+    fields = [point for point in fields if str(point).lower() not in credential_names]
+    return inputs.battery_plan(baseline, endpoint=f"{operation['method']} {operation['path']}",
+                               fields=fields, budget=budget, time_based=settings.get("time_based", False))
+
+
+def _credential_names(parsed, configured=()):
+    return credential_names_for(parsed, configured)
+
+
+def _writable_pointers(fields):
+    return {item["field_pointer"] for item in fields
+            if item["location"] == "body" and item["category"] == "writable-input"}
+
+
+def _family_permitted(name, settings):
+    if name in ("mass-assignment", "write-authorization", "body-injection", "xml"):
+        return settings["writes"]
+    if name == "input-handling":
+        return settings["inputs"]
+    if name == "posture":
+        return settings["posture"]
+    return settings["authz"]
+
+
+def audit_plan(spec: dict, operation_id: str, *, base_url=None, identities=None,
+               profile=DEFAULT_PROFILE, allow_mutating=False, example=None,
+               request_budget=None, response_comparison=None, credential_names=(), **_unused) -> dict:
+    """Build a deterministic reviewable plan without target or OAuth requests."""
+    comparison_policy = normalize_policy(response_comparison)
+    parsed = normalize_spec(spec)
+    names = _credential_names(parsed, credential_names)
+    operation = next((op for op in parsed["operations"] if op["id"] == operation_id), None)
+    if operation is None:
+        raise ValueError(f"Unknown operation: {operation_id}")
+    settings = _profile(profile)
+    identity = (identities or {}).get("primary") or {}
+    headers = identity.get("headers", {}) if "oauth" in identity or "headers" in identity else identity
+    headers = {str(key): str(value) for key, value in headers.items()
+               if isinstance(value, (str, int, float))}
+    built = build_request(parsed, operation_id, base_url=base_url, headers=headers)
+    if example:
+        built, _note = _apply_example(built, example, headers)
+    _check_example_scope(built, base_url or parsed.get("base_url") or built["url"])
+    limit = _limit(settings, request_budget)
+    plan = _schema_plan(parsed, operation, built, settings, allow_mutating, limit, names).to_dict()
+    baseline_count = int(built["method"] in ("GET", "HEAD", "OPTIONS", "TRACE")
+                         or (settings["writes"] and allow_mutating))
+    plan["baseline_requests"] = baseline_count
+    plan["request_budget"] = limit
+    plan["supplemental_probes"] = _supplemental_plan(
+        operation, built, settings, limit, names, _writable_pointers(plan["fields"]))
+    plan["supplemental_checks"] = [
+        {"check": name, "title": meta["title"], "operation": operation_id,
+         "prerequisite": (("Successful positive control" if meta.get("needs_baseline")
+                           else "Applicable method and probe-specific controls")
+                          + ("; distinct second identity" if meta.get("needs_second_identity") else "")),
+         "missing_prerequisites": ((["second-identity"] if meta.get("needs_second_identity")
+                                    and not (identities or {}).get("secondary") else [])
+                                   + ([] if _family_permitted(name, settings) else ["profile-disallows-check"])),
+         "planned_requests": None if _family_permitted(name, settings) else 0,
+         "conditional": bool(_family_permitted(name, settings)),
+         "request_ceiling": max(0, limit - baseline_count - plan.get("planned_requests", 0))}
+        for name, meta in coverage.CHECKS.items()
+        if name not in ("schema-inputs", "inventory", "contract-review", "passive-review",
+                        "response-contract", "transport", "jwt-offline")]
+    return redact_evidence({"endpoint": f"{operation['method']} {operation['path']}",
+            "operation_id": operation_id, "profile": profile, "request_budget": limit,
+            "test_plan": plan, "target_requests_sent": 0, "response_comparison": comparison_policy,
+            "request_breakdown": {"inventory": 0, "baseline": baseline_count,
+                                  "schema_inputs": plan.get("planned_requests", 0),
+                                  "other_endpoint_tests": 0,
+                                  "total": baseline_count + plan.get("planned_requests", 0)},
+            "credential_names": sorted(names)}, sources=[built], credential_names=names)
 
 
 def _profile(name: str) -> dict:
@@ -150,8 +264,19 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
                     allow_mutating: bool = False, verify_tls: bool = True,
                     timeout: float = 15.0, concurrency: int | None = None,
                     user_agent: str | None = None, connection=None, client=None,
-                    expectation: dict | None = None, example: dict | None = None) -> dict:
+                    expectation: dict | None = None, example: dict | None = None,
+                    request_budget: int | None = None,
+                    requests_per_second: float | None = None,
+                    response_comparison: dict | None = None, credential_names=(),
+                    control=None) -> dict:
     """Run the audit battery against one documented operation.
+
+    ``control`` is a :class:`namazu.audit.control.RunControl` when this
+    operation is one case in a server-owned run. It supplies the ONE request
+    budget, pacer, stop signal and write-authorisation shared across the whole
+    run, plus the receipt sink that persists each request durably. Left as
+    ``None`` (the standalone ``/api/audit`` path), the operation builds its own
+    per-operation budget and pacer exactly as before.
 
     ``example`` is a saved request for this operation, which replaces the one
     generated from the schema. A generated request carries the literal "string"
@@ -163,7 +288,9 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
     for this operation, including the case where the expected answer is a
     refusal. See :mod:`namazu.audit.baseline`.
     """
+    comparison_policy = normalize_policy(response_comparison)
     parsed = normalize_spec(spec)
+    names = _credential_names(parsed, credential_names)
     operation = next((op for op in parsed["operations"] if op["id"] == operation_id), None)
     if operation is None:
         raise ValueError(f"Unknown operation: {operation_id}")
@@ -193,12 +320,36 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
     example_note = ""
     if example:
         built, example_note = _apply_example(built, example, identity_a)
-    budget = Budget(settings["requests_per_operation"])
+    target = base_url or parsed.get("base_url") or built["url"]
+    _check_example_scope(built, target)
+    per_operation_limit = _limit(settings, request_budget)
+    # In a run, this operation's budget is a child of the one run-wide budget,
+    # so the operation keeps its own ceiling while the run total holds across
+    # every operation, the inventory sweep and every worker.
+    budget = control.per_operation_budget(per_operation_limit) if control is not None else Budget(per_operation_limit)
+    input_plan = _schema_plan(parsed, operation, built, settings, allow_mutating, budget.limit, names)
     owns_client = client is None
     http = client or build_client(connection=link)
     workers = _workers(settings, concurrency)
-    executor = Executor(http, budget, timeout=timeout, allow_mutating=allow_mutating,
-                        concurrency=workers, signature=Signature(quiet=link.quiet))
+    executor = Executor(http, budget, timeout=timeout, allow_mutating=bool(settings["writes"] and allow_mutating),
+                        concurrency=workers, signature=Signature(quiet=link.quiet),
+                        scope_url=target, requests_per_second=requests_per_second,
+                        pace=control.pace if control is not None else None,
+                        cancel=control.cancel if control is not None else None,
+                        write_withdrawn=control.write_withdrawn if control is not None else None,
+                        receipts=control.receipts if control is not None else None)
+    executor.test_plan = input_plan.to_dict()
+    executor.comparison_policy = comparison_policy
+    executor.contract_snapshot = contract.snapshot(parsed, operation, request_url=built["url"])
+    executor.test_plan["baseline_requests"] = 1
+    executor.test_plan["request_budget"] = budget.limit
+    executor.redacted_names = names
+    executor.credential_sources = [built, {"headers": identity_a}, {"headers": identity_b}]
+    executor.writable_body_pointers = _writable_pointers(input_plan.fields)
+    executor.test_plan["supplemental_probes"] = _supplemental_plan(
+        operation, built, settings, budget.limit, executor.redacted_names, executor.writable_body_pointers)
+    executor.campaign_plan = input_plan
+    executor.campaign_result = {}
     notes: list[str] = list(credential_notes)
     # Said before anything else, because a run whose requests do not name the
     # tool has to be attributable from the report instead.
@@ -245,12 +396,31 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
         return _skipped(endpoint, operation, findings, budget, profile, ledger=ledger,
                         source_url=parsed.get("source_url") or "", executor=executor,
                         reason=str(exc))
+    except Cancelled:
+        # Stopped before the baseline left: no request was dispatched for this
+        # operation, so it is reviewed from its contract only, not reported as
+        # tested. The run loop will mark the remaining operations not-started.
+        if owns_client:
+            http.close()
+        return _skipped(endpoint, operation, findings, budget, profile, ledger=ledger,
+                        source_url=parsed.get("source_url") or "", executor=executor, reason=(
+            "The run was stopped before this operation's baseline request was sent, so it "
+            "was reviewed from its contract only. No target request was dispatched for it."))
 
     verdict = baseline_module.classify(
         baseline, operation=operation, expectation=expected,
         identity="identity A" if identity_a else "an anonymous caller")
+    baseline.positive_control = verdict.positive_control
+    token = jwtlab.bearer_token(identity_a)
+    if token:
+        token_findings = _supplied_token_findings(identity_a, endpoint)
+        findings += token_findings
+        ledger.complete("jwt-offline", findings=len(token_findings))
+    else:
+        ledger.not_applicable("jwt-offline", "No supplied JWT to inspect offline.")
     if not baseline.ok:
-        ledger.block_dependents(verdict)
+        ledger.block_dependents(verdict, has_second_identity=bool(identity_b))
+        executor.campaign_result = campaign.execute_campaign(executor, input_plan, baseline)
         for name in ("response-contract", "passive-review", "methods", "posture", "transport"):
             ledger.block(name, verdict.reason, verdict.remediation)
         result = _result(endpoint, operation, _dedupe(findings), budget, profile,
@@ -273,38 +443,56 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
         if verdict.remediation:
             notes.append(f"To get coverage of this operation: {verdict.remediation}")
 
-    def family(name: str, run):
+    def family(name: str, run, *, run_when_blocked=False):
         """Run one probe family, or record why it did not run."""
-        if ledger.state(name) == "blocked":
+        if ledger.state(name) == "blocked" and not run_when_blocked:
             return []
         ledger.attempt(name)
-        produced = list(run() or [])
-        ledger.complete(name, findings=len(produced))
+        before = len(executor.exchanges)
+        declined = budget.declined + budget.refused
+        try:
+            produced = list(run() or [])
+        except BudgetExhausted:
+            ledger.budget_exhausted(name)
+            return []
+        except MutationRefused as exc:
+            ledger.block(name, str(exc))
+            return []
+        except Exception as exc:
+            ledger.execution_error(name)
+            notes.append(f"{name}: {type(exc).__name__}; no conclusion was reached.")
+            return []
+        sent = executor.exchanges[before:]
+        if name in ("response-contract", "passive-review") or sent:
+            ledger.complete(name, findings=len(produced), requests=len(sent))
+            if any(item.error for item in sent):
+                ledger.execution_error(name)
+        else:
+            ledger.not_applicable(name, "No applicable probe sent a request; see individual prerequisites.")
+        if budget.declined + budget.refused > declined:
+            ledger.budget_exhausted(name)
         return produced
 
     tls_findings = posture.inspect_tls(built["url"], timeout=min(timeout, 10.0))
     findings += tls_findings
     ledger.complete("transport", findings=len(tls_findings))
     notes += _route_notes(link, url=built["url"], tls_inspected=bool(tls_findings))
-    findings += family("response-contract",
-                       lambda: contract.review(parsed, operation, baseline, endpoint))
+    # Response conformance and implementation disclosure are reviewed once,
+    # after every probe has settled, so non-baseline evidence is included.
     findings += inventory.zombie_check(baseline, endpoint)
     findings += family("passive-review",
                        lambda: passive.review(baseline, endpoint=endpoint, operation=operation,
                                               document=parsed.get("document") or {}))
 
-    if identity_a:
-        for weakness_finding in _supplied_token_findings(identity_a, endpoint):
-            findings.append(weakness_finding)
-
     try:
+        executor.campaign_result = campaign.execute_campaign(executor, input_plan, baseline)
         if settings["authz"]:
             before = len(notes)
             authz_findings = family("authorization", lambda: authz.probe(
                 executor, baseline=baseline, endpoint=endpoint, operation=operation,
                 identity_a=identity_a, identity_b=identity_b, base_headers=built["headers"],
                 notes=notes,
-            ))
+            ), run_when_blocked=True)
             findings += authz_findings
             # The cross-identity read is tracked apart from the rest of the
             # family, so "no second identity" does not read as "the whole of
@@ -319,9 +507,6 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
                         "Supply a second identity that holds a different object on this "
                         "operation, and give it a resource marker so the read can be checked "
                         "by content rather than by status code.")
-                else:
-                    ledger.complete("cross-identity", findings=len(
-                        [item for item in authz_findings if item.id.startswith("authz.bola")]))
             findings += family("credential-handling", lambda: contract.invalid_credentials(
                 executor, baseline=baseline, endpoint=endpoint, operation=operation,
                 identity=identity_a, headers=built["headers"]))
@@ -390,9 +575,16 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
         notes.append(f"Request budget of {budget.limit} reached; some probes did not run.")
         for name in coverage.CHECKS:
             if not ledger.state(name):
-                ledger.block(name, f"The request budget of {budget.limit} was spent before this "
-                                   "check ran.",
-                             "Choose a profile with a larger budget, or audit fewer operations.")
+                ledger.budget_exhausted(name)
+    except Cancelled:
+        # Stopped part-way through this operation. Everything already captured
+        # is kept and reported; the probes that had not run are recorded as
+        # blocked by the stop, not as clean.
+        notes.append("The run was stopped during this operation. No further probes were "
+                     "dispatched for it; the evidence already captured is retained.")
+        for name in coverage.CHECKS:
+            if not ledger.state(name):
+                ledger.block(name, "The run was stopped before this check ran.", code="run-stopped")
     except MutationRefused as exc:
         notes.append(str(exc))
     finally:
@@ -406,8 +598,6 @@ def audit_operation(spec: dict, operation_id: str, *, base_url: str | None = Non
     if budget.declined or budget.refused:
         notes.append(f"The request budget of {budget.limit} was reached, so some probes did not run. "
                      "Choose a profile with a larger budget to finish this operation.")
-    if (gap := coverage.describe(ledger, verdict)):
-        notes.append(gap)
     return _result(endpoint, operation, _dedupe(findings), budget, profile, notes=notes,
                    baseline=baseline, verdict=verdict, ledger=ledger,
                    source_url=parsed.get("source_url") or "", executor=executor)
@@ -463,16 +653,7 @@ def _apply_example(built: dict, example: dict, identity_headers: dict) -> tuple[
 
 
 def _body_text(built: dict):
-    import json
-    if not built.get("has_body"):
-        return None
-    body = built.get("body")
-    if isinstance(body, str):
-        return body
-    media = str(built.get("content_type") or "")
-    if "json" in media:
-        return json.dumps(body)
-    return json.dumps(body) if body is not None else None
+    return campaign._body_text(built)
 
 
 def _supplied_token_findings(identity_a: dict, endpoint: str) -> list:
@@ -491,7 +672,9 @@ def _supplied_token_findings(identity_a: dict, endpoint: str) -> list:
             f"jwt.{weakness['id']}", f"Supplied JWT: {weakness['id'].replace('-', ' ')}",
             weakness["severity"], "confirmed", owasp="API2:2023 Broken Authentication",
             endpoint=endpoint,
-            detail=weakness["detail"] + " Determined offline from the token you supplied; no request was sent.",
+            detail=("The HMAC signature validates under a recovered weak secret; its value is redacted."
+                    if weakness["id"] == "weak-secret" else weakness["detail"])
+                    + " Determined offline from the token you supplied; no request was sent.",
             impact=("The signing key is recoverable, so a token can be minted for any user."
                     if weakness["id"] == "weak-secret"
                     else "Reduces the guarantees the token is meant to provide."),
@@ -499,7 +682,7 @@ def _supplied_token_findings(identity_a: dict, endpoint: str) -> list:
                          if weakness["id"] == "weak-secret"
                          else "Set a short exp, pin the key source, and keep sensitive data out of the payload."),
             evidence={"algorithm": report["algorithm"], "key_id": report.get("key_id"),
-                      "cracked_secret": report.get("cracked_secret"),
+                      "cracked_secret": "<credential>" if report.get("cracked_secret") else None,
                       "privilege_claims": report.get("privilege_claims")},
         ))
     return out
@@ -519,9 +702,17 @@ def _write_probes(executor, parsed, operation, built, endpoint, headers, identit
     def blocked(name: str) -> bool:
         return ledger is not None and ledger.state(name) == "blocked"
 
-    def record(name: str, found: int) -> None:
+    def record(name: str, found: int, before: int) -> None:
         if ledger is not None:
-            ledger.complete(name, findings=found)
+            sent = executor.exchanges[before:]
+            if sent:
+                ledger.complete(name, findings=found, requests=len(sent))
+                if any(item.error for item in sent):
+                    ledger.execution_error(name)
+            elif executor.budget.remaining <= 0:
+                ledger.budget_exhausted(name)
+            else:
+                ledger.not_applicable(name, "No applicable probe sent a request; see individual prerequisites.")
 
     if method not in ("POST", "PUT", "PATCH"):
         if ledger is not None:
@@ -536,10 +727,11 @@ def _write_probes(executor, parsed, operation, built, endpoint, headers, identit
     if not xml_media and ledger is not None:
         ledger.not_applicable("xml", "The operation does not accept an XML request body.")
     elif xml_media and baseline is not None and not blocked("xml"):
+        before = len(executor.exchanges)
         probes = xmllab.probe(executor, baseline=baseline, operation=operation,
                               endpoint=endpoint, base_headers=headers, media=xml_media)
         out += probes
-        record("xml", len(probes))
+        record("xml", len(probes), before)
         if not probes:
             notes.append(f"The XML body for this operation ({xml_media}) was probed for external "
                          "entity processing and nothing was found.")
@@ -555,12 +747,13 @@ def _write_probes(executor, parsed, operation, built, endpoint, headers, identit
                                   "The request schema declares no property that names a privilege "
                                   "or an owner, so there was nothing to try to set.")
     elif not blocked("mass-assignment"):
+        before = len(executor.exchanges)
         read_back = built["url"] if method in ("PUT", "PATCH") else None
         probes = inputs.mass_assignment(executor, built=built, endpoint=endpoint,
                                         base_headers=headers, properties=properties,
                                         read_back_url=read_back)
         out += probes
-        record("mass-assignment", len(probes))
+        record("mass-assignment", len(probes), before)
     if not identity_b:
         if ledger is not None and ledger.state("write-authorization") != "blocked":
             ledger.block("write-authorization",
@@ -569,15 +762,17 @@ def _write_probes(executor, parsed, operation, built, endpoint, headers, identit
                          "Add a second identity on the Auth tab that owns a different object on "
                          "this operation.")
     elif not blocked("write-authorization"):
+        before = len(executor.exchanges)
         probes = inputs.write_authorization(executor, built=built, endpoint=endpoint,
                                             base_headers=headers, identity_b=identity_b,
                                             notes=notes)
         out += probes
-        record("write-authorization", len(probes))
+        record("write-authorization", len(probes), before)
     if baseline is not None and not blocked("body-injection"):
+        before = len(executor.exchanges)
         probes = _body_probes(executor, baseline, endpoint, headers, method, body_fields, notes)
         out += probes
-        record("body-injection", len(probes))
+        record("body-injection", len(probes), before)
     return out
 
 
@@ -608,11 +803,16 @@ def _skipped(endpoint, operation, findings, budget, profile, *, reason: str,
         for name in coverage.CHECKS:
             if not ledger.state(name):
                 ledger.block(name, reason)
+    if executor is not None and hasattr(executor, "campaign_plan"):
+        executor.test_plan["baseline_requests"] = 0
+        executor.campaign_result = campaign.execute_campaign(
+            executor, executor.campaign_plan,
+            Exchange(label="baseline not sent", method=operation["method"], url="", error=reason))
     return _result(endpoint, operation, _dedupe(findings), budget, profile, notes=[reason],
                    source_url=source_url, executor=executor, ledger=ledger)
 
 
-MAX_LOG_ENTRIES = 200
+MAX_LOG_ENTRIES = 220
 # How much of a response body each log entry carries. Wider than the excerpt in
 # a finding's proof, because the traffic view is the only place an operator
 # reads a request that produced no finding, and narrow enough that two hundred
@@ -653,19 +853,81 @@ def _route_notes(link, *, url: str = "", tls_inspected: bool = False) -> list[st
 
 def _result(endpoint, operation, findings, budget, profile, *, notes=None, baseline=None,
             source_url: str = "", executor=None, verdict=None, ledger=None) -> dict:
+    response_review = None
+    if executor is not None:
+        response_review, observed = contract.review_captured(
+            getattr(executor, "contract_snapshot", None), executor.exchanges, endpoint)
+        findings = _dedupe(list(findings) + observed)
+        if ledger is not None and response_review["responses_received"]:
+            if response_review["contract"]["reviewed_responses"]:
+                ledger.complete("response-contract", findings=len(response_review["contract"]["findings"]))
+                partial = [row for row in response_review["contract"]["exchanges"]
+                           if row["state"] in ("incomplete", "not-reviewed", "edge-block")]
+                if partial:
+                    ledger.inconclusive("response-contract", "All captured responses were considered; some lack a complete matching application contract or are explicit edge block pages. See the response review for individual reasons.")
+            else:
+                ledger.inconclusive("response-contract", "No captured response could be reviewed against a matching application contract. Edge blocks do not establish downstream application behaviour.")
     _attach_commands(findings, source_url)
     log = _log(executor, endpoint)
+    if executor is not None and baseline is not None:
+        for exchange, row in zip(executor.exchanges, log, strict=False):
+            if exchange is not baseline:
+                row["comparison_before_import_redaction"] = comparison_facts(
+                    exchange, baseline, policy=getattr(executor, "comparison_policy", None),
+                    protected_keys={part.replace("~1", "/").replace("~0", "~")
+                                    for pointer in getattr(executor, "writable_body_pointers", set())
+                                    for part in pointer.split("/") if part})
     if executor is not None and len(executor.exchanges) > MAX_LOG_ENTRIES:
         (notes := list(notes or [])).append(
             f"The request log keeps the first {MAX_LOG_ENTRIES} of {len(executor.exchanges)} requests.")
     if ledger is not None:
+        _probe_coverage(ledger, executor)
         # Anything never reached gets a state too. A check with no state at all
         # is indistinguishable from one that ran clean, which is the whole
         # failure this ledger exists to prevent.
         for name in coverage.CHECKS:
             if not ledger.state(name):
-                ledger.skip(name, "This check did not run in this profile.")
-    return {
+                if name == "inventory":
+                    ledger.not_applicable(name, "Inventory is a separate host sweep, not an endpoint check.")
+                elif executor is not None and executor.pace.stopped:
+                    ledger.block(name, "Target rate limit stopped further requests.", code="rate-limit-observed")
+                elif budget.remaining <= 0 and _family_permitted(name, _profile(profile)):
+                    ledger.budget_exhausted(name)
+                else:
+                    ledger.skip(name, "This check did not run in this profile.")
+        # Summarise only after individual receipts and unreached families have
+        # settled the ledger. An earlier summary could say seven families were
+        # blocked while the final receipts correctly say nine.
+        gap = coverage.describe(ledger, verdict)
+        if gap and gap not in (notes or []):
+            notes = list(notes or []) + [gap]
+    campaign_result = getattr(executor, "campaign_result", {})
+    individual = campaign_result.get("probes", []) + getattr(executor, "probe_results", [])
+    # Probe copies reference the same redacted wire data as their log entry.
+    # Keep name-only pre-mask facts with those copies too, for field drill-down.
+    if executor is not None and baseline is not None:
+        for probe in individual:
+            for entry in ([probe["exchange"]] if probe.get("exchange") else probe.get("exchanges", [])):
+                match = next((row for row in log if row.get("comparison_before_import_redaction") and all(row.get(key) == entry.get(key) for key in
+                             ("label", "method", "url", "request_body", "status", "response_body", "request_headers", "response_headers"))), None)
+                if match and match.get("comparison_before_import_redaction"):
+                    entry["comparison_before_import_redaction"] = match["comparison_before_import_redaction"]
+    represented = {item.get("family") for item in individual}
+    if ledger is not None:
+        for entry in ledger.entries():
+            if entry.check not in represented and entry.check != "schema-inputs":
+                individual.append({"check": entry.check, "family": entry.check,
+                                   "operation": endpoint, "field_pointer": "",
+                                   "status": "blocked-prerequisite" if entry.state == "blocked" else entry.state,
+                                   "reason_code": ("all-captured-response-review" if entry.check == "response-contract"
+                                                   and response_review and response_review["responses_received"]
+                                                   else entry.reason_codes[0] if entry.reason_codes else entry.state),
+                                   "reason": entry.reason, "requests": entry.requests,
+                                   "request_sent": bool(entry.requests),
+                                   "missing_prerequisites": entry.missing_prerequisites})
+    schema_sent = sum(item.get("request_sent", False) for item in campaign_result.get("probes", []))
+    baseline_sent = int(baseline is not None)
+    result = {
         "endpoint": endpoint,
         "operation_id": operation["id"],
         "method": operation["method"],
@@ -673,26 +935,124 @@ def _result(endpoint, operation, findings, budget, profile, *, notes=None, basel
         "profile": profile,
         "requests_sent": budget.spent,
         "request_budget": budget.limit,
+        "response_comparison": normalize_policy(getattr(executor, "comparison_policy", None)),
+        "contract_snapshot": getattr(executor, "contract_snapshot", None),
+        "response_review": response_review,
         "concurrency": executor.concurrency if executor is not None else 1,
         "baseline_status": baseline.status if baseline is not None else None,
         "baseline_outcome": verdict.outcome if verdict is not None else None,
         "baseline_verdict": verdict.to_dict() if verdict is not None else None,
         "coverage": ledger.to_dict() if ledger is not None else None,
+        "test_plan": getattr(executor, "test_plan", None),
+        "field_coverage": campaign_result.get("field_coverage", []),
+        "probes": individual,
+        "request_breakdown": {"inventory": 0, "baseline": baseline_sent,
+                              "schema_inputs": schema_sent,
+                              "other_endpoint_tests": max(0, budget.spent - baseline_sent - schema_sent),
+                              "total": budget.spent},
         "notes": [note for note in (notes or []) if note],
         "baseline": baseline.to_dict() if baseline is not None else None,
         "log": log,
         "findings": [item.to_dict() for item in findings],
         "summary": summarize(findings),
     }
+    # Findings may quote a target response outside their exchanges. Redact
+    # known baseline credentials there as well, including custom scheme names.
+    if baseline is not None:
+        # Redact string values, not serialized JSON structure. A credential
+        # such as "true" must not corrupt Boolean coverage/assertion values.
+        def redact_values(value):
+            if isinstance(value, dict):
+                return {key: redact_values(item) for key, item in value.items()}
+            if isinstance(value, list):
+                return [redact_values(item) for item in value]
+            return baseline.safe_text(value, redact_properties=False) if isinstance(value, str) else value
+        result = redact_values(result)
+    # The checksum identifies the evidence actually exported after redaction.
+    if executor is not None:
+        result["credential_names"] = sorted(executor.redacted_names)
+        sources = [*getattr(executor, "credential_sources", []),
+                   *[{"response_headers": exchange.headers} for exchange in executor.exchanges]]
+        result = redact_evidence(result, sources=sources, credential_names=executor.redacted_names)
+    result["contract_snapshot"] = contract.attach_snapshot_integrity(result["contract_snapshot"])
+    return result
+
+
+def _probe_coverage(ledger, executor):
+    """Aggregate individual receipts; no function return is evidence of completion."""
+    if executor is None:
+        return
+    campaign_result = getattr(executor, "campaign_result", {})
+    reports = list(executor.probe_results)
+    reports += [{**probe, "family": "schema-inputs", "requests": int(probe.get("request_sent", False))}
+                for probe in campaign_result.get("probes", [])]
+    families = {item.get("family") for item in reports if item.get("family") in coverage.CHECKS}
+    for name in families:
+        rows = [item for item in reports if item.get("family") == name]
+        sent = sum(row.get("requests", 0) for row in rows)
+        meaningful_headers = set()
+        states = {row.get("status") for row in rows}
+        if sent:
+            ledger.complete(name)
+        elif states <= {"not-sent", "not-applicable"}:
+            ledger.not_applicable(name, "No distinct applicable request was needed.")
+        for row in rows:
+            status = row.get("status")
+            comparisons = list(row.get("comparisons", []))
+            if isinstance(row.get("comparison"), dict):
+                comparisons.append(row["comparison"])
+            meaningful_headers.update(change["name"] for comparison in comparisons
+                                      for change in comparison.get("meaningful_header_differences", [])
+                                      if change.get("name"))
+            if status == "budget-exhausted":
+                ledger.budget_exhausted(name)
+            elif status == "execution-error":
+                ledger.execution_error(name)
+            elif status == "blocked-prerequisite":
+                missing = row.get("missing_prerequisites") or [row.get("reason") or "Probe prerequisite not met."]
+                for reason in missing:
+                    if sent and ledger.state(name) != "blocked":
+                        ledger.inconclusive(name, "Some probes ran, but others lack prerequisites: " + reason)
+                    else:
+                        ledger.block(name, reason, code=row.get("reason_code") or "blocked-prerequisite")
+            elif status in ("same-denial", "same-denial-as-baseline"):
+                ledger.inconclusive(name, "Same denial as baseline; downstream handling unknown.")
+            elif status == "edge-block-observed":
+                ledger.inconclusive(name, "An explicit edge block page was observed; downstream handling is unknown.")
+            elif row.get("reason_code") == "field-validation-observed":
+                ledger.inconclusive(name, "A field-specific validation rejection was observed; this alone does not demonstrate security impact or the processing layer.")
+            elif status in ("field-response-observed", "field-specific-response-observed") or "lead" in row.get("reason_code", ""):
+                ledger.inconclusive(name, "A response difference is a lead; validation and security impact are not established.")
+        entry = next((entry for entry in ledger.entries() if entry.check == name), None)
+        if entry is not None:
+            entry.requests = sent
+            entry.reason_codes = sorted(set(entry.reason_codes) | {row.get("reason_code", "") for row in rows} - {""})
+            if meaningful_headers:
+                entry.reason_codes = sorted(set(entry.reason_codes) | {"meaningful-response-header-difference"})
+                header_note = ("Meaningful response-header changes were also observed: "
+                               + ", ".join(sorted(meaningful_headers))
+                               + ". Review the exact exchanges; these changes alone do not establish security impact.")
+                if header_note not in entry.reason:
+                    entry.reason = (entry.reason + " " + header_note).strip()
+            entry.missing_prerequisites = sorted(set(entry.missing_prerequisites)
+                                                | {reason for row in rows for reason in row.get("missing_prerequisites", [])})
 
 
 def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict | None = None,
                     verify_tls: bool = True, timeout: float = 15.0, budget: int = 60,
                     connection=None,
                     concurrency: int | None = None, user_agent: str | None = None,
-                    client=None) -> dict:
-    """Sweep the host around the documented surface. Read-only."""
+                    requests_per_second: float | None = None, credential_names=(), client=None,
+                    control=None) -> dict:
+    """Sweep the host around the documented surface. Read-only.
+
+    ``control`` binds the sweep to a server-owned run: its request budget is a
+    child of the run-wide budget, and it shares the run's pacer, stop signal and
+    receipt sink, so the sweep draws on the same total as the operations and a
+    429 during the sweep stops the rest of the run too.
+    """
     parsed = normalize_spec(spec)
+    names = _credential_names(parsed, credential_names)
     target = base_url or parsed.get("base_url") or ""
     if not target:
         raise ValueError("Set a base URL before running the inventory sweep.")
@@ -706,19 +1066,33 @@ def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict
     findings = list(specscan.review_document(parsed))
     documented_paths = {op["path"] for op in parsed["operations"]}
 
-    tracker = Budget(budget)
+    tracker = control.per_operation_budget(budget) if control is not None else Budget(budget)
     owns_client = client is None
     http = client or build_client(connection=link)
     signature = Signature(quiet=link.quiet)
     executor = Executor(http, tracker, timeout=timeout, allow_mutating=False,
                         concurrency=_workers(PROFILES["readonly"], concurrency),
-                        signature=signature)
+                        signature=signature, scope_url=target, requests_per_second=requests_per_second,
+                        pace=control.pace if control is not None else None,
+                        cancel=control.cancel if control is not None else None,
+                        write_withdrawn=control.write_withdrawn if control is not None else None,
+                        receipts=control.receipts if control is not None else None)
+    executor.redacted_names = names
+    rate_note = ""
+    stopped = False
     try:
         probe_findings, summary = inventory.run(
             executor, spec=parsed, base_url=target, headers=identity_a,
             documented_paths=documented_paths,
         )
         findings += probe_findings
+    except RateLimited:
+        probe_findings, summary = [], {"rate_limited": True}
+        rate_note = "The target returned HTTP 429; remaining inventory probes were stopped."
+    except Cancelled:
+        probe_findings, summary = [], {"stopped": True}
+        rate_note = "The run was stopped during the inventory sweep; remaining sweep probes were not sent."
+        stopped = True
     finally:
         if owns_client:
             http.close()
@@ -728,7 +1102,11 @@ def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict
     # ran rather than leaving its absence to be read as nothing found.
     ledger = coverage.Ledger()
     ledger.complete("contract-review", findings=len(list(specscan.review_document(parsed))))
-    if summary.get("budget_exhausted"):
+    if stopped:
+        ledger.block("inventory", rate_note, code="run-stopped")
+    elif rate_note:
+        ledger.block("inventory", rate_note, code="rate-limit-observed")
+    elif summary.get("budget_exhausted"):
         ledger.inconclusive(
             "inventory",
             f"The sweep's request budget of {tracker.limit} was spent before it finished, so "
@@ -736,20 +1114,26 @@ def audit_inventory(spec: dict, *, base_url: str | None = None, identities: dict
             "Raise the sweep budget to cover the whole surface.")
     else:
         ledger.complete("inventory", findings=len(probe_findings), requests=tracker.spent)
-    return {
+    result = {
         "scope": "inventory",
         "coverage": ledger.to_dict(),
         "base_url": target,
         "profile": "readonly",
         "requests_sent": tracker.spent,
+        "request_breakdown": {"inventory": tracker.spent, "baseline": 0, "schema_inputs": 0,
+                              "other_endpoint_tests": 0, "total": tracker.spent},
         "request_budget": tracker.limit,
         "concurrency": executor.concurrency,
         "discovery": summary,
         "log": _log(executor, "surface sweep"),
         "notes": ([credential_note] if credential_note else [])
+                 + ([rate_note] if rate_note else [])
                  + ([signature.describe()] if signature.describe() else [])
                  + _route_notes(link)
                  + (["Request budget reached; the sweep stopped early."] if summary.get("budget_exhausted") else []),
         "findings": [item.to_dict() for item in deduped],
         "summary": summarize(deduped),
     }
+    result["credential_names"] = sorted(executor.redacted_names)
+    sources = [{"headers": identity_a}, *[{"response_headers": exchange.headers} for exchange in executor.exchanges]]
+    return redact_evidence(result, sources=sources, credential_names=executor.redacted_names)

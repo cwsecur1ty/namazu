@@ -27,8 +27,16 @@ import re
 import secrets
 from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit
 
+from . import probes
 from .identity import same_principal, strip_credentials, subject
-from .model import Exchange, finding, mark, similarity
+from .model import (
+    CREDENTIAL_QUERY,
+    REDACTED_HEADERS,
+    Exchange,
+    finding,
+    mark,
+    similarity,
+)
 from .transport import BudgetExhausted, Executor
 
 MAX_FIELDS = 4
@@ -95,6 +103,17 @@ def _header_value(headers: dict, name: str) -> str:
 
 def _without_header(headers: dict, name: str) -> dict:
     return {key: value for key, value in (headers or {}).items() if key.lower() != name.lower()}
+
+
+def _baseline_headers(baseline: Exchange, base_headers: dict) -> dict:
+    """Carry the saved request's application headers, once each.
+
+    The transport regenerates framing and Host; replaying their captured values
+    could send stale lengths after a body mutation.
+    """
+    managed = {"host", "content-length", "transfer-encoding", "connection", "proxy-authorization", "upgrade"}
+    return {name.lower(): value for source in (baseline.request_headers, base_headers or {})
+            for name, value in source.items() if name.lower() not in managed}
 
 
 def _parse_cookies(header: str) -> list:
@@ -164,18 +183,23 @@ class Point(str):
 
     def place(self, baseline: Exchange, value: str, base_headers: dict) -> dict:
         """The ``send()`` arguments for a request carrying ``value`` at this point."""
-        headers = dict(base_headers or {})
+        headers = _baseline_headers(baseline, base_headers)
+        carried = {}
+        if baseline.request_body is not None:
+            carried = {"body": baseline.request_body,
+                       "content_type": _header_value(headers, "content-type")}
         if self.location == "header":
             return {"method": baseline.method, "url": baseline.url,
-                    "headers": {**_without_header(headers, str(self)), str(self): value}}
+                    "headers": {**_without_header(headers, str(self)), str(self): value}, **carried}
         if self.location == "cookie":
             carried = (_header_value(headers, "Cookie")
                        or _header_value(baseline.request_headers, "Cookie"))
             return {"method": baseline.method, "url": baseline.url,
                     "headers": {**_without_header(headers, "Cookie"),
-                                "Cookie": _set_cookie(carried, str(self), value)}}
+                                "Cookie": _set_cookie(carried, str(self), value)},
+                    **({"body": baseline.request_body} if baseline.request_body is not None else {})}
         return {"method": baseline.method, "url": self.apply(baseline.url, value),
-                "headers": headers}
+                "headers": headers, **carried}
 
     def current(self, baseline: Exchange) -> str:
         """The value this point carries in the baseline request."""
@@ -249,7 +273,7 @@ class BodyPoint(Point):
         content_type = (_header_value(baseline.request_headers, "content-type")
                         or "application/json")
         return {"method": baseline.method, "url": baseline.url,
-                "headers": _without_header(dict(base_headers or {}), "content-type"),
+                "headers": _without_header(_baseline_headers(baseline, base_headers), "content-type"),
                 "body": json.dumps(mutated), "content_type": content_type,
                 "mutating": True}
 
@@ -280,13 +304,15 @@ def _body_leaves(node, pointer: list, out: list, depth: int = 0) -> None:
         for index, value in enumerate(node[:MAX_BODY_ITEMS]):
             _body_leaves(value, pointer + [index], out, depth + 1)
     elif isinstance(node, bool):
-        # A boolean field rejects a string payload before it reaches anything.
+        # Boolean type/boundary cases belong to the schema campaign; this
+        # supplemental battery targets string and numeric injection oracles.
         return
     elif isinstance(node, (str, int, float)):
         out.append((pointer, node))
 
 
-def _body_points(baseline: Exchange, limit: int) -> list:
+def _body_points(baseline: Exchange, limit: int, credential_names=(),
+                 allowed_body_pointers=None) -> list:
     """Scalar fields in the request body, highest signal first."""
     document = _parse_json(baseline.request_body)
     if not isinstance(document, (dict, list)):
@@ -297,6 +323,14 @@ def _body_points(baseline: Exchange, limit: int) -> list:
     # number does without being rejected by validation on the way.
     leaves.sort(key=lambda leaf: (0 if INTERESTING.match(str(leaf[0][-1])) else 1,
                                   0 if isinstance(leaf[1], str) else 1))
+    protected = {str(name).lower() for name in credential_names}
+    leaves = [(pointer, value) for pointer, value in leaves
+              if not any(CREDENTIAL_QUERY.match(str(part)) or str(part).lower() in protected
+                         for part in pointer)]
+    if allowed_body_pointers is not None:
+        allowed = set(allowed_body_pointers)
+        leaves = [(path, value) for path, value in leaves
+                  if probes.pointer(BodyPoint(path)) in allowed]
     return [BodyPoint(pointer, example=value) for pointer, value in leaves[:limit]]
 
 
@@ -314,6 +348,8 @@ def _named_points(documented: list | None, location: str, limit: int) -> list:
     out = []
     for entry in (documented or []):
         if not isinstance(entry, dict) or not entry.get("name"):
+            continue
+        if entry["name"].lower() in REDACTED_HEADERS or CREDENTIAL_QUERY.match(entry["name"]):
             continue
         out.append(Point(entry["name"], location=location,
                          example=entry.get("example") or entry.get("default")))
@@ -418,9 +454,10 @@ def _query_fields(url: str, documented: list | None = None, limit: int = MAX_FIE
     """
     present, out = [], []
     for key, _value in parse_qsl(urlsplit(url).query, keep_blank_values=True):
-        if key not in present:
+        if key not in present and not CREDENTIAL_QUERY.match(key):
             present.append(key)
-    candidates = present + [name for name in _names_of(documented) if name not in present]
+    candidates = present + [name for name in _names_of(documented)
+                            if name not in present and not CREDENTIAL_QUERY.match(name)]
     # Rank by signal: named-for-a-sink first, then parameters the request already carried.
     candidates.sort(key=lambda name: (0 if INTERESTING.match(name) else 1,
                                       0 if name in present else 1))
@@ -429,6 +466,46 @@ def _query_fields(url: str, documented: list | None = None, limit: int = MAX_FIE
             out.append(Point(name, example=_documented_value(name, documented, filler)))
     return out[:limit]
 
+
+
+BATTERY_REQUEST_LIMITS = {
+    "sql-error": 2, "template-evaluation": 8, "html-reflection": 1,
+    "open-redirect": 1, "traversal": 1, "nosql-error": 2, "ldap-error": 2,
+    "sql-boolean": 4, "url-fetch-error": 2, "crlf": 2, "parameter-pollution": 2,
+}
+
+
+def battery_plan(baseline: Exchange, *, endpoint: str, fields: list,
+                 budget: int, time_based: bool = False) -> list[dict]:
+    """Deterministic conditional upper bounds for the retained paired-control probes.
+
+    These are supplemental to the exact schema case plan. A second request is
+    sent only when the first response supplies the relevant oracle.
+    """
+    out = []
+    for field in fields:
+        for check, count in BATTERY_REQUEST_LIMITS.items():
+            needs_success = check in ("sql-boolean", "parameter-pollution")
+            out.append({
+                "operation": endpoint, "family": "body-injection" if isinstance(field, BodyPoint)
+                else "input-handling", "check": check, "field_pointer": probes.pointer(field),
+                "location": getattr(field, "location", "query"),
+                "mutation": check, "prerequisite": (
+                    "Successful positive control; probe-specific applicability and paired controls"
+                    if needs_success else "HTTP response; probe-specific applicability and paired controls"),
+                "planned_requests": count, "budget": budget, "conditional": True,
+                "request_count_kind": "upper-bound", "category": "endpoint-tests",
+            })
+    if time_based:
+        for field in fields[:TIME_BASED_POINTS]:
+            out.append({"operation": endpoint, "family": "input-handling", "check": "sql-timing",
+                        "field_pointer": probes.pointer(field), "mutation": "sql-timing",
+                        "location": getattr(field, "location", "query"),
+                        "prerequisite": "Successful positive control; zero-delay and scaled-delay controls",
+                        "planned_requests": len(SLEEP_PAYLOADS) * 3, "budget": budget,
+                        "conditional": True, "request_count_kind": "upper-bound",
+                        "category": "endpoint-tests"})
+    return out
 
 
 def battery(executor: Executor, *, baseline: Exchange, endpoint: str, field,
@@ -440,25 +517,52 @@ def battery(executor: Executor, *, baseline: Exchange, endpoint: str, field,
     compared against the same target in the same state.
     """
     findings: list = []
-    findings += _sql_error(executor, baseline, endpoint, field, base_headers)
-    findings += _template_injection(executor, baseline, endpoint, field, base_headers)
-    findings += _reflection(executor, baseline, endpoint, field, base_headers)
-    findings += _open_redirect(executor, baseline, endpoint, field, base_headers)
-    findings += _traversal(executor, baseline, endpoint, field, base_headers)
-    findings += _nosql(executor, baseline, endpoint, field, base_headers)
-    findings += _ldap_error(executor, baseline, endpoint, field, base_headers)
-    findings += _sql_boolean(executor, baseline, endpoint, field, base_headers, documented_query)
-    findings += _ssrf(executor, baseline, endpoint, field, base_headers)
-    findings += _crlf(executor, baseline, endpoint, field, base_headers)
-    findings += _parameter_pollution(executor, baseline, endpoint, field, base_headers,
-                                     documented_query)
+    family = "body-injection" if isinstance(field, BodyPoint) else "input-handling"
+    checks = (
+        ("sql-error", _sql_error), ("template-evaluation", _template_injection),
+        ("html-reflection", _reflection), ("open-redirect", _open_redirect),
+        ("traversal", _traversal), ("nosql-error", _nosql), ("ldap-error", _ldap_error),
+        ("sql-boolean", _sql_boolean), ("url-fetch-error", _ssrf),
+        ("crlf", _crlf), ("parameter-pollution", _parameter_pollution),
+    )
+    for name, callback in checks:
+        needs_success = name in ("sql-boolean", "parameter-pollution")
+        applicable = True
+        missing = (["successful-positive-control"]
+                   if needs_success and not probes.successful(baseline) else [])
+        if name == "crlf" and isinstance(field, Point) and not field.in_url:
+            missing.append("URL input; raw newlines in headers or cookies are not permitted")
+            applicable = False
+        if name == "parameter-pollution" and isinstance(field, Point) and field.location != "query":
+            missing.append("query parameter")
+            applicable = False
+        if name == "sql-boolean" and not str(_seed_value(
+                baseline, field, documented_query, executor.signature.marker()) or "").isdigit():
+            missing.append("numeric seed value")
+            applicable = False
+        for check_name, pattern in (("sql-error", SQL_ERRORS), ("nosql-error", NOSQL_ERRORS),
+                                    ("ldap-error", LDAP_ERRORS), ("url-fetch-error", FETCH_ERRORS)):
+            if name == check_name and pattern.search(baseline.body or ""):
+                missing.append("baseline without the same error signature")
+        if name == "url-fetch-error" and not SSRF_NAMES.match(field):
+            missing.append("URL-like input")
+            applicable = False
+        args = (executor, baseline, endpoint, field, base_headers)
+        if needs_success:
+            args += (documented_query,)
+        findings += probes.run(
+            executor, name, lambda callback=callback, args=args: callback(*args),
+            family=family, baseline=baseline, endpoint=endpoint, field=field,
+            prerequisite=("Successful positive control and probe-specific paired controls"
+                          if needs_success else "HTTP response and probe-specific paired controls"),
+            missing=missing, applicable=applicable)
     return _locate(findings, field)
 
 
 def points(baseline: Exchange, *, documented_query: list | None = None,
            documented_header: list | None = None, documented_path: list | None = None,
            documented_cookie: list | None = None, path_template: str = "",
-           max_fields: int = MAX_FIELDS, filler: str = "namazu") -> list:
+           max_fields: int = MAX_FIELDS, filler: str = "namazu", credential_names=()) -> list:
     """Every injection point this operation documents, highest signal first.
 
     Path parameters carry identifiers and reach the same sinks as query
@@ -471,7 +575,9 @@ def points(baseline: Exchange, *, documented_query: list | None = None,
     fields = fields[:max_fields + 2]
     fields += _named_points(documented_header, "header", NAMED_FIELDS)
     fields += _named_points(documented_cookie, "cookie", NAMED_FIELDS)
-    return fields
+    protected = {str(name).lower() for name in credential_names}
+    return [field for field in fields if not CREDENTIAL_QUERY.match(str(field))
+            and str(field).lower() not in protected]
 
 
 def probe(executor: Executor, *, baseline: Exchange, endpoint: str, base_headers: dict,
@@ -482,27 +588,31 @@ def probe(executor: Executor, *, baseline: Exchange, endpoint: str, base_headers
     """Run the read-only input probes over every documented point."""
     findings: list = []
     if baseline.method not in ("GET", "HEAD") or not baseline.ok:
+        probes.run(executor, "input-points", lambda: [], family="input-handling",
+                   baseline=baseline, endpoint=endpoint,
+                   missing=(["read-only-method"] if baseline.method not in ("GET", "HEAD") else [])
+                   + (["baseline-response"] if not baseline.ok else []))
         return findings
     # No query parameters does not mean nothing to probe: header and cookie
     # parameters and the forwarding headers are tested either way.
     fields = points(baseline, documented_query=documented_query,
                     documented_header=documented_header, documented_path=documented_path,
                     documented_cookie=documented_cookie, path_template=path_template,
-                    max_fields=max_fields, filler=executor.signature.marker())
+                    max_fields=max_fields, filler=executor.signature.marker(),
+                    credential_names=getattr(executor, "redacted_names", ()))
 
     def one(branch, field):
         # Points are independent of each other, so they are the unit of
         # parallelism. Each branch draws on the same request budget.
-        if not branch.affordable(4):
-            return []
         return battery(branch, baseline=baseline, endpoint=endpoint, field=field,
                        base_headers=base_headers, documented_query=documented_query)
 
     try:
         for group in executor.fan_out(fields, one):
             findings += group or []
-        findings += header_reflection(executor, baseline=baseline, endpoint=endpoint,
-                                      base_headers=base_headers)
+        findings += probes.run(executor, "forwarding-header", lambda: header_reflection(
+            executor, baseline=baseline, endpoint=endpoint, base_headers=base_headers),
+            family="input-handling", baseline=baseline, endpoint=endpoint)
         if time_based:
             findings += time_based_pass(executor, baseline=baseline, endpoint=endpoint,
                                         base_headers=base_headers, fields=fields,
@@ -525,15 +635,19 @@ def time_based_pass(executor: Executor, *, baseline: Exchange, endpoint: str,
     confirmed = {item.id if hasattr(item, "id") else item.get("id")
                  for item in (already or [])}
     findings: list = []
+    if not probes.successful(baseline):
+        probes.run(executor, "sql-timing", lambda: [], family="input-handling",
+                   baseline=baseline, endpoint=endpoint, missing=["successful-positive-control"])
+        return findings
     for field in fields[:TIME_BASED_POINTS]:
         # A point already confirmed as reaching SQL needs no second proof, and
         # the sleep is the expensive way to get one.
         if {"input.sql-error", "input.sql-boolean"} & confirmed:
             break
-        if not executor.affordable(len(SLEEP_PAYLOADS) + 2):
-            break
-        found = _sql_time_based(executor, baseline, endpoint, field, base_headers,
-                                documented_query)
+        found = probes.run(executor, "sql-timing", lambda field=field: _sql_time_based(
+            executor, baseline, endpoint, field, base_headers, documented_query),
+            family="input-handling", baseline=baseline, endpoint=endpoint, field=field,
+            prerequisite="Successful positive control; paired zero-delay and scaled-delay responses")
         findings += _locate(found, field)
     return findings
 
@@ -560,7 +674,7 @@ def _sql_error(executor, baseline, endpoint, field, base_headers) -> list:
         return []
     # A balanced pair must NOT error; otherwise the field rejects quotes generally.
     balanced = _send(executor, baseline, field, "''", f"{field}='' (balanced control)", base_headers)
-    if balanced.ok and SQL_ERRORS.search(balanced.body or ""):
+    if not balanced.ok or SQL_ERRORS.search(balanced.body or ""):
         return []
     match = SQL_ERRORS.search(broken.body)
     return [finding(
@@ -570,9 +684,9 @@ def _sql_error(executor, baseline, endpoint, field, base_headers) -> list:
         method=("Sent a single unbalanced quote, then a balanced pair as a control. The finding "
                 "requires a database error on the first and none on the second."),
         detail=(f"Setting “{field}” to a single quote returned a database engine error, while the balanced "
-                "control value did not. The parameter reaches a query that is assembled as a string rather "
-                "than parameterised."),
-        impact="Indicates the field is concatenated into SQL. Confirm manually before claiming data access.",
+                "control value did not. This is a field-specific error-disclosure lead; the response "
+                "does not establish which server layer processed the value or prove query execution."),
+        impact="May indicate unsafe query handling. Confirm manually before claiming SQL injection or data access.",
         remediation="Use parameterised queries or a prepared statement for this input, and return a generic "
                     "error to the client.",
         evidence={"parameter": field, "payload": "'", "control": "''",
@@ -589,17 +703,18 @@ def _nosql(executor, baseline, endpoint, field, base_headers) -> list:
     if not operator.ok or not NOSQL_ERRORS.search(operator.body or ""):
         return []
     control = _send(executor, baseline, field, "[xne]", f"{field}[xne] control", base_headers)
-    if control.ok and NOSQL_ERRORS.search(control.body or ""):
+    if not control.ok or NOSQL_ERRORS.search(control.body or ""):
         return []
     match = NOSQL_ERRORS.search(operator.body)
     return [finding(
-        "input.nosql-operator", "Document-database operator is interpreted in a parameter",
+        "input.nosql-operator", "Document-database error follows an operator-like input",
         "high", "probable", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
         parameter=field,
         method=("Sent a MongoDB-style operator, then a structurally identical inert key as a control. "
                 "The finding requires a driver error on the first and none on the second."),
         detail=(f"A MongoDB-style operator in “{field}” produced a driver error that the inert control value "
-                "did not. The parameter is passed into a query document without sanitisation."),
+                "did not. This is an error-disclosure lead; it does not prove query execution or "
+                "identify which server layer processed the value."),
         impact="Operator injection can bypass filters and authentication predicates.",
         remediation="Cast query parameters to their expected scalar type and reject keys beginning with $.",
         evidence={"parameter": field, "payload": "[$ne]", "control": "[xne]",
@@ -634,7 +749,8 @@ def _template_injection(executor, baseline, endpoint, field, base_headers) -> li
         second_payload = template.replace("EXPR", "9*41")
         second = _send(executor, baseline, field, second_payload,
                        f"{field}={second_payload}", base_headers)
-        if not second.ok or "369" not in (second.body or ""):
+        if (not second.ok or "369" not in (second.body or "") or "9*41" in (second.body or "")
+                or first.body == second.body or ("217" in baseline.body and "369" in baseline.body)):
             continue
         return [finding(
             "input.template-injection", "Parameter is evaluated by a template engine",
@@ -778,18 +894,42 @@ def mass_assignment(executor: Executor, *, built: dict, endpoint: str, base_head
         return []
     if "json" not in str(built.get("content_type") or "application/json"):
         return []
+    allowed = getattr(executor, "writable_body_pointers", None)
+    out = []
+    for name in list(dict.fromkeys(properties))[:3]:
+        path = [name] if name in payload else name.split(".")
+        point = BodyPoint(path)
+        missing = []
+        if allowed is not None and probes.pointer(point) not in allowed:
+            missing.append("writable-request-schema-property")
+        if any(CREDENTIAL_QUERY.match(part) or part.lower() in getattr(executor, "redacted_names", ())
+               for part in path):
+            missing.append("credential-preserved")
+        try:
+            parent = _get_in(payload, path[:-1])
+        except (KeyError, TypeError, IndexError):
+            parent = None
+        if not isinstance(parent, dict):
+            missing.append("saved-baseline-parent-required")
+        out += probes.run(executor, "privileged-property-write", lambda path=path, name=name: _mass_assignment_one(
+            executor, built=built, endpoint=endpoint, base_headers=base_headers,
+            payload=payload, path=path, name=name, read_back_url=read_back_url),
+            family="mass-assignment", endpoint=endpoint, field=point, missing=missing)
+    return out
+
+
+def _mass_assignment_one(executor, *, built, endpoint, base_headers, payload, path, name,
+                         read_back_url=None):
+    """One property changed against the original saved request, without a marker field."""
     if not executor.affordable(2):
         return []
-
-    nonce = _nonce()
-    injected = dict(payload)
-    chosen: dict = {}
-    for name in properties[:3]:
-        leaf = name.split(".")[-1]
-        value = True if re.match(r"(?i)^(is_|has_)|^(admin|verified|active|enabled|approved)$", leaf) else "admin"
-        injected[leaf] = value
-        chosen[leaf] = value
-    injected.setdefault(executor.signature.field_name, nonce)
+    leaf = path[-1]
+    value = True if re.match(r"(?i)^(is_|has_)|^(admin|verified|active|enabled|approved)$", leaf) else "admin"
+    parent = _get_in(payload, path[:-1])
+    if leaf in parent and parent[leaf] == value and type(parent[leaf]) is type(value):
+        return []
+    injected = _set_in(copy.deepcopy(payload), path, value)
+    chosen = {name: value}
 
     written = executor.send(
         built["method"], built["url"], label=f"body with {', '.join(chosen)} added",
@@ -799,8 +939,14 @@ def mass_assignment(executor: Executor, *, built: dict, endpoint: str, base_head
     if not written.ok or written.status >= 400:
         return []
 
-    echoed = {name: value for name, value in chosen.items()
-              if re.search(rf'"{re.escape(name)}"\s*:\s*{re.escape(json.dumps(value))}', written.body or "")}
+    def echoed_value(exchange):
+        try:
+            actual = _get_in(_parse_json(exchange.body), path)
+        except (KeyError, IndexError, TypeError):
+            return {}
+        return chosen if actual == value and type(actual) is type(value) else {}
+
+    echoed = echoed_value(written)
 
     confirmed = {}
     exchanges = [written]
@@ -809,8 +955,7 @@ def mass_assignment(executor: Executor, *, built: dict, endpoint: str, base_head
                                   headers=base_headers, identity="identity A")
         exchanges.append(read_back)
         if read_back.ok and read_back.status < 300:
-            confirmed = {name: value for name, value in chosen.items()
-                         if re.search(rf'"{re.escape(name)}"\s*:\s*{re.escape(json.dumps(value))}', read_back.body or "")}
+            confirmed = echoed_value(read_back)
 
     if confirmed:
         return [finding(
@@ -846,24 +991,12 @@ def mass_assignment(executor: Executor, *, built: dict, endpoint: str, base_head
             evidence={"properties": echoed, "write_status": written.status, "verified_by_read_back": False},
             exchanges=exchanges,
         )]
-    return [finding(
-        "input.unknown-property-accepted", "Unknown properties are accepted without rejection",
-        "low", "possible", owasp="API3:2023 Broken Object Property Level Authorization",
-        endpoint=endpoint, mutating=True,
-        method=("Added properties the schema does not declare, including a unique marker, and the "
-                "request was accepted rather than rejected."),
-        detail=(f"A body containing {', '.join(chosen)} and an unknown marker property was accepted with "
-                f"HTTP {written.status}. The schema is not enforced strictly, though no privileged value "
-                "was observed taking effect."),
-        impact="Lenient deserialisation is the precondition for mass assignment.",
-        remediation="Reject unknown properties (additionalProperties: false) and validate against the schema.",
-        evidence={"properties": list(chosen), "marker": nonce, "status": written.status},
-        exchanges=[written],
-    )]
+    return []
 
 
 def body_injection(executor: Executor, *, baseline: Exchange, endpoint: str,
-                   base_headers: dict, max_fields: int = 3) -> tuple:
+                   base_headers: dict, max_fields: int = 3,
+                   allowed_body_pointers=None) -> tuple:
     """Run the injection battery against the fields of a JSON request body.
 
     A payload that only ever travels in a query string misses every sink
@@ -877,22 +1010,38 @@ def body_injection(executor: Executor, *, baseline: Exchange, endpoint: str,
     state it changed.
     """
     content_type = _header_value(baseline.request_headers, "content-type")
-    if baseline.method not in ("POST", "PUT", "PATCH") or not baseline.ok:
-        return [], []
+    missing = []
+    if baseline.method not in ("POST", "PUT", "PATCH"):
+        missing.append("body-carrying write method")
+    if not baseline.ok:
+        missing.append("baseline-response")
+    if not executor.allow_mutating:
+        missing.append("write-permission-required")
     if "json" not in (content_type or "application/json"):
+        missing.append("JSON request body")
+    if missing:
+        probes.run(executor, "body-points", lambda: [], family="body-injection",
+                   baseline=baseline, endpoint=endpoint, missing=missing)
         return [], []
-    fields = _body_points(baseline, max_fields)
+    if allowed_body_pointers is None:
+        allowed_body_pointers = getattr(executor, "writable_body_pointers", None)
+    fields = _body_points(baseline, max_fields, getattr(executor, "redacted_names", ()),
+                          allowed_body_pointers)
+    if not fields:
+        probes.run(executor, "body-points", lambda: [], family="body-injection",
+                   baseline=baseline, endpoint=endpoint, missing=["non-credential request-body fields"])
     findings: list = []
     probed: list = []
     for field in fields:
-        if not executor.affordable(4):
-            break
-        probed.append(str(field))
+        sent_before = len(executor.exchanges)
         try:
             findings += battery(executor, baseline=baseline, endpoint=endpoint, field=field,
                                 base_headers=base_headers)
         except BudgetExhausted:
             break
+        finally:
+            if len(executor.exchanges) > sent_before:
+                probed.append(str(field))
     for item in findings:
         item.mutating = True
     return findings, probed
@@ -906,13 +1055,15 @@ def write_authorization(executor: Executor, *, built: dict, endpoint: str, base_
     # This probe writes, so a misconfigured pair of identities costs more here
     # than anywhere else: the write lands either way, and it would be reported
     # as one account writing another account's resource.
-    reason = same_principal(base_headers, identity_b)
+    reason = same_principal(base_headers, identity_b, getattr(executor, "redacted_names", ()))
     if reason:
         if notes is not None:
             notes.append(f"The write was not replayed as the second identity: {reason}. Testing a "
                          "write boundary needs two different accounts.")
+        probes.run(executor, "cross-identity-write", lambda: [], family="write-authorization",
+                   endpoint=endpoint, missing=["distinct-second-identity-required", reason])
         return []
-    headers = strip_credentials(base_headers)
+    headers = strip_credentials(base_headers, getattr(executor, "redacted_names", ()))
     headers.update(identity_b)
     if built.get("content_type"):
         headers["Content-Type"] = built["content_type"]
@@ -974,7 +1125,7 @@ def _ldap_error(executor, baseline, endpoint, field, base_headers) -> list:
         return []
     inert = executor.signature.marker("probe")
     control = _send(executor, baseline, field, inert, f"{field}= inert control", base_headers)
-    if control.ok and LDAP_ERRORS.search(control.body or ""):
+    if not control.ok or LDAP_ERRORS.search(control.body or ""):
         return []
     match = LDAP_ERRORS.search(broken.body)
     return [finding(
@@ -984,7 +1135,8 @@ def _ldap_error(executor, baseline, endpoint, field, base_headers) -> list:
         method=("Sent an unbalanced LDAP filter fragment, then an inert alphanumeric control. The "
                 "finding requires a directory error on the first and none on the second."),
         detail=(f"“{field}” set to an unbalanced LDAP filter produced a directory error that the inert "
-                "control value did not. The parameter reaches a filter built by string concatenation."),
+                "control value did not. This is an error-disclosure lead; it does not prove filter "
+                "execution or identify which server layer processed the value."),
         impact=("Filter injection lets a caller widen a search to records they should not see, and in "
                 "authentication filters it can turn into a login bypass."),
         remediation=("Escape the input per RFC 4515 before placing it in a filter, or bind parameters "
@@ -1140,7 +1292,7 @@ def _sql_time_based(executor, baseline, endpoint, field, base_headers,
 
 
 def _ssrf(executor, baseline, endpoint, field, base_headers) -> list:
-    """Did the server actually try to fetch what we handed it?"""
+    """Record a URL-triggered error as a lead, without inferring a fetch."""
     if not SSRF_NAMES.match(field) or not executor.affordable(2):
         return []
     if FETCH_ERRORS.search(baseline.body or ""):
@@ -1155,34 +1307,39 @@ def _ssrf(executor, baseline, endpoint, field, base_headers) -> list:
         return []
     closed = _send(executor, baseline, field, CLOSED_PORT,
                    f"{field}= closed port on the server's own loopback", base_headers)
-    reached_loopback = closed.ok and FETCH_ERRORS.search(closed.body or "")
+    loopback_error = closed.ok and FETCH_ERRORS.search(closed.body or "")
     return [finding(
-        "input.ssrf-confirmed", "Server fetches a URL supplied in a parameter",
-        "high", "confirmed", owasp="API7:2023 Server Side Request Forgery", endpoint=endpoint,
+        # Keep the historic identifier readable in existing saved reports.
+        # Its name is not an evidence classification or confirmation claim.
+        "input.ssrf-confirmed", "URL input returned network-error text",
+        "low", "possible", category="security", verification="observed",
+        owasp="API7:2023 Server Side Request Forgery", endpoint=endpoint,
         parameter=field,
-        method=("Supplied a hostname that cannot resolve and read the response for a network error "
-                "produced by the server's own HTTP client"
-                + (", then supplied a closed port on the server's loopback interface and saw a "
-                   "connection error from there too." if reached_loopback else ".")),
-        highlights=[mark("proves the parameter controls a server-side fetch", "proof",
-                     "Only the server attempting the request can produce this network error.")],
+        method=("Supplied an unresolvable hostname, then a loopback URL, and compared the "
+                "returned text for network-error signatures absent from the baseline."),
+        highlights=[mark("network-error text requires verification", "observation",
+                     "Response text alone does not establish that a server-side request occurred.")],
         detail=(f"Setting “{field}” to {unreachable} made the application return a network-level error "
-                f"(“{hit.group(0)}”). The error can only come from the server attempting the request, "
-                "which proves the parameter controls a server-side fetch."
-                + (f" A follow-up pointing at {CLOSED_PORT} also produced a connection error, so the "
-                   "fetch reaches the server's own loopback interface." if reached_loopback else "")),
-        impact=("The server can be directed at hosts only it can reach: cloud instance metadata, internal "
-                "admin panels, databases and other services that trust the API's network position. Namazu "
-                "stops at proving the fetch happens and does not read any internal resource."),
+                f"signature (“{hit.group(0)}”). This is consistent with URL-processing or fetch behavior, "
+                "but may also be validation, a simulated error, an intermediary response or reflected text."
+                + (f" The {CLOSED_PORT} follow-up also returned a network-error signature. This does not "
+                   "establish loopback access." if loopback_error else "")),
+        impact=("No server-side request, internal resource access or security consequence was demonstrated. "
+                "If independently verified, attacker-controlled fetching could expose internal services; "
+                "the observed error text is a lead for that verification."),
+        limitations=("No callback was observed by this probe, and no destination-side log or controlled "
+                     "resource response was collected. Neither error wording nor status proves a fetch, "
+                     "SSRF, loopback reachability or access to metadata/internal services."),
         remediation=("Resolve the hostname first and reject private, loopback, link-local and multicast "
                      "addresses, re-checking after resolution to defeat DNS rebinding. Allow-list the "
                      "destinations the feature genuinely needs, disable redirect following, and make the "
                      "fetch from a network segment with no access to internal services."),
         evidence={"parameter": field, "unresolvable_payload": unreachable,
                   "error_signature": hit.group(0), "status": unresolvable.status,
-                  "loopback_payload": CLOSED_PORT if reached_loopback else None,
-                  "reached_loopback": bool(reached_loopback)},
-        exchanges=[baseline, unresolvable] + ([closed] if reached_loopback else []),
+                  "loopback_payload": CLOSED_PORT,
+                  "loopback_error_observed": bool(loopback_error),
+                  "server_side_fetch_confirmed": False, "reached_loopback": False},
+        exchanges=[baseline, unresolvable, closed],
     )]
 
 

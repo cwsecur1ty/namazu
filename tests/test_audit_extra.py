@@ -74,7 +74,7 @@ def test_boolean_sql_injection_not_reported_when_value_is_inert():
 
 # ── SSRF ────────────────────────────────────────────────────────────────────
 
-def test_ssrf_confirmed_from_a_server_side_fetch_error():
+def test_ssrf_error_text_remains_an_unconfirmed_lead():
     spec = _search_spec([{"name": "url", "in": "query",
                           "schema": {"type": "string", "example": "https://cdn.example.test/a.png"}}])
 
@@ -92,8 +92,10 @@ def test_ssrf_confirmed_from_a_server_side_fetch_error():
     with _client(handler) as client:
         result = audit_operation(spec, "GET /search", base_url=BASE, client=client)
     hit = next(f for f in result["findings"] if f["id"] == "input.ssrf-confirmed")
-    assert hit["confidence"] == "confirmed"
-    assert hit["evidence"]["reached_loopback"] is True
+    assert hit["confidence"] == "possible" and hit["severity"] == "low"
+    assert hit["evidence"]["loopback_error_observed"] is True
+    assert hit["evidence"]["reached_loopback"] is False
+    assert hit["evidence"]["server_side_fetch_confirmed"] is False
     assert hit["evidence"]["error_signature"] in ("getaddrinfo", "ENOTFOUND")
 
 
@@ -264,7 +266,10 @@ def test_downgrade_redirect_reported():
     with _client(lambda r: httpx.Response(302, headers={"location": "http://api.example.test/next"})) as client:
         result = audit_operation(_search_spec(), "GET /search", base_url=BASE, client=client)
     hit = next(f for f in result["findings"] if f["id"] == "transport.downgrade-redirect")
-    assert hit["severity"] == "high"
+    assert hit["severity"] == "low"
+    assert hit["assessment"]["category"] == "hardening"
+    assert hit["assessment"]["verification"] == "observed"
+    assert "redirect was not followed" in hit["limitations"]
 
 
 # ── finding provenance ──────────────────────────────────────────────────────
@@ -279,7 +284,8 @@ def test_every_finding_carries_method_cwe_and_references():
     assert result["findings"]
     for item in result["findings"]:
         assert item["method"], f"{item['id']} has no method sentence"
-        assert item["cwe"], f"{item['id']} has no CWE"
+        if item["assessment"]["category"] not in ("informational", "contract"):
+            assert item["cwe"], f"{item['id']} has no CWE"
         assert item["references"], f"{item['id']} has no references"
         for reference in item["references"]:
             assert reference["url"].startswith("https://")
@@ -868,7 +874,8 @@ def test_path_bypass_is_found_when_a_rewrite_slips_past_the_filter():
         result = audit_operation(_gated_spec(), "GET /admin/reports", base_url=BASE,
                                  identities={"primary": ALICE}, client=client)
     hit = next(f for f in result["findings"] if f["id"] == "authz.path-bypass")
-    assert hit["severity"] == "high" and hit["confidence"] == "confirmed"
+    assert hit["severity"] == "info" and hit["confidence"] == "possible"
+    assert hit["evidence"]["signal_only"] is True
     assert hit["evidence"]["baseline_status"] == 403
     assert hit["evidence"]["bypass_status"] == 200
     assert len(hit["proof"]) == 2
@@ -1202,6 +1209,7 @@ def test_schemathesis_excludes_write_methods_unless_allowed(monkeypatch):
 
 def _reachable_check_ids():
     """Every check id the engine can emit, including the ones built at runtime."""
+    import ast
     import re
     from pathlib import Path
 
@@ -1211,6 +1219,14 @@ def _reachable_check_ids():
     for path in sources:
         text = path.read_text(encoding="utf-8")
         ids |= set(re.findall(r"finding\(\s*\n?\s*[\"']([a-z0-9._-]+)[\"']", text))
+        # AST inspection handles comments before the first argument as well as
+        # conditional literals that choose a disclosure observation's strength.
+        for node in ast.walk(ast.parse(text)):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "finding"
+                    and node.args and isinstance(node.args[0], (ast.Constant, ast.IfExp))):
+                ids.update(child.value for child in ast.walk(node.args[0])
+                           if isinstance(child, ast.Constant) and isinstance(child.value, str)
+                           and re.fullmatch(r"[a-z0-9._-]+", child.value))
     # jwt.* ids are composed from the weakness ids jwtlab produces, so a literal
     # scan cannot see them. This is exactly how jwt.alg-none shipped with no CWE.
     weaknesses = set(re.findall(r'"id": "([a-z-]+)"',
@@ -1364,8 +1380,9 @@ def test_undocumented_status_is_reported():
     }, BASE)
     with _client(lambda r: _json({"detail": "teapot"}, 418)) as client:
         result = audit_operation(spec, "GET /thing", base_url=BASE, client=client)
-    hit = next(f for f in result["findings"] if f["id"] == "contract.undocumented-status")
-    assert hit["evidence"]["status"] == 418
+    hit = next(f for f in result["findings"] if f["id"] == "contract.response-disagreement")
+    assert any(item["kind"] == "undocumented-status" and item["status"] == 418
+               for item in hit["evidence"]["mismatches"])
     assert hit["evidence"]["documented_statuses"] == ["200"]
 
 
@@ -1378,10 +1395,12 @@ def test_server_error_on_a_contract_valid_request_is_reported():
     }, BASE)
     with _client(lambda r: httpx.Response(500, text="boom")) as client:
         result = audit_operation(spec, "GET /thing", base_url=BASE, client=client)
-    hit = next(f for f in result["findings"] if f["id"] == "contract.server-error")
-    assert hit["severity"] == "low"
-    assert hit["assessment"]["category"] == "reliability"
-    assert "contract.undocumented-status" not in _ids(result)  # the 500 is the better finding
+    hit = next(f for f in result["findings"] if f["id"] == "contract.response-disagreement")
+    assert hit["severity"] == "info"
+    assert hit["assessment"]["category"] == "contract"
+    assert "contract.server-error" not in _ids(result)  # Generated examples do not establish business-valid input.
+    assert any(item["kind"] == "undocumented-status" and item["status"] == 500
+               for item in hit["evidence"]["mismatches"])
 
 
 def test_response_schema_violation_is_reported():
@@ -1395,8 +1414,8 @@ def test_response_schema_violation_is_reported():
     }, BASE)
     with _client(lambda r: _json({"id": "not-an-integer"})) as client:
         result = audit_operation(spec, "GET /thing", base_url=BASE, client=client)
-    hit = next(f for f in result["findings"] if f["id"] == "contract.response-schema-violation")
-    assert hit["evidence"]["violations"]
+    hit = next(f for f in result["findings"] if f["id"] == "contract.response-disagreement")
+    assert any(item.get("violations") for item in hit["evidence"]["mismatches"])
 
 
 def test_conforming_response_produces_no_contract_findings():

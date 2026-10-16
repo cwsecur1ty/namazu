@@ -1,0 +1,50 @@
+/* One compact application header, with the same tokens as the request editor. */
+.desktop-workbench {grid-template-rows:48px minmax(0,1fr) 25px;}
+.desktop-toolbar {flex-wrap:nowrap;gap:7px;padding:0 0 0 12px;align-content:normal;overflow:hidden;user-select:none;}
+.desktop-toolbar > * {min-width:0;}
+.desktop-toolbar .desktop-wordmark {flex:none;gap:7px;font-size:13px;padding:6px 4px 6px 0;}
+.desktop-toolbar > #desktop-workspace {flex:0 1 185px;width:185px;min-width:72px;max-width:185px;height:30px;text-overflow:ellipsis;border-color:transparent;background-color:var(--panel);}
+.desktop-toolbar > #desktop-workspace:hover {border-color:var(--line);background-color:var(--raised);}
+.desktop-import-action {color:var(--ink);gap:8px;flex:none;}
+.desktop-header-context-slot {min-width:0;flex:0 1 530px;margin-left:8px;}
+.desktop-header-context {display:flex;align-items:center;gap:6px;min-width:0;}
+.desktop-header-context select {min-width:80px;max-width:150px;width:130px;height:30px;font-size:11px;background:var(--input);}
+.desktop-header-context button {min-width:0;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;text-align:left;}
+.desktop-header-context #desktop-identity {margin-left:0;max-width:150px;}
+.desktop-target {font-size:11px;}
+.desktop-toolbar-gap {display:block;flex:1;min-width:12px;align-self:stretch;}
+.desktop-execution-state {flex:none;display:flex;align-items:center;gap:6px;font-size:11px;white-space:nowrap;color:var(--muted);padding:5px 6px;border-radius:3px;}
+.desktop-state-dot {width:6px;height:6px;background:var(--dim);border-radius:50%;flex:none;}
+.desktop-execution-state[data-state="running"] .desktop-state-dot {background:var(--ok);}
+.desktop-execution-state[data-state="stopping"] .desktop-state-dot,.desktop-execution-state[data-state="interrupted"] .desktop-state-dot {background:var(--warnc);}
+.desktop-execution-state[data-state="disconnected"] .desktop-state-dot {background:var(--bad);}
+.desktop-menu-open {flex:none;font-size:16px;min-width:32px;margin-right:5px;}
+.desktop-window-controls {display:flex;align-self:stretch;flex:none;}
+.desktop-window-controls button {width:42px;min-width:42px;border:0;border-radius:0;font-size:18px;color:var(--ink);}
+.desktop-window-controls button:hover {background:var(--raised);}
+.desktop-window-controls .desktop-window-close:hover {background:#c42b32;color:white;}
+.desktop-native .desktop-toolbar {-webkit-app-region:drag;app-region:drag;}
+.desktop-native .desktop-toolbar :is(button,select,input,a,summary),.desktop-native .desktop-window-controls {-webkit-app-region:no-drag;app-region:no-drag;}
+.desktop-toolbar :is(button,select):focus-visible,.desktop-header-menu :is(button,select):focus-visible,.desktop-import-dialog button:focus-visible {outline:2px solid var(--focus);outline-offset:-2px;}
+.desktop-header-menu,.desktop-import-dialog {color:var(--ink);background:var(--panel);border:1px solid var(--line);box-shadow:0 12px 40px #0004;border-radius:6px;max-height:calc(100dvh - 24px);overflow:auto;padding:18px;}
+.desktop-header-menu {width:min(420px,calc(100vw - 24px));margin:56px 12px auto auto;}
+.desktop-import-dialog {width:min(660px,calc(100vw - 24px));}
+.desktop-header-menu::backdrop,.desktop-import-dialog::backdrop {background:#0005;}
+.desktop-menu-heading {display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:16px;}
+.desktop-menu-heading h2 {font-size:16px;margin:0;}
+.desktop-menu-heading .hint {margin:7px 0 0;line-height:1.5;}
+.desktop-header-menu .desktop-menu-action {display:block;width:100%;text-align:left;padding:10px 8px;border-radius:3px;font-size:12px;color:var(--ink);}
+.desktop-header-menu .desktop-menu-action:hover,.desktop-import-options button:hover {background:var(--raised);}
+#desktop-menu-context-description {white-space:pre-line;overflow-wrap:anywhere;font-size:11px;line-height:1.7;border-bottom:1px solid var(--line);padding-bottom:12px;}
+#desktop-menu-context-slot .desktop-header-context {flex-direction:column;align-items:stretch;gap:8px;}
+#desktop-menu-context-slot .desktop-header-context :is(button,select) {width:100%;max-width:100%;min-height:32px;}
+.desktop-header-menu #desktop-environments,.desktop-header-menu #desktop-sidebar-toggle {display:block;}
+.desktop-import-options {display:grid;gap:2px;}
+.desktop-import-options button {display:grid;gap:5px;text-align:left;padding:14px 12px;border:1px solid transparent;border-radius:4px;}
+.desktop-import-options button strong {font-size:13px;font-weight:600;color:var(--ink);}
+.desktop-import-options button span {font-size:12px;color:var(--muted);line-height:1.5;}
+.desktop-import-options button + button {border-top-color:var(--line-soft);}
+.desktop-collections-open .desktop-sidebar {top:48px;}
+@media(max-width:1180px){.desktop-header-context-slot{display:none;}.desktop-toolbar-gap{min-width:24px;}}
+@media(max-width:760px){.desktop-toolbar{gap:3px;padding-left:8px;}.desktop-toolbar>#desktop-workspace{flex:0 1 120px;width:120px;}.desktop-toolbar-gap{min-width:7px;}.desktop-execution-state{padding:6px;}.desktop-execution-state #desktop-execution-label{display:none;}.desktop-window-controls button{width:36px;min-width:36px;}.desktop-import-action{padding:5px 7px;}.desktop-header-menu{margin:54px 8px auto auto;}}
+@media(prefers-reduced-motion:reduce){.desktop-toolbar *,.desktop-header-menu *,.desktop-import-dialog *{transition:none;}}
