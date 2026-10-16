@@ -35,7 +35,10 @@ def test_real_cli_provenance_and_independent_receipts_match_committed_reports():
     assert provenance["collection_requests"] == 36
     for run in provenance["runs"]:
         report = FIXTURES / run["report"]
-        assert hashlib.sha256(report.read_bytes()).hexdigest() == run["normalized_output_sha256"]
+        # Hash the line-ending-normalized bytes so the receipt matches on any
+        # platform; git may hand back CRLF on a Windows checkout.
+        normalized = report.read_bytes().replace(b"\r\n", b"\n")
+        assert hashlib.sha256(normalized).hexdigest() == run["normalized_output_sha256"]
         results = [row for iteration in document(run["report"]) for row in iteration["results"]]
         receipts = document(run["report"].replace(".json", "-receipts.json"))
         assert len(results) == run["logical_executions"] == 72

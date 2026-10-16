@@ -238,7 +238,7 @@ def generate(cli, output=ROOT):
             runs.append({"report": filename, "exit_code": result.returncode,
                          "command": "node @usebruno/cli/bin/bru.js run --env Local --env-var baseUrl=<owned-loopback> --iteration-count 2 --sandbox developer --noproxy --reporter-json " + filename + " " + " ".join(flags),
                          "original_cli_output_sha256": hashlib.sha256(raw_bytes).hexdigest(),
-                         "normalized_output_sha256": hashlib.sha256(report.read_bytes()).hexdigest(),
+                         "normalized_output_sha256": hashlib.sha256(report.read_bytes().replace(b"\r\n", b"\n")).hexdigest(),
                          "logical_executions": len(executions), "mock_network_attempts": len(attempts),
                          "observed_responses": sum(isinstance((entry.get("response") or {}).get("status"), int) for entry in executions),
                          "no_response_executions": sum(not isinstance((entry.get("response") or {}).get("status"), int) for entry in executions)})
