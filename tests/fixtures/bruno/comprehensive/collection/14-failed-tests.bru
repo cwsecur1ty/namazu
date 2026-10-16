@@ -1,0 +1,23 @@
+meta {
+  name: Failed assertion and script test
+  type: http
+  seq: 16
+}
+
+get {
+  url: {{baseUrl}}/ok
+  body: none
+  auth: inherit
+}
+
+tests {
+  test("deliberate failure", function () { expect(res.body.id).to.equal("different-widget"); });
+}
+
+assert {
+  res.status: eq 201
+}
+
+settings {
+  timeout: 200
+}

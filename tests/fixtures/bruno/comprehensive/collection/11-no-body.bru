@@ -1,0 +1,19 @@
+meta {
+  name: POST without body
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/echo?case=absent
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

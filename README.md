@@ -53,7 +53,124 @@ are, and admitting what it does not prove.
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Install and run
+## Windows desktop
+
+Namazu now opens as a local API workspace: searchable contract collections,
+independent request tabs, an editable request and response split, environments,
+ordinary request history, and dedicated contract, identity, overlap and audit
+reviews. The desktop uses the same Python engine and frontend as browser mode.
+The interaction layout takes inspiration from [Bruno's desktop application](https://github.com/usebruno/bruno);
+Namazu is independent and has no official affiliation with Bruno.
+
+Build the Windows x64 package from this repository:
+
+```powershell
+python -m venv .venv
+.\scripts\build-desktop.ps1 -InstallDependencies -OutputPath 'dist\Namazu Desktop'
+```
+
+The build bundles Python, Node (for the supported Bruno parser), application
+resources and a self-contained .NET shell. End users do not need Python, Node,
+a development server or a terminal. Keep the extracted application directory
+intact and double-click `Namazu.exe`. The Windows prerequisite is Microsoft's
+[WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
+The application detects a missing runtime and explains how to install it; it
+does not silently download software. Windows is the desktop validation target;
+macOS and Linux desktop packages are not claimed.
+Build prerequisites, pinned versions, artifact manifests and package checks are
+documented in [Windows desktop packaging](docs/desktop-packaging.md). Packages
+are currently unsigned portable folders/ZIPs; no installer or updater is supplied.
+
+The header/Bruno update builds to `dist/Namazu Desktop Header Bruno/Namazu.exe`,
+with the complete portable folder in `dist/Namazu Desktop Header Bruno.zip`.
+See [this update's validation and screenshots](docs/desktop-header-bruno-validation.md)
+for its exact checks and remaining native-window validation limits. The earlier
+`Namazu Desktop Windows` artifact is retained; its
+[previous validation record](docs/desktop-validation.md) does not validate the new header.
+
+The compact header combines Namazu, workspace selection, **Import**, environment,
+target, identity and execution state. Secondary context moves into the workspace
+menu on narrow windows. The same menu provides theme, settings and collection
+visibility; **Application actions** contains the retained native file/help actions.
+Native minimise, maximise/restore and application close are separate from request
+tab close and **Close workspace view**. Browser mode omits native window controls.
+Closing the application still offers the existing stop-and-retain-evidence flow
+when work is active. **Stop** in the header stops new dispatch without closing
+the application; already dispatched requests may still complete.
+
+![Compact header and request workspace, rendered from the rebuilt package](docs/screenshots/header-bruno/header-desktop-dark.png)
+
+![Bruno collection alongside an existing contract after restart, rendered from the rebuilt package](docs/screenshots/header-bruno/bruno-restored-light.png)
+
+These screenshots use the rebuilt package's backend and resources in headless
+Chromium. Native window control remained stopped at the user's request; they do
+not validate native chrome, file pickers, snapping or Windows display scaling.
+The [current screenshot gallery](docs/desktop-header-bruno-validation.md#screenshots)
+also shows the import chooser, historical Bruno results and narrow overflow.
+
+On first launch, choose **Import contracts**, **Open workspace**, **Import a
+Bruno collection or report**, **Open a saved audit report**, or **Try local
+sample**. The sample starts a loopback-only mock with two documented contracts.
+It sends nothing until you choose Send or explicitly execute a reviewed audit.
+Its target port belongs to that application session; create a fresh sample
+after restarting. Sample outcomes do not establish API security coverage.
+
+Ordinary **Send** performs one exchange and records its own history. **Audit &
+run plan** reviews contracts, operations, identities, exclusions, prerequisites,
+inventory, budgets, traffic controls and writes before a separate run. Attaching
+a token is not proof of authentication, role, resource permission or business
+success. The guided API → Identity → Test data → Readiness workflow and the
+existing replay, sequence, matrix, contract review, disclosure and tool controls
+remain under **Advanced tools**.
+
+Desktop data lives in `%LOCALAPPDATA%\Namazu` (or an explicitly supplied
+`--state-dir`), split into `config`, `workspaces`, `evidence`, `secrets`,
+`cache`, `logs` and `backups`. Request drafts store identity references, not
+bearer values. Named bearer profiles default to **session only**; **Windows
+current-user protected** storage explicitly opts into DPAPI encryption. There
+is no plaintext fallback. Imported workspaces never restore live credential
+values, resume audits, refresh OAuth tokens or execute collection scripts.
+
+UI saves use atomic replacement, recoverable backups and revision checks.
+Concurrent edits produce a conflict instead of overwriting newer data. First
+desktop launch copies existing `~/.namazu` databases with SQLite's backup API,
+including committed WAL records, and leaves the originals intact. Corrupt or
+newer state is retained for recovery rather than silently discarded. Saved
+single-contract reports remain readable and offline reassessment sends no
+target traffic. See [the capability and migration checklist](docs/desktop-capabilities.md)
+for each workflow's destination and retained formats.
+
+**Cancel/Stop** prevents new dispatch; requests already in flight may still
+reach the target and their evidence is retained when available. Closing an
+active desktop window explains this and asks whether to stop and close or
+keep the window open. It never hides a running scan. If the process is killed,
+the next launch marks unfinished work interrupted, with unknown outcomes
+explicitly recorded; it never replays those requests.
+
+Keyboard shortcuts: **Ctrl+O** import, **Ctrl+Enter** Send, **Ctrl+S** save the
+active draft, **Ctrl+Shift+T** reopen a closed tab. Theme, pane orientation and
+sizes, tabs, drafts and environment selections restore without sending traffic.
+Response HTML is displayed as text; it never receives application privileges.
+Desktop requests use an instance-specific capability over an ephemeral
+loopback port, with the original host/origin and content-security protections.
+No cloud account, telemetry or application update checks are required.
+
+**Fuzzing & OOB** exposes the existing bounded schema-mutation campaigns with
+reviewed contract scope, request budgets, rate limits, concurrency and explicit
+write permission. The plan separates deterministic input cases from conditional
+checks; its case count is not a promise of total traffic. Schemathesis remains
+available under the existing external tools workflow and is bundled on Windows.
+
+The new [Interactsh](https://github.com/projectdiscovery/interactsh) workflow
+prepares a unique callback value for one contract, operation, field and identity
+revision. Supply a callback session you control, explicitly send the reviewed
+draft, and import the collector's JSONL to correlate observations with existing
+request receipts. Namazu does not start or poll a callback service. Imported
+callbacks remain unverified external observations, with distinct callback and
+network-attempt counts; they do not automatically establish SSRF, XXE, injection
+or security impact. See [detection expansion](docs/detection-expansion.md).
+
+## Browser and CLI installation
 
 Python 3.10 or newer.
 
@@ -82,6 +199,336 @@ docker run --rm -p 127.0.0.1:8010:8010 namazu
 Requests originate from the Namazu container, so `localhost` means the
 container. Use `host.docker.internal` for an API on the Docker Desktop host.
 </details>
+
+## Multi-contract workspaces
+
+Choose **Import** in the workspace toolbar to import several contracts into one workspace.
+Upload multiple OpenAPI files or paste one specification/documentation URL per
+line. Documentation-page discovery uses the existing resolver, without workspace
+credentials. Each import is reviewed independently: a broken document does not
+remove the contracts that parsed successfully. Review the title, version, source,
+content hash, server choices, operation count and unresolved references before
+selecting the API targets. A documentation URL alone is never an API target.
+
+Contract IDs are stable within the workspace. Operations, schemas, examples,
+baselines, assertions, write permissions and assessments stay under that ID;
+an `operationId`, path or schema name is not a workspace-wide key. Replacing a
+contract keeps its historical snapshots so earlier evidence still identifies the
+hash it used. References are resolved from their originating document using
+explicitly supplied companion documents; missing documents remain visible import
+limitations. Reference resolution does not search another contract by schema name
+or silently fetch arbitrary remote references.
+
+### Local example: two contracts, one shared bearer identity
+
+Start Namazu and the included mock API in separate terminals:
+
+```sh
+python -m namazu --port 8010
+python -m tests.workspace_fixture_server --port 9138
+```
+
+1. Choose **Import** in the toolbar, create a workspace, and import these two URL lines:
+
+   ```text
+   http://127.0.0.1:9138/docs/accounts
+   http://127.0.0.1:9138/docs/orders
+   ```
+
+2. Review the resolved targets, `http://127.0.0.1:9138/v1/accounts` and
+   `http://127.0.0.1:9138/v2/orders`. Both contracts deliberately use
+   `getWidget` and `Widget`; their operation and schema state remains separate.
+3. Create a named bearer profile with the inert fixture token `local-shared`.
+   Explicitly assign that profile to the two contracts, using their exact API
+   base URLs as each assignment's allowed scopes. The UI masks the token. An optional third
+   contract at `http://127.0.0.1:9138/docs/public` receives no shared identity
+   unless you separately assign one. Use `local-override` in a second profile to
+   exercise a contract-specific override.
+4. Select operations, leave writes disabled, choose a shared request budget and
+   optional contract limits, then review the plan. Importing, assigning identities
+   and reviewing the plan send no API probes or token requests. URL import does
+   fetch documentation. Execute only after reviewing the target and scope.
+5. Inspect the saved results under each contract and operation. Export the
+   workspace to retain contract boundaries, profile references, scope decisions,
+   plans, snapshots and saved evidence. Restoring it is offline and never resumes
+   a run. The fixture's `/stats` endpoint records local attempts without tokens.
+
+### Overlap review and request accounting
+
+The review distinguishes identical contract content, same endpoint declarations,
+conflicting endpoint semantics, similar paths on different hosts/base paths/API
+versions, and potentially overlapping templates such as `/widgets/{id}` and
+`/widgets/current`. Method, selected target, base path and request/response
+semantics participate in the comparison. Matching operation IDs or URLs alone
+do not establish equivalence.
+
+For a blocking overlap, choose an owner, exclude an operation, or explicitly
+keep separate assessments. Reviewed identical cases can reuse evidence only
+when the effective identity, input, assertion and execution context also match.
+Different credentials, inputs or assertions require separate requests. Reuse is
+conservative and applies to a whole operation assessment: the resolved document,
+selected media type and execution settings must match too. If that final check
+differs from the review's proposed reuse, execution records the reason and uses
+separate requests within the shared budget. Reuse
+records one set of network attempts with separate contract assessment links;
+an excluded or reused operation is never described as independently dispatched.
+The report keeps unique attempts, assessments, reused evidence and exclusions
+separate. Per-contract affected operations remain visible.
+
+### Identity and execution boundaries
+
+Bearer credentials live only in server memory, following Namazu's existing
+credential handling. Saved workspaces and exports contain profile references and
+revisions, never plaintext tokens. Restarting the process requires credentials
+to be entered again. Explicit contract overrides take precedence over shared
+assignments; removing an assignment stops subsequent use. A changed target or
+credential invalidates reviewed plans and requires scope review. Shared identity
+configuration establishes no successful authentication, role, resource-access or
+business control for another contract.
+
+One run shares a request budget, rate limiter, cancellation signal and HTTP 429
+stop across contracts. Contract limits and write authorization are independent.
+Inventory traffic is separately identified and uses no shared bearer token.
+Redirects are not followed by workspace execution. Out-of-scope requests cannot
+carry a profile token; scopes include both the origin and a path-segment boundary.
+Partial evidence survives cancellation and exhausted budgets through the existing
+durable run store. Older single-contract audit exports remain supported.
+
+Overlap detection is deliberately conservative: it is not a proof that templates
+have identical routing behavior. External reference fetching, automatic token
+acquisition, automatic baseline replay, and transfer of successful controls
+between contracts are not part of workspace import. The local fixtures and
+regression tests validate isolation and accounting, not API security coverage.
+
+## Bruno interoperability
+
+Choose **Import → Bruno collection or request definitions** or **Bruno execution
+results**. The sidebar's **Bruno import / export** opens the same adapter and
+review dialog. Import also distinguishes OpenAPI/documentation URLs, saved Namazu
+workspaces and historical evidence. This is an independent
+Namazu integration, not an official Bruno partnership or endorsement.
+
+### Supported formats and runtime
+
+- **Run reports:** the JSON reporter from **`@usebruno/cli@4.2.1`**, verified with
+  real local runs. Its root is an array of iteration objects with `iterationIndex`
+  and `results`; reports do not identify their CLI version. The UI explicitly
+  targets 4.2.1. Legacy object-shaped reports, JUnit, collection JSON, and
+  OpenCollection YAML are not accepted as run reports.
+- **Definitions:** Bruno collection manifest version **1** (`bruno.json`) and
+  `.bru` grammar v2, parsed/serialized with the official **`@usebruno/lang@0.40.0`**.
+  The MIT parser is bundled with its third-party notices in
+  [namazu/bruno_node](namazu/bruno_node/README.md). The Windows package includes
+  Node.js **25.2.1** and finds the parser independently of the working directory.
+  Source/browser installations need **Node.js 20+** on the
+  Namazu server's PATH for definitions and exports. Report import needs Python
+  only. The base Docker image does not include Node; report import works there,
+  while definition conversion requires adding Node to a derived image.
+
+The reusable backend adapters are `namazu.bruno.import_report`,
+`namazu.bruno_collections.import_collection` and `export_collection`. The UI uses
+the same offline `/api/bruno/*` endpoints under Namazu's existing Host/Origin
+checks. They never create a target HTTP client, acquire tokens or run scripts.
+
+### Generate and import a run report
+
+From the collection directory, using the [documented CLI options](https://docs.usebruno.com/bru-cli/run/options):
+
+```sh
+npx --yes @usebruno/cli@4.2.1 run --env Local --iteration-count 2 --sandbox developer --noproxy --reporter-json report.json
+```
+
+This command **executes the collection**. Use it only with requests and scripts
+you have reviewed and targets you are authorised to test. The walkthrough below
+uses loopback only. `--sandbox developer` permits that fixture's small assertion
+script; it is never used by Namazu's importer. There is no CLI
+`--request-timeout` flag in this version: the fixture uses a `.bru` `settings`
+block with `timeout: 200` milliseconds.
+
+Choose **Import Bruno run (JSON)**. The panel labels evidence **Imported Bruno
+run**, shows import time separately, and records **zero requests sent during
+import**. CLI execution timestamps and exact wire-attempt counts are unknown.
+Logical executions, observed HTTP responses and each assertion/test namespace
+have separate counts. Every iteration remains a distinct execution; importing
+the same report replaces the viewed evidence and retains stable source/row IDs.
+
+Request/response data, errors, timings, suite/path identities, unknown metadata
+and source JSON pointers are retained in a redacted source representation.
+Bruno's decoded `data` is not claimed to be exact wire bytes. Missing bodies,
+empty/omitted headers, partial reports and explicit truncation remain visible;
+templates are never used to fill missing captured evidence. An explicit skip
+without an observed HTTP response does not establish dispatch. A contradictory
+skip flag alongside a response retains that response with a warning; an execution
+error alone does not prove dispatch. Reports are
+limited to 8 MiB, 2,000 executions and 40 nesting levels.
+
+Use **Open in Namazu evidence views** for the existing request/response log,
+or **Export redacted evidence + source** to retain source references and
+provenance. Importing, viewing, offline reassessment and exporting send no target
+requests. The original run is historical and is never resumed. Bruno assertions
+are not Namazu findings: failure is not a vulnerability, pass is not proof of
+security, and HTTP 2xx alone does not establish business success. Uniform 403
+denials leave downstream handling unknown; explicit edge pages, validation
+observations and timeouts/incomplete evidence remain separate. No field mutations
+or baseline comparisons are invented from a report.
+
+### Add definitions to the request workspace
+
+Choose a collection folder or individual `.bru` files, explicitly resolve its
+environment, then select **Add definitions to current workspace**. Request
+collections remain separate from OpenAPI contracts. Nested folders and duplicate
+names retain distinct source identities. Supported definitions open as independent
+editable tabs; no imported request executes until an explicit **Send**.
+Adding the same source snapshot again reuses the existing collection. A changed
+source creates a separate collection, preserving prior drafts and evidence.
+
+Imported authentication is a requirement, never an activated credential. For a
+supported bearer request, open **Auth**, choose a named local profile, review its
+allowed API origins/base paths, and assign it to that request. Repeat explicitly
+for each request that should share the profile. Other requests keep their own
+assignments. The ordinary collection editor rejects Basic, API-key, OAuth,
+signing and incompatible credential-header mappings; use a separate manually
+configured request/auth setup in the existing advanced tools for those cases.
+Mutating ordinary requests also require their own
+write authorisation. Token assignment does not establish access or business success.
+
+Unsupported, unresolved or script-dependent definitions remain inspectable with
+specific blockers. The request editor does not claim OpenAPI validation or audit
+readiness for a collection. JSON scalar values (`null`, `false`, `0`), empty text
+and no-body requests remain distinct. The pinned serializer cannot faithfully
+export a zero-byte text body, so that conversion is rejected explicitly.
+Saved workspace exports include sanitised definitions and assignment references,
+never usable imported tokens. Collection removal archives its definition snapshot;
+it does not erase another contract or historical request evidence.
+
+### Map a definition to an OpenAPI baseline
+
+1. Import a supplied OpenAPI contract through Namazu's existing API import flow.
+   A Bruno collection is a request template library, not a response contract.
+2. Choose **Import collection folder**, or select `.bru` files. Include
+   `collection.bru`, ancestor `folder.bru` files and environment files to preserve
+   inherited definitions. Folder import reads only `.bru` and `bruno.json`.
+3. Explicitly choose an environment, or **No environment**, then resolve it.
+   [Bruno's variable precedence](https://docs.usebruno.com/variables/overview)
+   is runtime > request > folder > environment > collection > global. Namazu
+   resolves the supported static string scopes in that order; it never invents
+   runtime, global, process, secret-provider or dynamic values. Unresolved values,
+   environment inheritance, cycles and unsupported features are shown and block preparation.
+4. Select **one request**, open **Prepare one explicitly selected baseline**,
+   select the matching method/target/path operation and confirm mapping to
+   Namazu's **primary** identity (the identity used for baseline execution).
+   Configure its actual credentials separately in Namazu; imported authentication
+   is only a reference. Define an expected status and non-secret resource and
+   content JSON Pointer assertions. A Bruno assertion cannot substitute for them.
+5. Save the reviewed template. This sends nothing and does not establish a
+   successful positive control. Review credentials and the execution plan before
+   starting a separate, explicitly authorised Namazu run. Existing baseline
+   checks must satisfy both business assertions; expected denials never unlock
+   success-dependent checks.
+
+The supported subset includes standard HTTP methods, resolved absolute URLs,
+query parameters already represented in the URL, inherited headers, and static
+JSON, text, XML and URL-encoded bodies. The pinned CLI uses the URL rather than
+merging a divergent query table; Namazu flags mismatches instead of guessing.
+Authentication references require local mapping, with no OAuth/token acquisition
+or signing. Bruno transport settings are displayed as conversion warnings and
+must be reviewed in Namazu separately.
+
+The pinned CLI retains inherited authentication when a folder says `auth: none`
+or `inherit`; a request's explicit `auth: none` is distinct. Namazu preserves
+that distinction without activating either identity. Case-variant inherited
+headers follow CLI 4.2.1 insertion-order precedence and carry a review warning.
+
+Scripts/hooks, tests, dynamic expressions and post-response variables stay inert.
+Scripts that could affect a request block preparation; tests are displayed as
+warnings and are not converted into baseline assertions. Path-parameter templates,
+binary/file/multipart/GraphQL bodies, non-HTTP protocols, typed variables,
+environment inheritance and external secret providers need manual conversion.
+Referenced local files are never opened. Archives are not accepted. Uploads are
+bounded to 200 definitions, 256 KiB each and 8 MiB total; absolute paths, traversal,
+drive letters and duplicate paths are rejected.
+
+### Export requests to Bruno
+
+Select imported requests, or choose **Choose Namazu requests to export** for
+captured requests and saved baseline templates. Select up to 100, then **Preview
+conversion**. Review the warnings and secret-free file preview, acknowledge them,
+and download the ZIP. It contains `bruno.json`, numbered `.bru` requests and
+`environments/Local.bru`. Namazu serializes and reparses every file with the
+official grammar before download. Unrepresentable/injectable syntax is rejected.
+
+Credentials become named `{{NAMAZU_...}}` variables with empty environment values.
+Fill them locally before running Bruno. Header variables require the **complete**
+value, including a Bearer/Basic prefix where applicable. Tokens, cookies, API keys,
+credential-looking body/query fields and learned echoes are redacted. Add custom
+credential names **before import** for names Namazu cannot recognise. Response
+status/counters and meaningful non-secret headers remain intact. Arbitrary script
+source is omitted from preserved source rather than exported with hidden literals.
+Review remaining business data before sharing; credential redaction is not general
+data anonymisation. Raw import files are held in memory, not written to server
+storage. Explicitly added request collections, saved templates and downloaded
+evidence persist in their respective workspace/evidence stores.
+
+Exports preserve the supported request subset; they do not promise roundtrip
+fidelity for scripts, hooks, assertions, auth flows/signing, cookie jars, transport
+settings or unsupported bodies. Wire-only headers are omitted with warnings.
+Bruno CLI reserializes JSON, so JSON value roundtrips do not promise identical
+whitespace or exact wire bytes. Query encoding can also be normalised.
+Prepared/receipt exports preserve explicit JSON `null`, `false`, `0` and string
+values using retained body-presence and media information. Raw report/definition
+body text stays raw; the adapter does not guess that missing evidence is JSON
+`null`, or turn a JSON-looking string value into an object.
+Missing evidence stays a warning, not a reconstructed body. No assertion or
+authentication flow is silently converted into executable code.
+
+### Complete local mock walkthrough
+
+From the repository root, start the synthetic target in one terminal:
+
+```sh
+python -m tests.bruno_fixture --serve
+```
+
+In another terminal (Node 20+), run the checked-in collection:
+
+```sh
+cd tests/fixtures/bruno/collection
+npx --yes @usebruno/cli@4.2.1 run --env Local --iteration-count 2 --sandbox developer --noproxy --reporter-json local-report.json
+```
+
+An exit code of 1 is expected: the collection deliberately includes a failed
+assertion and a timeout. All seven routes use `http://127.0.0.1:9876`. Import
+`local-report.json` in Namazu: expect 14 recorded executions, 12 responses,
+10 passed/2 failed status assertions and 2 passed script tests. Inspect the
+uniform403, validation400, explicit edge and timeout rows. The checked-in
+`report.json` and `omitted.json` are sanitised CLI output with
+[fixture provenance](tests/fixtures/bruno/provenance.json); the latter was generated
+with `--reporter-skip-all-headers --reporter-skip-body`.
+
+Import [the local OpenAPI fixture](tests/fixtures/bruno/openapi.json) into Namazu,
+then import the collection folder and choose **Local**. Select `01-ok.bru`, map
+it to `GET /ok` and primary identity, use status `200`, resource `/id` =
+`local-widget`, and content `/owner` = `fixture-user`. Save the template without
+running it. Choose Namazu requests, select that baseline, preview/export it, and
+extract the downloaded ZIP into a new directory. From that directory:
+
+```sh
+npx --yes @usebruno/cli@4.2.1 run --env Local --noproxy --reporter-json roundtrip.json
+```
+
+This last command explicitly executes only the reviewed local collection. For
+repeatable development validation, install the pinned CLI in an ignored location:
+
+```sh
+npm install --prefix .local-reports/bruno-tools --ignore-scripts --no-audit --no-fund @usebruno/cli@4.2.1
+python -m tests.bruno_roundtrip --cli .local-reports/bruno-tools/node_modules/@usebruno/cli/bin/bru.js
+python -m pytest -q tests/test_bruno.py
+# Regenerate sanitised report fixtures only:
+python -m tests.bruno_fixture --cli .local-reports/bruno-tools/node_modules/@usebruno/cli/bin/bru.js
+```
+
+The roundtrip check verifies GET and POST method, URL, header and body at a local
+mock server. These are interoperability checks, not API security coverage.
 
 ## What it does
 
@@ -410,8 +857,10 @@ that ran forty probes against a denied baseline produces no findings for them,
 and nothing distinguishes that from forty probes that ran and found the target
 sound.
 
-So the first request of each operation is classified, and the result decides
-what may follow.
+The first request is classified, then each individual probe checks its own
+prerequisites. A denied baseline does not block bounded request-input tests or
+response parsing and disclosure checks. Authorization comparisons and exploit
+checks that need successful access still require a positive control.
 
 | Baseline outcome | Means |
 |---|---|
@@ -431,6 +880,8 @@ Then every probe family ends the run in one state:
 | **Inconclusive** | It ran, and the evidence supports no conclusion either way. |
 | **Not in this profile** | Deliberately not run. |
 | **Nothing to test** | The operation has nothing for it to look at. |
+| **Budget exhausted** | Some planned probes could not run within the existing request ceiling. |
+| **Execution error** | A probe or its transport failed; this is not a completed check. |
 
 There is deliberately no **passed**. A check that ran and found nothing is
 shown as **Ran**, because "passed" is a claim about the target and "ran" is a
@@ -444,6 +895,83 @@ request getting through; a refusal is its input. And a missing second identity
 blocks the **cross-identity read** alone, not the whole authorization family,
 which also holds the anonymous replay, the identifier swap and the token
 battery.
+
+Before target traffic starts, **Audit** displays an offline plan for each
+selected operation: field JSON pointer, mutation, prerequisite, eligible case
+count, budgeted requests, and conditional upper bounds for supplemental
+probes. `POST /api/audit/plan` exposes the same plan without obtaining OAuth
+tokens or contacting the target. The operation audit accepts `request_budget`
+to lower its profile ceiling and `requests_per_second` to pace requests.
+An HTTP 429 stops further requests for that operation.
+
+The schema campaign covers writable request properties and declared
+parameters, including booleans and numbers. It resolves local references and
+compositions, tests omission, nullability, wrong types, declared boundaries and
+applicable string cases, and schedules fields in rounds within the shared
+budget. Every request starts from the saved baseline and changes one field.
+Credentials and unrelated fields are preserved. Read-only-property submission
+is a separate negative test; response schemas never supply request inputs.
+JSON and supported form/query parameter encodings are handled explicitly;
+unsupported encodings, absent parent objects, unresolved references and schema
+traversal limits remain visible prerequisites or gaps. String and collection
+sizes are capped, so an oversized declared boundary is reported as untested.
+Duplicate requests and changes identical to the baseline are not sent again.
+
+Per-field coverage and the audit export distinguish a request sent, a changed
+response naming the field, the same denial with downstream handling unknown,
+a blocked prerequisite, budget exhaustion, and an execution error. Response
+differences without an explicit validation explanation are leads; a uniform 403 establishes neither validation nor a
+vulnerability, and does not identify the server layer that handled the value.
+The report lists all missing prerequisites, including absent second identities.
+Offline token inspection and token replay have separate coverage entries.
+
+Request totals separate inventory/calibration traffic, endpoint baselines,
+schema mutations and other endpoint probes. Exports work even with zero
+findings, and include the plan, individual receipts and captured exchanges with
+credentials redacted. Response capture retains the transport's size limit and
+marks truncation; it does not imply evidence beyond the captured bytes.
+
+**Audit results** leads with recorded coverage, request counts and blockers,
+then groups cases by operation and input field. Expand a response group to see
+each mutation, executed/skipped/error state, baseline comparison, interpretation
+and remaining uncertainty. Evidence links open the captured request and full
+response, with credentials redacted. Read-only submissions remain separate
+negative tests. Missing receipts are unknown, never silently completed.
+
+Equivalent responses are grouped using status, headers and complete body.
+Only named envelope timestamps and correlation metadata are ignored; originals
+remain available. Meaningful IDs, large numbers, validation headers and domain
+timestamps are preserved. Truncated responses are not treated as equivalent,
+and a recorded difference hidden by redaction remains a lead with that limit
+stated. The export includes the same derived coverage groups and JSON pointers
+to their original evidence alongside the original plans and receipts.
+
+Specification observations, observed behaviour and reproduced behaviour are
+labelled separately from demonstrated security impact. The sidebar separates
+demonstrated vulnerabilities from observations and leads; test receipts never
+create findings just to fill the view. Saved reports retain their recorded
+profile and identity configuration, even when the current controls differ.
+
+Response comparison separates application equivalence from diagnostic metadata
+changes. The exact supported header catalog includes `date`, correlation IDs
+such as `fm-correlation-id`, and the diagnostic `x-iinfo` header. Their changed
+values remain in the original exchanges and are listed separately. Cookies,
+authentication, security, caching and rate-limit headers remain meaningful;
+wildcards and arbitrary header exclusions are rejected. **Response comparison
+policy** in the results view reclassifies saved evidence offline. The audit and
+plan APIs also accept `response_comparison: {"metadata_headers": [...]}` using
+the same supported catalog; an empty list selects strict header comparison.
+Exports record the effective policy.
+
+An HTML page carrying explicit Incapsula block markers is an **edge block
+observation**, with downstream handling unknown. HTTP 403 alone does not
+identify a WAF. A structured 400/422 rejection naming the tested input is a
+**field validation observation**, not automatically a security lead. Meaningful
+header differences remain visible alongside that observation. Timeouts remain
+incomplete tests. Response totals count retained requests once, separate from
+cases that can contain several exchanges, and distinguish inventory from
+endpoint tests. Saved contradictory blocked-family summaries are reconciled
+against final coverage; their original text is retained in `original_notes`.
 
 ### Getting a usable baseline
 
@@ -461,9 +989,9 @@ and per base URL:
   audit runs as.
 - **Assertions**: the status that counts as success, and a string the response
   must contain. A 2xx alone is not always success.
-- **A negative flag**, for an operation whose correct answer is a refusal. With
-  it, a 403 is a baseline that worked and a passing negative test, rather than
-  a reported gap.
+- **A negative flag**, for an operation whose correct answer is a refusal. A
+  matching 403 satisfies that negative assertion. It never supplies successful
+  access or unlocks checks requiring a positive control.
 
 ## Evidence and replay
 
@@ -663,9 +1191,15 @@ matches nothing at all is still `low`.
   its request, so a write can never succeed on the first identity's token and
   be read as the second one's.
 - No outbound callback service: nuclei runs with `-no-interactsh`.
-- Redirects are read, never followed. Requests are never retried.
-- No database. Tokens, headers and responses live in the browser tab and the
-  server process only. Theme and layout are the only things stored locally.
+- Redirects are read, never followed. Requests are never retried, and an
+  interrupted run is never replayed, a POST least of all.
+- A reviewed run is stored locally in a credential-free SQLite file so it
+  survives a browser disconnect. Credentials never reach that file, a log line,
+  an event or an export: they live only in the browser tab and the run's own
+  server thread, so a process restart cannot silently resume a run, only report
+  it as interrupted and ask you to set it up again. Theme, layout and the run
+  store are the only things kept on disk, and the run store has explicit delete
+  controls. See **Runs survive the browser** below.
 - Exports mask recognised credential headers and query values. Response bodies
   are **not** masked; review before sharing.
 - Namazu identifies itself by name on every request, by default. See
@@ -682,6 +1216,44 @@ matches nothing at all is still `low`.
   TLS; both are paths read by the Namazu server, which keeps the private key
   off the wire.
 - Loopback by default. With `--host 0.0.0.0` you supply your own access control.
+
+## Runs survive the browser
+
+You review a plan in the browser, then hand it to the server to run. From that
+point the run is the server's, not the tab's: it binds the reviewed operations,
+target, identity references, profile, write authorisation, rate limit and one
+shared request budget, and changing any of those is a new review, not an edit of
+a live run.
+
+- **One budget, one pacer, across the whole run.** The inventory sweep and every
+  operation draw on the same request budget, so no single operation can reset or
+  overshoot the run total, and an HTTP 429 from the target stops dispatch for the
+  rest of the run, not just the operation that saw it.
+- **Stopping is accurate.** A stop prevents the next request being dispatched,
+  including part-way through an operation. A request already on the wire is never
+  abandoned, and its response is kept. The run never claims a request that went
+  out was never sent, or that stopping undid a write. Withdrawing write
+  authorisation mid-run refuses every further state-changing request while the
+  read-only work continues.
+- **Evidence is durable.** Every request is written to the local run store
+  *before* it is sent, and updated once its outcome is known. A request still
+  marked dispatched after the process ends is the honest signature of an
+  interruption: it is reported as outcome-unknown and never re-sent. Run metadata,
+  reviewed plans, receipts, redacted exchanges and contract-snapshot hashes are
+  persisted as the run goes.
+- **Leaving and coming back is free.** Progress is polled, showing phase,
+  attempts, responses, and completed / blocked / skipped / incomplete cases
+  against the remaining budget, with no invented percentage. Reopening a run only
+  reads it: an active run is observed, a finished or interrupted one is opened as
+  retained evidence, and either way nothing is sent.
+
+Runs are listed, reopened and deleted from the **Runs** panel in the audit setup,
+and over the API: `POST /api/runs` starts a reviewed run, `GET /api/runs` lists
+them, `GET /api/runs/{id}` polls one, `POST /api/runs/{id}/stop` and
+`.../withdraw-writes` control it, `GET /api/runs/{id}/export` returns the
+request-free report, and `DELETE /api/runs/{id}` (or `DELETE /api/runs`) removes
+retained runs. The store lives under `NAMAZU_STATE_DIR` (default `~/.namazu`),
+keeping the most recent `NAMAZU_RUN_RETENTION` runs.
 
 ## Outbound identity
 
@@ -760,6 +1332,97 @@ On the evidence and coverage work specifically:
 
 ## Development
 
+### Guided setup and local UX fixtures
+
+Setup separates API discovery, identity configuration, request data and readiness.
+Paste a documentation or OpenAPI URL, or import a file. Supported Swagger/ReDoc
+pages and explicit specification links are resolved before choosing the API
+server. Multiple servers require an explicit target choice. The documentation
+URL is never silently used as the API target.
+
+Credentials, authentication evidence, successful business assertions, second
+identity and permission expectations are independent readiness items. Schema
+examples are suggestions, and likely placeholders remain warnings. Import a
+known-good request or use **Save for audit** in the request editor; preparation
+and saving do not contact the target. Credentials are masked in saved evidence.
+
+**Review audit plan** precedes execution. It shows selected operations, field
+mutations, prerequisites, inventory traffic, endpoint traffic and a shared
+request budget. Conditional work is labelled as an upper bound. Starting writes
+requires explicit authorization for the reviewed scope. Changing the target,
+identity, inputs or limits invalidates the review. Stop prevents further
+operations after the current operation finishes, retaining partial evidence and
+an incomplete run state. Counters distinguish attempts from responses; they do
+not invent a completion percentage.
+
+Saved reports distinguish historical evidence from an offline reassessment and
+a live run. Opening or reassessing a report sends no target requests. Imports
+pass through local redaction before display. Future exports contain the redacted
+response-contract snapshot and its SHA-256 hash, with the snapshot's limited
+scope stated explicitly. Old exports remain readable and identify missing
+contract, version or run-state information. A hash mismatch stays visible.
+
+For manual development, start the app and the loopback-only fixture server:
+
+```sh
+python -m namazu --host 127.0.0.1 --port 8010
+python -m tests.ux_fixture_server --port 9137
+```
+
+Use `http://127.0.0.1:9137/docs` in Setup. The fixture server's `/reports` page
+provides known-good requests, business assertions, two-identity permissions and
+sanitised historical exports. `/stats` counts API attempts, so report viewing
+and planning can be checked for zero target traffic. The fixtures include uniform
+denials, validation responses, explicit edge pages, timeouts and token failure.
+These journeys verify workbench behaviour, not API security coverage.
+
+### Evidence assessment and baseline readiness
+
+The report separates demonstrated vulnerabilities from contract, hardening and
+implementation observations. Every captured endpoint response is considered for
+contract review. Related status, media-type and schema disagreements aggregate
+under one operation record, with distinct mismatch counts, repeated occurrences
+and links to retained evidence. Explicit Incapsula block pages are kept separate
+from application responses. Future exports include a minimal response-contract
+snapshot; older exports without one explicitly show that offline contract review
+is unavailable. No contract is inferred from an HTTP error.
+
+Implementation-detail review distinguishes ordinary validation, limited details
+such as hostnames/framework types, and potentially sensitive paths/stack traces.
+These remain observations without demonstrated impact. Header review accounts
+for response media, browser context and credential use; header presence does not
+prove correctness, and missing HTML controls are not blanket JSON API findings.
+
+**Prepare successful baseline** imports a JSON request, a single HAR entry or raw
+HTTP, records a local identity reference, warns about likely placeholders, and
+checks expected status plus resource/content assertions against a saved complete
+exchange. It also generates a request for the API owner to supply missing test
+data and permissions. Expected denials cannot establish a positive control.
+Saved audit baselines execute under the primary Auth identity; preparation never
+silently remaps another identity to it. Business assertions are retained when the
+prepared request becomes the saved audit baseline.
+
+Follow-up plans require explicit allow/deny permissions, meaningful response
+assertions, successful controls and configured identities. Cache checks include
+both the priming and comparison request in the budget. Persona/options checks
+need an application-defined boundary. Incomplete-case replays remain separately
+bounded by scope, write permission, rate and budget. These are reviewable plans:
+viewing a report, importing evidence or exporting a plan sends no target request.
+Execution remains an explicit action through the existing request, Access matrix
+or captured-case replay workflows.
+
+Generate a portable assessment from an existing export entirely offline:
+
+```sh
+python -m namazu.audit.reporting saved-audit.json --output .local-reports/assessment
+```
+
+This writes HTML and JSON. If Node is installed, the report also derives field
+coverage with the same receipt model used by the UI. The source is unchanged;
+all request/response evidence remains redacted. Generated engagement reports are
+ignored by Git. The local-only APIs are `POST /api/audit/assess`,
+`/api/readiness/prepare` and `/api/readiness/plan`; none constructs a target client.
+
 ```sh
 .venv/bin/python -m pip install -e ".[dev]"
 .venv/bin/python -m pytest
@@ -768,8 +1431,9 @@ On the evidence and coverage work specifically:
 node --check namazu/static/app.js
 ```
 
-454 tests across 93 checks, about 90 seconds to run, most of which is the
-time-based SQL tests waiting for real delays. Detections are asserted in both
+Over 900 tests cover the audit, reporting, request builder and local workflows.
+The full suite takes about two minutes, including the time-based SQL tests
+waiting for real delays. Detections are asserted in both
 directions: a check fires on the broken handler, and stays silent on the correct
 one. Where a check rests on a control, the test asserts the control is what
 suppressed it, rather than only that nothing was reported.

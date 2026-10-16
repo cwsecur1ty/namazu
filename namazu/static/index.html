@@ -3,14 +3,123 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="namazu-build-id" content="source">
   <meta name="color-scheme" content="dark light">
   <meta name="description" content="Namazu is a standalone API testing workbench. Import an OpenAPI contract, build requests, send them, and validate responses against the contract.">
   <title>Namazu API testing workbench</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23234e8f'/%3E%3Cpath d='M9 7v18M23 7l-9 9 9 9' fill='none' stroke='white' stroke-width='3.6' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <script src="/static/desktop-readiness.js"></script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23343936'/%3E%3Cpath d='M9 7v18M23 7l-9 9 9 9' fill='none' stroke='white' stroke-width='3.6' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/setup.css">
+  <link rel="stylesheet" href="/static/results-ux.css">
+  <script src="/static/setup-model.js" defer></script>
+  <script src="/static/audit-results.js" defer></script>
+  <script src="/static/audit-results-view.js" defer></script>
+  <script src="/static/assessment-view.js" defer></script>
+  <script src="/static/readiness.js" defer></script>
+  <link rel="stylesheet" href="/static/bruno.css">
+  <script src="/static/bruno-import.js" defer></script>
+  <script src="/static/bruno.js" defer></script>
   <script src="/static/app.js" defer></script>
+  <link rel="stylesheet" href="/static/workspaces.css">
+  <script src="/static/workspaces.js" defer></script>
+  <link rel="stylesheet" href="/static/desktop-workbench.css">
+  <link rel="stylesheet" href="/static/desktop-header.css">
+  <script src="/static/desktop-model.js" defer></script>
+  <script src="/static/desktop-testing.js" defer></script>
+  <script src="/static/desktop-header.js" defer></script>
+  <link rel="stylesheet" href="/static/desktop-identities.css">
+  <script src="/static/desktop-identities.js" defer></script>
+  <script src="/static/desktop-workbench.js" defer></script>
 </head>
 <body>
+<div id="desktop-workbench" class="desktop-workbench" hidden>
+  <header class="desktop-toolbar" aria-label="Namazu workspace and application controls">
+    <button type="button" id="desktop-home" class="desktop-wordmark" aria-label="Namazu home"><span aria-hidden="true">N</span> Namazu</button>
+    <select id="desktop-workspace" aria-label="Active workspace"><option value="">Open a workspace</option></select>
+    <button type="button" id="desktop-import" class="desktop-tool desktop-import-action" title="Import contracts, Bruno definitions or saved evidence (Ctrl+O)" aria-haspopup="dialog">Import <span aria-hidden="true">⌄</span></button>
+    <div id="desktop-header-context-slot" class="desktop-header-context-slot"><div id="desktop-header-context" class="desktop-header-context">
+      <select id="desktop-environment" aria-label="Active environment"><option value="default">Contract targets</option></select>
+      <button type="button" id="desktop-target" class="desktop-tool desktop-target" aria-label="Review active target">No target selected</button>
+      <button type="button" id="desktop-identity" class="desktop-tool desktop-identity">No identity</button>
+    </div></div>
+    <span class="desktop-toolbar-gap" aria-hidden="true"></span>
+    <button type="button" id="desktop-execution-state" class="desktop-execution-state" aria-label="Execution state: ready" title="Ready. No active requests."><span class="desktop-state-dot" aria-hidden="true"></span><span id="desktop-execution-label">Ready</span></button>
+    <button type="button" id="desktop-stop-work" class="desktop-tool" hidden>Stop</button>
+    <button type="button" id="desktop-menu-open" class="desktop-tool desktop-menu-open" aria-label="Workspace and application menu" aria-haspopup="dialog" title="Workspace and application menu">☰</button>
+    <div id="desktop-window-controls" class="desktop-window-controls" hidden>
+      <button type="button" data-native-action="minimize" aria-label="Minimise Namazu" title="Minimise">─</button>
+      <button type="button" data-native-action="maximize" aria-label="Maximise Namazu" title="Maximise"><span aria-hidden="true">□</span></button>
+      <button type="button" data-native-action="close" class="desktop-window-close" aria-label="Close Namazu application" title="Close Namazu application">×</button>
+    </div>
+  </header>
+  <div class="desktop-layout">
+    <aside class="desktop-sidebar" id="desktop-sidebar" aria-label="Contract collections">
+      <div class="desktop-sidebar-head"><strong>Collections</strong><button type="button" id="desktop-new-workspace" class="desktop-tool" aria-label="New workspace">+</button></div>
+      <input type="search" id="desktop-search" placeholder="Search requests…" aria-label="Search contract requests" autocomplete="off">
+      <div id="desktop-collection-tree" class="desktop-tree"></div>
+      <nav class="desktop-sidebar-nav" aria-label="Workspace tools">
+        <button type="button" data-desktop-view="contracts">Contracts &amp; setup</button>
+        <button type="button" data-desktop-view="overlap">Overlap review <span id="desktop-overlap-count"></span></button>
+        <button type="button" data-desktop-view="plan">Audit &amp; run plan</button>
+        <button type="button" id="desktop-testing-open">Fuzzing &amp; OOB</button>
+        <button type="button" data-desktop-view="evidence">Saved reports</button>
+        <button type="button" id="desktop-history">Request history</button>
+        <button type="button" id="desktop-bruno">Bruno import / export</button>
+        <button type="button" id="desktop-advanced">Advanced tools</button>
+      </nav>
+    </aside>
+    <div id="desktop-sidebar-resize" class="desktop-separator" role="separator" tabindex="0" aria-label="Resize collections" aria-orientation="vertical"></div>
+    <main class="desktop-main" id="desktop-main">
+      <div class="desktop-tabstrip" id="desktop-request-tabs" role="tablist" aria-label="Open requests"></div>
+      <section id="desktop-welcome" class="desktop-welcome">
+        <div class="desktop-welcome-title"><span class="desktop-welcome-mark" aria-hidden="true">N</span><div><h1>Your API workbench</h1><p>Requests, contracts and audit evidence, together in one local workspace.</p></div></div>
+        <div class="desktop-start-actions"><button type="button" class="btn primary" id="desktop-welcome-bruno">Import Bruno workspace or collection</button><button type="button" class="btn" id="desktop-welcome-import">Import API contracts</button><button type="button" class="btn" id="desktop-welcome-open">Open Namazu workspace</button><button type="button" class="btn" id="desktop-welcome-auth">Configure authentication</button><button type="button" class="btn" id="desktop-welcome-continue">Continue collection or request</button></div>
+        <div class="desktop-welcome-columns"><section><h2>Recent workspaces</h2><div id="desktop-recent-workspaces"></div></section><section><h2>Continue your work</h2><button type="button" id="desktop-welcome-sample">Try local sample</button><button type="button" id="desktop-welcome-report">Open a saved audit report</button><button type="button" id="desktop-welcome-guided">Open guided setup</button><p>The local sample creates two contracts and a loopback mock target. Importing or opening a workspace sends no API requests.</p></section></div>
+        <p class="desktop-shortcuts"><kbd>Ctrl O</kbd> Import <kbd>Ctrl Enter</kbd> Send <kbd>Ctrl S</kbd> Save draft <kbd>Ctrl Shift T</kbd> Restore closed tab</p>
+      </section>
+      <section id="desktop-request" class="desktop-request" hidden>
+        <div class="desktop-urlbar"><select id="desktop-method" aria-label="Request method"><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option><option>HEAD</option><option>OPTIONS</option><option>TRACE</option></select><input id="desktop-request-url" type="text" aria-label="Request URL" spellcheck="false" autocomplete="off"><button type="button" id="desktop-save-draft" class="desktop-tool" title="Save request draft (Ctrl+S)">Save</button><button type="button" id="desktop-send" class="btn primary">Send</button><button type="button" id="desktop-cancel" class="btn" hidden>Cancel</button></div>
+        <div class="desktop-request-context" id="desktop-request-context"></div>
+        <div class="desktop-request-split" id="desktop-request-split">
+          <section class="desktop-request-pane" aria-label="Request editor"><div class="desktop-pane-tabs" id="desktop-editor-tabs" role="tablist" aria-label="Request editor sections"></div><div id="desktop-editor" class="desktop-editor"></div><div class="desktop-request-foot"><button type="button" class="desktop-tool" id="desktop-validate">Validate / generate</button><button type="button" class="desktop-tool" id="desktop-save-baseline">Save for audit</button><label><input type="checkbox" id="desktop-write-consent"> Authorise this write</label></div></section>
+          <div id="desktop-response-resize" class="desktop-separator" role="separator" tabindex="0" aria-label="Resize request and response" aria-orientation="vertical"></div>
+          <section class="desktop-response-pane" aria-label="Response inspector"><div class="desktop-pane-tabs"><div id="desktop-response-tabs" role="tablist" aria-label="Response sections"></div><button type="button" class="desktop-tool" id="desktop-layout-toggle" title="Switch request/response orientation">Stack</button></div><div id="desktop-response-meta" class="desktop-response-meta"></div><div id="desktop-response" class="desktop-response"></div></section>
+        </div>
+      </section>
+      <section id="desktop-workspace-review" class="desktop-workspace-review" hidden></section>
+      <section id="desktop-environment-editor" class="desktop-secondary" hidden></section>
+      <section id="desktop-request-history" class="desktop-secondary" hidden></section>
+      <section id="desktop-testing" class="desktop-secondary desktop-testing" hidden></section>
+      <section id="desktop-expert" class="desktop-expert" hidden><nav id="desktop-expert-nav" aria-label="Advanced workbench tools"></nav><p id="desktop-expert-context" class="desktop-expert-context"></p><div id="desktop-expert-content"></div></section>
+    </main>
+  </div>
+  <footer class="desktop-statusbar"><span id="desktop-status" role="status">Ready</span><span id="desktop-save-status">Local session</span><span id="desktop-performance"></span></footer>
+  <div id="desktop-error" class="desktop-error" role="alert" hidden></div>
+</div>
+<dialog id="desktop-menu" class="desktop-header-menu" aria-labelledby="desktop-menu-title">
+  <div class="desktop-menu-heading"><h2 id="desktop-menu-title">Workspace menu</h2><button type="button" data-close-dialog="desktop-menu" class="desktop-tool" aria-label="Close workspace menu">×</button></div>
+  <div id="desktop-menu-context-slot"></div>
+  <p id="desktop-menu-context-description" class="hint"></p>
+  <button type="button" id="desktop-environments" class="desktop-menu-action">Manage environments</button>
+  <button type="button" id="desktop-theme" class="desktop-menu-action" aria-label="Change theme">Light theme</button>
+  <button type="button" id="desktop-menu-settings" class="desktop-menu-action">Connection and application settings</button>
+  <button type="button" id="desktop-sidebar-toggle" class="desktop-menu-action" aria-label="Toggle collections">Show collections</button>
+  <button type="button" id="desktop-menu-workspace-close" class="desktop-menu-action">Close workspace view</button>
+  <button type="button" id="desktop-native-menu" class="desktop-menu-action" hidden>Application actions…</button>
+  <p id="desktop-native-diagnostic" class="hint" hidden>Diagnostic session · loopback only</p>
+  <p id="desktop-native-placement-warning" class="hint" role="status" hidden></p>
+</dialog>
+<dialog id="desktop-import-dialog" class="desktop-import-dialog" aria-labelledby="desktop-import-title">
+  <div class="desktop-menu-heading"><div><h2 id="desktop-import-title">Import into Namazu</h2><p class="hint">Choose what you have. Importing never executes API requests or scripts.</p></div><button type="button" data-close-dialog="desktop-import-dialog" class="desktop-tool" aria-label="Close import chooser">×</button></div>
+  <div class="desktop-import-options">
+    <button type="button" data-import-kind="bruno-definitions"><strong>Import Bruno workspace or collection</strong><span>Choose a folder, workspace ZIP or supported definitions. Review collections, environments and unresolved inputs before import.</span></button>
+    <button type="button" data-import-kind="openapi"><strong>Import API contracts</strong><span>OpenAPI files or documentation URLs. Review declared schemas and the resolved API target before execution.</span></button>
+    <button type="button" data-import-kind="bruno-results"><strong>Bruno execution results</strong><span>CLI 4.2.1 JSON report. Historical outcomes and assertions; omitted request or response details remain unavailable.</span></button>
+    <button type="button" data-import-kind="workspace"><strong>Open Namazu workspace</strong><span>Contract boundaries, request collections and configuration. Opens a separate workspace without restoring usable secrets.</span></button>
+    <button type="button" data-import-kind="evidence"><strong>Saved Namazu evidence</strong><span>A retained audit or workspace run. Review historical results without replaying requests.</span></button>
+  </div>
+</dialog>
 <a class="skip-link" href="#work">Skip to request editor</a>
 
 <!-- ───────────────────────── top bar ───────────────────────── -->
@@ -36,6 +145,10 @@
   </div>
 
   <div class="topbar-tools">
+    <button type="button" class="btn ghost" id="workspaces-open">Workspaces</button>
+    <button type="button" class="btn ghost" id="bruno-open">Bruno</button>
+    <span class="saved-target-context" id="saved-target-context" hidden></span>
+    <span class="session-context" id="visible-session-context" role="status">Primary identity · Setup</span>
     <label class="switch" id="writes-switch" hidden>
       <input type="checkbox" id="allow-writes">
       <span class="switch-track" aria-hidden="true"></span>
@@ -89,7 +202,7 @@
     <div class="rail-gap"></div>
     <button type="button" class="rail-btn" data-section="source" title="Contract source">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7.5z"/><path d="M13.5 3v4.5H18M9.5 13h5M9.5 16.5h3.5"/></svg>
-      <span>Contract</span>
+      <span>Setup</span>
     </button>
     <button type="button" class="rail-btn" data-section="settings" title="Settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 7.5h7M15.5 7.5H20M4 16.5h3.5M12 16.5H20"/><circle cx="13" cy="7.5" r="2.4"/><circle cx="9.5" cy="16.5" r="2.4"/></svg>
@@ -196,6 +309,7 @@
         <h2>Security audit</h2>
         <span class="count" id="audit-count">0</span>
       </div>
+      <p class="hint audit-next-run-context" id="audit-next-run-context" hidden></p>
       <div class="panel-block">
         <div class="field">
           <label for="audit-profile">Probe profile</label>
@@ -207,6 +321,11 @@
           </select>
           <p class="hint" id="profile-note"></p>
         </div>
+        <details class="disclosure"><summary>Traffic limits</summary><div class="disclosure-body">
+          <div class="field"><label for="audit-budget">Total request budget</label><input id="audit-budget" type="number" min="1" max="10000" value="100"><p class="hint">A ceiling across inventory and selected operations, not a request target.</p></div>
+          <div class="field"><label for="audit-rate">Maximum requests per second</label><input id="audit-rate" type="number" min="0.1" max="100" step="0.1" value="2"></div>
+          <p class="hint">Each operation is also limited by its profile. Token acquisition is a separate explicit identity action.</p>
+        </div></details>
         <div class="field">
           <label for="audit-concurrency">Requests in flight</label>
           <select id="audit-concurrency">
@@ -220,13 +339,13 @@
           <p class="hint" id="concurrency-note"></p>
         </div>
         <div class="field">
-          <label class="check"><input id="audit-inventory" type="checkbox" checked><span>Sweep for undocumented surface</span></label>
+          <label class="check"><input id="audit-inventory" type="checkbox"><span>Include inventory of undocumented paths</span></label>
           <label class="check"><input id="audit-selected-only" type="checkbox"><span>Selected endpoints only</span></label>
         </div>
         <details class="disclosure" id="identity-b-block">
           <summary>Second identity <span class="dim" id="identity-b-state">not set</span></summary>
           <div class="disclosure-body">
-            <p class="hint">A second account's credentials. Namazu replays the first identity's request as this one. If the same object comes back, that is a confirmed authorization break.</p>
+            <p class="hint">Attach a second account's credentials. A permission matrix and successful controls are also needed to interpret cross-account access. Receiving the same object alone does not establish an authorization failure.</p>
             <div class="kv-head"><span></span><span>Header</span><span>Value</span><span></span></div>
             <div id="identity-b-rows" class="kv-list"></div>
             <div class="row-actions"><button type="button" class="link" id="add-identity-b">+ Add header</button></div>
@@ -235,7 +354,7 @@
         <details class="disclosure" id="baseline-block">
           <summary>Baseline for this operation <span class="dim" id="baseline-state">generated</span></summary>
           <div class="disclosure-body">
-            <p class="hint">An audit can only test what its first request reached. Where the contract documents no example, the generated request carries the literal <code>string</code>, which usually names nothing that exists, and every probe that compares against it then has nothing to compare.</p>
+            <p class="hint">A working baseline is the positive control for checks that depend on successful access. Where the contract documents no example, a generated request may carry the literal <code>string</code>, which usually names nothing that exists. Bounded schema input tests can still compare responses after a denial, but uniform denials leave downstream validation unknown.</p>
             <div class="field">
               <label for="baseline-url">Request URL</label>
               <input id="baseline-url" type="text" spellcheck="false" placeholder="Leave empty to use the generated request">
@@ -252,7 +371,7 @@
                 <input id="baseline-status" type="text" spellcheck="false" placeholder="200, 2xx or 200-204" class="mini-input">
                 <label class="check"><input id="baseline-negative" type="checkbox"><span>a refusal is the expected answer</span></label>
               </div>
-              <p class="hint">A 2xx is not always success, and an expected negative test may legitimately return 403. Tick the box for an operation this identity is <em>supposed</em> to be refused, and a refusal becomes a baseline that worked rather than a reported gap.</p>
+              <p class="hint">A 2xx is not always success, and an expected negative test may legitimately return 403. Tick the box for an operation this identity is <em>supposed</em> to be refused. This records the expected refusal; it does not unlock checks that require a successful positive control.</p>
             </div>
             <div class="field">
               <label for="baseline-contains">Response must contain</label>
@@ -265,6 +384,7 @@
               <button type="button" class="link" id="baseline-clear">Clear</button>
             </div>
             <p class="hint" id="baseline-saved-note"></p>
+            <div id="baseline-preparation"></div>
           </div>
         </details>
         <details class="disclosure" id="second-opinion-block">
@@ -273,14 +393,25 @@
             <p class="hint">Runs an external scanner against the same target and folds what it reports into this findings list, tagged with the tool that found it. Namazu does not re-verify those matches, and says so on each one.</p>
             <div id="tool-list" class="tool-list"></div>
             <label class="check"><input id="tools-after-audit" type="checkbox"><span>Run these after the audit</span></label>
-            <p class="hint">Run audit then runs each available tool in turn, once Namazu's own checks have finished, and folds what they report into the same list.</p>
+            <p class="hint">External tools are separate explicit runs. Their traffic is not included in Namazu's reviewed request budget.</p>
             <p class="hint">Both are run read-only: destructive and brute-force templates are excluded, nuclei runs without its callback service, and schemathesis is held to safe methods unless Allow writes is on. nuclei includes CVE templates, so expect minutes rather than seconds.</p>
           </div>
         </details>
         <div class="stack">
-          <button type="button" class="btn primary wide" id="run-audit">Run audit</button>
+          <button type="button" class="btn primary wide" id="run-audit">Review audit plan</button>
           <button type="button" class="btn wide" id="cancel-audit" hidden>Stop after current</button>
         </div>
+        <p class="hint">The test plan appears before any target requests, with field mutations, prerequisites and request budgets. Inventory traffic is counted separately.</p>
+        <details class="block" id="runs-block">
+          <summary>Runs <span class="hint">retained locally; reopening never resends</span></summary>
+          <p class="hint banner" id="runs-interrupted-banner" hidden></p>
+          <div class="runs-list" id="runs-list"></div>
+          <div class="stack row">
+            <button type="button" class="btn ghost" id="runs-refresh">Refresh</button>
+            <button type="button" class="btn ghost danger" id="runs-clear">Delete all retained runs</button>
+          </div>
+          <p class="hint">A run keeps its reviewed plan, request receipts and redacted evidence on this machine. Credentials are never stored; opening or exporting a run sends nothing. Delete removes a run and its evidence.</p>
+        </details>
       </div>
       <div class="sev-bar" id="audit-severity" hidden></div>
       <div class="panel-filters" id="audit-filters" hidden>
@@ -296,11 +427,14 @@
             <option value="critical">Critical</option><option value="high">High</option>
             <option value="medium">Medium</option><option value="low">Low</option><option value="info">Info</option>
           </select>
-          <label class="sr-only" for="confidence-filter">Confidence</label>
-          <select id="confidence-filter" title="Confidence">
-            <option value="all">Any confidence</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="probable">Probable+</option>
+          <label class="sr-only" for="confidence-filter">Evidence level</label>
+          <select id="confidence-filter" title="Evidence level">
+            <option value="all">Any evidence</option>
+            <option value="specification">Specification observation</option>
+            <option value="observed">Observed behaviour</option>
+            <option value="reproduced">Reproduced behaviour</option>
+            <option value="impact-demonstrated">Demonstrated security impact</option>
+            <option value="unverified">Unverified report</option>
           </select>
         </div>
       </div>
@@ -349,6 +483,7 @@
             <svg data-icon="rows" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true" hidden><rect x="4.5" y="3.5" width="15" height="7" rx="1"/><rect x="4.5" y="13.5" width="15" height="7" rx="1"/></svg>
           </button>
           <button type="button" class="btn" id="prepare-request">Validate</button>
+          <button type="button" class="btn" id="save-request-baseline">Save for audit</button>
           <button type="button" class="btn primary" id="send-request">Send<kbd>⌃⏎</kbd></button>
         </div>
       </div>
@@ -606,10 +741,17 @@
     <!-- contract source -->
     <section class="view scroll-view" id="view-source" hidden>
       <div class="op-bar">
-        <h2 class="view-title">Contract source</h2>
+        <h2 class="view-title">Set up your API audit</h2>
         <div class="op-actions"><button type="button" class="btn" id="source-back" hidden>Back to endpoints</button></div>
       </div>
-
+      <div class="setup-intro"><p>Start with your API documentation and credentials. Each step explains what is known and what is still needed.</p><button type="button" class="link" id="setup-open-saved">Open a saved report instead</button></div>
+      <div class="setup-steps" role="tablist" aria-label="Setup stages">
+        <button type="button" role="tab" id="setup-tab-api" aria-controls="setup-api" aria-selected="true" data-setup-step="api"><span>A</span> API</button>
+        <button type="button" role="tab" id="setup-tab-identity" aria-controls="setup-identity" aria-selected="false" tabindex="-1" data-setup-step="identity"><span>B</span> Identity</button>
+        <button type="button" role="tab" id="setup-tab-data" aria-controls="setup-data" aria-selected="false" tabindex="-1" data-setup-step="data"><span>C</span> Test data</button>
+        <button type="button" role="tab" id="setup-tab-readiness" aria-controls="setup-readiness" aria-selected="false" tabindex="-1" data-setup-step="readiness"><span>D</span> Readiness</button>
+      </div>
+      <div id="setup-api" role="tabpanel" aria-labelledby="setup-tab-api" class="setup-stage">
       <div class="source-grid">
         <form id="import-form" class="card" novalidate>
           <div class="tabstrip inset" role="tablist" aria-label="Import source">
@@ -622,7 +764,7 @@
               <div class="field">
                 <label for="spec-url">Documentation or specification URL</label>
                 <input id="spec-url" type="url" placeholder="https://api.example.com/openapi.json" autocomplete="off" spellcheck="false">
-                <p class="hint">A Swagger UI / ReDoc page or a direct JSON or YAML document.</p>
+                <p class="hint">A Swagger UI / ReDoc page or a direct JSON or YAML document. Namazu follows supported specification links. The documentation address is not assumed to be the API target.</p>
               </div>
             </div>
 
@@ -684,6 +826,42 @@
           </div>
         </section>
       </div>
+      <section class="setup-target" id="setup-target" hidden>
+        <h3>Choose the API target</h3>
+        <p id="setup-target-note" class="hint"></p>
+        <label for="setup-server">Documented server</label><select id="setup-server"><option value="">Choose a server</option></select>
+        <label for="setup-custom-target">Target URL</label><input id="setup-custom-target" type="url" spellcheck="false" placeholder="https://api.example.com">
+        <label for="setup-environment">Environment label <span class="opt">optional</span></label><input id="setup-environment" placeholder="For example: staging" maxlength="120">
+        <button type="button" class="btn" id="setup-select-target">Use this target</button>
+        <p id="setup-target-error" class="msg error" role="alert" hidden></p>
+      </section>
+      <div class="setup-footer"><button type="button" class="btn primary" data-setup-next="identity">Continue to identity</button></div>
+      </div>
+      <section id="setup-identity" role="tabpanel" aria-labelledby="setup-tab-identity" class="setup-stage" hidden>
+        <h3>Which identity will send requests?</h3>
+        <p>Getting a token obtains credentials. Choosing an authentication method attaches them to requests. Permission to use an endpoint or resource must be established separately.</p>
+        <div class="field"><label for="setup-identity-name">Local identity label</label><input id="setup-identity-name" value="Primary identity" maxlength="100"><p class="hint">A label for this session. Credentials remain masked and are not saved in the report.</p></div>
+        <div id="setup-auth-mount"></div>
+        <p class="setup-auth-fact" id="setup-auth-fact" role="status"></p>
+        <details class="disclosure"><summary>Custom headers and second identity</summary><div class="disclosure-body"><p class="hint">Use the request Headers tab for custom credentials. The Audit panel holds the second identity; Access defines who may access each resource.</p><button type="button" class="btn" id="setup-headers">Edit request headers</button><button type="button" class="btn" id="setup-second-identity">Configure second identity</button></div></details>
+        <div class="setup-footer"><button type="button" class="btn primary" data-setup-next="data">Continue to test data</button></div>
+      </section>
+      <section id="setup-data" role="tabpanel" aria-labelledby="setup-tab-data" class="setup-stage" hidden>
+        <h3>Use inputs that refer to real test data</h3><p>Schema examples describe the format. They do not establish that a document, account or persona exists or that this identity may use it.</p>
+        <div class="field"><label for="setup-operation">Operation to prepare</label><select id="setup-operation"><option value="">Load an API first</option></select></div>
+        <div id="setup-fields"></div>
+        <div class="row-actions"><button type="button" class="btn" id="setup-edit-request">Edit request values</button><button type="button" class="btn" id="setup-owner-copy">Copy request to API owner</button></div>
+        <details class="disclosure"><summary>Request to the API owner</summary><pre id="setup-owner-request" class="setup-json"></pre></details>
+        <details class="disclosure" id="setup-baseline-details"><summary>Import a known-good request and define success</summary><div id="setup-baseline-mount" class="disclosure-body"></div></details>
+        <div class="setup-footer"><button type="button" class="btn primary" data-setup-next="readiness">Review readiness</button></div>
+      </section>
+      <section id="setup-readiness" role="tabpanel" aria-labelledby="setup-tab-readiness" class="setup-stage" hidden>
+        <h3>Readiness depends on the question being tested</h3><p>You can review the contract before a successful request exists. Tests of resource access need more evidence.</p>
+        <div id="setup-readiness-items"></div>
+        <div class="setup-next"><div><h4>Can run now</h4><ul id="setup-can-run"></ul></div><div><h4>Still needs prerequisites</h4><ul id="setup-requires"></ul></div></div>
+        <p id="setup-profile-suggestion"></p>
+        <div class="setup-footer"><button type="button" class="btn" id="setup-use-profile">Use suggested profile</button><button type="button" class="btn primary" id="setup-review-audit">Review audit plan</button></div>
+      </section>
     </section>
 
     <!-- audit report -->
@@ -737,19 +915,27 @@
 
     <section class="view scroll-view" id="view-audit-report" hidden>
       <div class="op-bar">
-        <h2 class="view-title">Audit report</h2>
+        <h2 class="view-title">Audit results</h2>
         <span class="chip" id="audit-state" hidden></span>
         <div class="op-actions">
           <div class="segmented" role="tablist" aria-label="Audit result view">
-            <button type="button" class="seg active" role="tab" aria-selected="true" id="report-here">Findings</button>
+            <button type="button" class="seg active" role="tab" aria-selected="true" id="report-here">Results</button>
             <button type="button" class="seg" role="tab" aria-selected="false" id="report-traffic">Traffic <span class="seg-count" id="report-traffic-count" hidden>0</span></button>
           </div>
           <button type="button" class="btn" id="export-audit-top" disabled>Export JSON</button>
         </div>
       </div>
       <div class="progress" id="audit-progress" role="progressbar" aria-label="Audit progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><div></div></div>
+      <div id="audit-live-status" class="audit-live-status" role="status" hidden></div>
+      <section id="audit-review-controls" class="audit-review-controls" hidden>
+        <h3>Review before sending requests</h3><p id="audit-review-summary"></p>
+        <p id="audit-review-writes"></p>
+        <label class="check" id="audit-write-consent-row" hidden><input id="audit-write-consent" type="checkbox"><span id="audit-write-consent-text">Authorise writes for the operations in this plan</span></label>
+        <div class="row-actions"><button type="button" class="btn primary" id="start-reviewed-audit">Start reviewed audit</button><button type="button" class="btn" id="discard-audit-plan">Discard plan</button></div>
+        <p class="hint">Changing the target, credentials, inputs, scope or traffic controls requires a new plan. Nothing is sent until you start.</p>
+      </section>
       <div class="report" id="audit-report-body">
-        <p class="pane-empty">No audit has run yet. Choose a profile on the left and select Run audit.</p>
+        <p class="pane-empty">No audit has run yet. Review setup, choose a profile and select Review audit plan. Opening a saved report sends no target requests.</p>
       </div>
     </section>
 
@@ -776,7 +962,7 @@
         <span class="dim" id="log-shown"></span>
         <div class="op-actions">
           <div class="segmented" role="tablist" aria-label="Audit result view">
-            <button type="button" class="seg" role="tab" aria-selected="false" id="log-back">Findings</button>
+            <button type="button" class="seg" role="tab" aria-selected="false" id="log-back">Results</button>
             <button type="button" class="seg active" role="tab" aria-selected="true" id="log-here">Traffic</button>
           </div>
           <button type="button" class="btn" id="export-log">Export JSON</button>
@@ -919,11 +1105,15 @@
         <section class="card">
           <div class="card-head"><h3>Session data</h3></div>
           <div class="card-body">
-            <p class="hint">Namazu keeps no database. Tokens, headers, requests and responses live in this browser session and the server process only; reloading the page clears them. Only theme and layout preferences are stored locally.</p>
-            <p class="hint">Exports include request and response bodies. Recognized credential headers and query parameters are masked, but body fields are not.</p>
+            <p class="hint">Workspaces, nonsecret request drafts and captured history are saved locally by the server. Identity profiles use session credentials unless Windows protected storage is explicitly chosen. Advanced session credentials clear when their contract context changes.</p>
+            <p class="hint">Exports retain evidence and mask recognized credentials. Review captured business data before sharing an export.</p>
             <div class="row-actions"><button type="button" class="btn sm" id="reset-layout">Reset layout</button></div>
             <p class="dim" id="about-line">Namazu</p>
           </div>
+        </section>
+        <section class="card" id="desktop-migration-panel">
+          <div class="card-head"><h3>Browser preferences and test data</h3></div>
+          <div class="card-body" id="desktop-migration"></div>
         </section>
       </div>
     </section>
@@ -946,5 +1136,13 @@
 
 <div id="live-status" class="sr-only" role="status" aria-live="polite"></div>
 <div id="toast" class="toast" role="status" hidden></div>
+<dialog id="saved-report-dialog" class="saved-report-dialog" aria-labelledby="saved-report-title">
+  <form method="dialog"><h2 id="saved-report-title">Open a saved audit</h2><button class="btn" aria-label="Close saved report dialog">Close</button></form>
+  <p>Read historical evidence or reassess it offline. This action does not contact the API or replay requests.</p>
+  <button type="button" class="btn" id="saved-report-file">Choose JSON file</button>
+  <div class="field"><label for="saved-report-json">Or paste a Namazu audit export</label><textarea id="saved-report-json" rows="10" spellcheck="false" class="code-input"></textarea></div>
+  <p id="saved-report-error" class="msg error" role="alert" hidden></p>
+  <button type="button" class="btn primary" id="saved-report-open">Open historical report</button>
+</dialog>
 </body>
 </html>

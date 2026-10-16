@@ -23,6 +23,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import secrets
+import threading
 import time
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
@@ -37,6 +38,7 @@ MAX_SESSIONS = 16
 WELL_KNOWN = ("/.well-known/openid-configuration", "/.well-known/oauth-authorization-server")
 
 _sessions: dict[str, dict] = {}
+_session_lock = threading.RLock()
 
 
 # ── PKCE ─────────────────────────────────────────────────────────────────────
@@ -160,6 +162,14 @@ def _auth_headers(client_id: str, client_secret: str, style: str) -> tuple[dict,
     return {}, fields
 
 
+class TokenRequestError(ValueError):
+    """Fixed OAuth diagnostics; issuer response text may contain credentials."""
+    def __init__(self, code, detail, *, response_received=False):
+        super().__init__(detail)
+        self.code = code
+        self.response_received = response_received
+
+
 def request_token(token_url: str, form: dict, *, client_id: str = "", client_secret: str = "",
                   auth_style: str = "post", verify_tls: bool = True, timeout: float = 15.0,
                   client: httpx.Client | None = None, user_agent: str | None = None,
@@ -177,29 +187,38 @@ def request_token(token_url: str, form: dict, *, client_id: str = "", client_sec
             headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded",
                      **headers},
         )
-    except httpx.HTTPError as exc:
-        raise ValueError(f"The token endpoint could not be reached ({type(exc).__name__}).") from exc
+    except httpx.TimeoutException:
+        raise TokenRequestError("timeout", "The token endpoint timed out. Check the endpoint and explicitly retry.") from None
+    except httpx.HTTPError:
+        raise TokenRequestError("connection-failed", "The token endpoint could not be reached. Check connectivity and TLS configuration.") from None
     finally:
         if owns:
             http.close()
 
+    if 300 <= response.status_code < 400:
+        raise TokenRequestError("redirect-refused", "The token endpoint redirected. Confirm the endpoint explicitly; credentials were not forwarded.", response_received=True)
     try:
         body = response.json()
     except ValueError:
         blocked = describe_block(response.status_code, dict(response.headers), response.text)
-        raise ValueError(
-            blocked or
-            f"The token endpoint returned a non-JSON response (HTTP {response.status_code}). "
-            f"The first of it: {response.text[:200]!r}"
-        ) from None
-    if response.status_code >= 400 or not isinstance(body, dict) or "access_token" not in body:
-        detail = ""
-        if isinstance(body, dict):
-            detail = body.get("error_description") or body.get("error") or ""
-        blocked = describe_block(response.status_code, dict(response.headers), response.text)
-        if blocked and not detail:
-            raise ValueError(blocked)
-        raise ValueError(f"The token request failed (HTTP {response.status_code}){': ' + detail if detail else '.'}")
+        if blocked:
+            from .audit.readiness import _sanitise
+            blocked = _sanitise(blocked, secret_sources=[payload, headers])
+            raise TokenRequestError("edge-block", blocked, response_received=True) from None
+        raise TokenRequestError("malformed-response", f"The token endpoint returned a non-JSON response (HTTP {response.status_code}). Response content is withheld to protect credentials.", response_received=True) from None
+    if response.status_code >= 400 or (isinstance(body, dict) and body.get("error")):
+        descriptions = {"invalid_client": "OAuth client authentication failed (invalid_client). Check the client ID, secret and client authentication placement.",
+                        "invalid_scope": "The identity platform rejected the scope. Check the scope configured for this client.",
+                        "unsupported_grant_type": "The identity platform does not support this grant. Confirm client_credentials is enabled.",
+                        "unauthorized_client": "This client is not authorized to use the requested grant."}
+        code = body.get("error") if isinstance(body, dict) else None
+        if not isinstance(code, str) or code not in descriptions:
+            code = "token-request-failed"
+        raise TokenRequestError(code, descriptions.get(code, f"The token request failed (HTTP {response.status_code}). Issuer error content is withheld to protect credentials."), response_received=True)
+    if not isinstance(body, dict) or not isinstance(body.get("access_token"), str) or not body["access_token"].strip():
+        raise TokenRequestError("missing-access-token", "The token endpoint response has no non-empty access_token. Check the endpoint and response format.", response_received=True)
+    if len(body["access_token"]) > 16384 or any(char in body["access_token"] for char in "\r\n\0"):
+        raise TokenRequestError("malformed-response", "The token endpoint returned an unusable access_token.", response_received=True)
     return summarize_token(body)
 
 
@@ -259,12 +278,13 @@ def refresh(*, refresh_token: str, scope: str = "", **kwargs) -> dict:
 # ── authorization code with PKCE ─────────────────────────────────────────────
 
 def _prune() -> None:
-    now = time.time()
-    for key in [key for key, entry in _sessions.items() if now - entry["created"] > SESSION_TTL]:
-        _sessions.pop(key, None)
-    while len(_sessions) > MAX_SESSIONS:
-        oldest = min(_sessions, key=lambda key: _sessions[key]["created"])
-        _sessions.pop(oldest, None)
+    with _session_lock:
+        now = time.time()
+        for key in [key for key, entry in _sessions.items() if now - entry["created"] > SESSION_TTL]:
+            _sessions.pop(key, None)
+        while len(_sessions) > MAX_SESSIONS:
+            oldest = min(_sessions, key=lambda key: _sessions[key]["created"])
+            _sessions.pop(oldest, None)
 
 
 def start_authorization(*, authorization_endpoint: str, token_endpoint: str, client_id: str,
@@ -308,26 +328,41 @@ def start_authorization(*, authorization_endpoint: str, token_endpoint: str, cli
         (existing + "&" if existing else "") + urlencode(query), "",
     ))
 
-    _sessions[session] = {
+    entry = {
         "created": time.time(), "state": state, "verifier": verifier if use_pkce else "",
         "token_endpoint": token_endpoint, "client_id": client_id, "client_secret": client_secret,
         "redirect_uri": redirect_uri, "auth_style": auth_style, "verify_tls": verify_tls,
         "connection": connection_for(connection, verify_tls), "timeout": timeout,
         "status": "pending", "token": None, "error": "",
     }
+    with _session_lock:
+        _sessions[session] = entry
     return {"session": session, "authorize_url": authorize_url, "redirect_uri": redirect_uri,
             "state": state, "pkce": use_pkce}
+
+
+def pending_authorization(state: str) -> bool:
+    """Only an issued, unexpired one-use state can enter the desktop callback."""
+    if not isinstance(state, str) or not state or not state.isascii():
+        return False
+    with _session_lock:
+        _prune()
+        return any(entry["status"] == "pending" and secrets.compare_digest(entry["state"], state)
+                   for entry in _sessions.values())
 
 
 def complete_authorization(*, state: str, code: str = "", error: str = "",
                            error_description: str = "") -> dict:
     """Redeem the code the authorization server sent back to /oauth/callback."""
-    _prune()
-    session_id = next((key for key, entry in _sessions.items() if entry["state"] == state), None)
-    if session_id is None:
-        raise ValueError("This authorization response does not match a pending request. "
-                         "Start the flow again from Namazu.")
-    entry = _sessions[session_id]
+    with _session_lock:
+        _prune()
+        session_id = next((key for key, entry in _sessions.items()
+                           if entry["status"] == "pending" and entry["state"] == state), None)
+        if session_id is None:
+            raise ValueError("This authorization response does not match a pending request. "
+                             "Start the flow again from Namazu.")
+        entry = _sessions[session_id]
+        entry["status"] = "redeeming"
     if error:
         entry["status"] = "error"
         entry["error"] = f"{error}{': ' + error_description if error_description else ''}"
@@ -364,7 +399,7 @@ def collect(session: str) -> dict:
     entry = _sessions.get(session)
     if entry is None:
         return {"status": "unknown"}
-    if entry["status"] == "pending":
+    if entry["status"] in {"pending", "redeeming"}:
         return {"status": "pending"}
     if entry["status"] == "error":
         _sessions.pop(session, None)

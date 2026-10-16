@@ -1,0 +1,23 @@
+meta {
+  name: Escaped JSON strings
+  type: http
+  seq: 24
+}
+
+post {
+  url: {{baseUrl}}/echo?case=escapes
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {"quote": "a \"quoted\" value", "path": "C:\\fixture\\path", "line": "one\ntwo", "unicode": "café 雪"}
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

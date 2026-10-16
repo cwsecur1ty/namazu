@@ -1,0 +1,58 @@
+/* Recorded outcomes are neutral evidence, separate from demonstrated impact. */
+.evidence-assessment { padding: 22px 24px; border-radius: 4px; }
+.evidence-assessment > h3 { font-size: 20px; letter-spacing: -.025em; }
+.assessment-question { padding: 20px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.assessment-question > h4 { margin-bottom: 10px; font-size: 15px; letter-spacing: -.01em; }
+.assessment-question > p + p { margin-top: 8px; }
+.assessment-question .assessment-section { margin: 12px 0; }
+.assessment-question .assessment-section > h4 { color: var(--muted); font-size: 12px; font-weight: 600; }
+.assessment-question .note-list { margin: 6px 0; padding-left: 20px; }
+.assessment-question .note-list li + li { margin-top: 7px; }
+.assessment-question .disclosure { background: transparent; border-color: var(--line-soft); border-radius: 0; }
+.assessment-question .disclosure > summary { font-weight: 600; }
+.assessment-question .disclosure > p { margin: 10px 12px; }
+.assessment-outcome { max-width: 80ch; }
+.assessment-outcome-case { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; padding: 8px 12px; border-top: 1px solid var(--line-soft); }
+.assessment-outcome-case > span { overflow-wrap: anywhere; min-width: 0; }
+.assessment-outcome-case .case-evidence-links { flex-shrink: 0; }
+.assessment-outcome-case .case-evidence-links a { margin-bottom: 0; }
+.assessment-next { margin-bottom: 16px; }
+.result-next-action { margin: 7px 10px 7px 0; display: inline-flex; text-align: left; }
+.test-blockers .result-next-action { display: block; }
+.prerequisite-code { display: block; font-family: var(--mono); font-size: 11px; margin-top: 3px; overflow-wrap: anywhere; }
+.owner-request-copy { display: block; width: 100%; padding: 10px; margin-top: 8px; resize: vertical; min-height: 130px; max-height: 460px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.readiness-assertion-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.readiness-assertion { min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--line); display: grid; gap: 10px; }
+.readiness-assertion legend { font-weight: 600; padding: 0 5px; }
+.readiness-assertion input, .readiness-assertion select { min-width: 0; width: 100%; padding: 7px; }
+.readiness-advanced > summary { cursor: pointer; padding: 10px 0; font-weight: 600; }
+.readiness-advanced .disclosure-body { display: grid; gap: 12px; }
+.readiness-advanced textarea { padding: 8px; }
+.readiness-advanced p { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.evidence-assessment p, .evidence-assessment li, .evidence-assessment summary { overflow-wrap: anywhere; }
+.request-comparison .case-evidence-panes { align-items: start; }
+.request-comparison .case-evidence-panes h5 { font-size: 12px; margin: 10px 0; }
+.mutation-value { background: var(--raised); border: 1px solid var(--line-soft); padding: 10px; margin-bottom: 10px; }
+.mutation-value pre { border: 0; margin: 5px 0 0; padding: 0; max-height: 170px; background: transparent; font-family: var(--mono); }
+.request-diff-line { white-space: pre-wrap; overflow-wrap: anywhere; }
+mark.request-diff-line { color: var(--ink); background: var(--accent-bg); text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+.request-diff { tab-size: 2; }
+.test-results details > summary, .evidence-assessment details > summary { scroll-margin: 14px; }
+.test-results a:focus-visible, .evidence-assessment a:focus-visible,
+.test-results summary:focus-visible, .evidence-assessment summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.test-case-table .case-uncertainty { color: var(--muted); }
+.test-results-heading p { max-width: 92ch; }
+.test-results .case-evidence-panes pre { line-height: 1.6; }
+.case-original-record { margin: 0 12px 12px; border-top: 1px solid var(--line-soft); }
+.case-original-record pre { max-height: 440px; overflow: auto; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.evidence-assessment .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@media (max-width: 760px) {
+  .evidence-assessment { padding: 16px 14px; }
+  .evidence-assessment > h3 { font-size: 18px; }
+  .assessment-question { padding: 16px 0; }
+  .assessment-outcome-case { display: block; }
+  .assessment-outcome-case .case-evidence-links { margin-top: 5px; }
+  .request-comparison-panes { grid-template-columns: 1fr; }
+  .readiness-assertion-rows { grid-template-columns: 1fr; }
+  .result-next-action { max-width: 100%; white-space: normal; }
+}

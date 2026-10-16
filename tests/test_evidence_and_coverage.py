@@ -73,10 +73,12 @@ def test_a_denied_baseline_blocks_the_checks_that_depend_on_it(spec):
     result = _audit(spec, "GET /reports/{reportId}",
                     identities={"primary": {"headers": TENANT_B}})
     assert result["baseline_outcome"] == "permission-denied"
-    for check in ("authorization", "credential-handling", "cache", "input-handling"):
+    for check in ("authorization", "credential-handling", "cache"):
         assert _state(result, check) == "blocked", f"{check} should be blocked"
         assert _entry(result, check)["reason"]
         assert _entry(result, check)["remediation"]
+    assert _state(result, "input-handling") == "inconclusive"
+    assert _entry(result, "input-handling")["requests"] > 0
 
 
 def test_a_blocked_check_is_never_described_as_passed_or_covered(spec):
@@ -98,8 +100,10 @@ def test_a_denied_baseline_does_not_block_the_checks_that_still_work(spec):
     """A refusal is still a response. Its headers and media type are evidence."""
     result = _audit(spec, "GET /reports/{reportId}",
                     identities={"primary": {"headers": TENANT_B}})
-    for check in ("contract-review", "response-contract", "passive-review", "transport"):
+    for check in ("contract-review", "passive-review", "transport"):
         assert _state(result, check) == "completed", f"{check} should still run"
+    assert result["response_review"]["contract"]["reviewed_responses"] > 0
+    assert _state(result, "response-contract") == "inconclusive"  # Some probes change method or route.
 
 
 def test_the_denial_path_bypass_battery_stays_available_on_a_refusal(spec):
@@ -109,7 +113,8 @@ def test_the_denial_path_bypass_battery_stays_available_on_a_refusal(spec):
     assert not coverage.CHECKS["access-bypass"].get("needs_baseline")
     result = _audit(spec, "GET /reports/{reportId}",
                     identities={"primary": {"headers": TENANT_B}})
-    assert _state(result, "access-bypass") == "completed"
+    assert _state(result, "access-bypass") == "inconclusive"
+    assert _entry(result, "access-bypass")["requests"] > 0
 
 
 def test_a_401_is_an_authentication_failure_and_a_403_is_not(spec):
@@ -160,11 +165,13 @@ def test_a_valid_baseline_permits_the_dependent_checks(spec):
     result = _audit(spec, "GET /reports/{reportId}",
                     identities={"primary": {"headers": TENANT_A}})
     assert result["baseline_outcome"] == "success"
-    for check in ("authorization", "credential-handling", "cache", "input-handling",
+    for check in ("authorization", "credential-handling", "cache",
                   "posture", "methods"):
         assert _state(result, check) == "completed", f"{check} should run"
+    assert _state(result, "input-handling") == "inconclusive"
+    assert _entry(result, "input-handling")["requests"] > 0
     assert result["coverage"]["blocked"] == [] or all(
-        entry["check"] in ("cross-identity", "write-authorization")
+        entry["check"] in ("cross-identity", "write-authorization", "schema-inputs")
         for entry in result["coverage"]["blocked"])
 
 
@@ -178,7 +185,8 @@ def test_an_expected_refusal_is_a_baseline_that_worked(spec):
                                  "body_contains": "not entitled"})
     assert result["baseline_outcome"] == "success"
     assert "negative test that passed" in result["baseline_verdict"]["reason"]
-    assert _state(result, "authorization") == "completed"
+    assert result["baseline_verdict"]["positive_control"] is False
+    assert _state(result, "authorization") == "blocked"
 
 
 def test_an_assertion_that_fails_is_not_quietly_a_success(spec):
@@ -230,13 +238,13 @@ def test_an_undocumented_problem_json_media_type_is_a_contract_issue(spec):
     """The third finding in the real export. It is a documentation defect."""
     result = _audit(spec, "GET /problems", identities={"primary": {"headers": TENANT_A}})
     hit = next(item for item in result["findings"]
-               if item["id"] == "contract.content-type-mismatch")
+               if item["id"] == "contract.response-disagreement")
     assert hit["assessment"]["category"] == "contract"
     assert hit["severity"] == "info"
     assert "application/problem+json" in hit["detail"]
     # It is still reported, and it still says what is wrong and how to fix it.
     assert "does not document" in hit["detail"]
-    assert "Add application/problem+json" in hit["remediation"]
+    assert "media types" in hit["remediation"]
 
 
 # ── 4. incomplete external evidence cannot become a confirmed exploit ───────
@@ -952,7 +960,7 @@ def test_a_sequence_masks_an_extracted_value_in_the_evidence_it_keeps():
         client.close()
     rendered = json.dumps(result.to_dict())
     assert "sess-tenant-a" not in rendered
-    assert "<extracted:session>" in rendered
+    assert "<credential>" in rendered or "<extracted:session>" in rendered
     # The names reach the reader; the values do not.
     assert result.to_dict()["variables"] == ["session"]
 

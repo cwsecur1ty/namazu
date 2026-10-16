@@ -2,11 +2,14 @@
 import html
 import ipaddress
 import os
+import secrets
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import httpx
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
@@ -15,25 +18,79 @@ from . import __version__, oauth
 from .audit import (
     audit_inventory,
     audit_operation,
+    audit_plan,
     capture,
     correlate,
     external,
     matrix,
+    readiness,
+    run_service,
     transport,
     zap,
 )
 from .audit.model import finding_from_dict
-from .discovery import Connection, fetch_document
-from .runner import execute_request, prepare_request
+from .bruno_routes import router as bruno_router
+from .bruno_source_routes import router as bruno_source_router
+from .desktop_routes import router as desktop_router
+from .discovery import Connection, fetch_document, setup_metadata
+from .identity_profiles import router as identity_router
+from .oob_routes import router as oob_router
+from .runner import (
+    credential_names_for,
+    execute_request,
+    prepare_request,
+    redact_evidence,
+)
 from .signature import Signature
 from .spec import parse_spec, spec_hash
+from .workspace_routes import router as workspace_router
 
 STATIC = Path(__file__).parent / "static"
-app = FastAPI(title="Namazu", version="0.1.0", description="Standalone API testing by K9", docs_url=None, redoc_url=None)
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    # Creating the manager marks any run left 'running' by a previous process as
+    # interrupted. It never resumes or re-sends anything.
+    run_service.manager()
+    from .desktop_requests import manager as request_manager
+    request_manager()
+    yield
+
+
+app = FastAPI(title="Namazu", version="0.1.0", description="Standalone API testing by K9",
+              docs_url=None, redoc_url=None, lifespan=lifespan)
+app.include_router(bruno_router)
+app.include_router(bruno_source_router)
+app.include_router(workspace_router)
+app.include_router(desktop_router)
+app.include_router(oob_router)
+app.include_router(identity_router)
+
+
+@app.exception_handler(RequestValidationError)
+async def invalid_request(_request: Request, exc: RequestValidationError):
+    # Pydantic's default response includes the supplied input and context. A
+    # malformed credential must not be reflected into UI errors or diagnostic
+    # logs. Field locations and error kinds still explain what needs fixing.
+    return JSONResponse({"detail": [{"loc": error["loc"], "type": error["type"],
+                                     "msg": "Invalid or missing value for this field."}
+                                    for error in exc.errors()]}, status_code=422)
 
 
 @app.middleware("http")
 async def local_requests(request: Request, call_next):
+    from . import desktop_runtime
+    if desktop_runtime.is_desktop():
+        # The native host adds this only to its exact loopback app origin. It is
+        # never exposed to JavaScript, URL parameters, target requests or logs.
+        supplied = request.headers.get("x-namazu-session", "")
+        oauth_return = (request.method == "GET" and request.url.path == "/oauth/callback"
+                        and oauth.pending_authorization(request.query_params.get("state", "")))
+        if not oauth_return and not secrets.compare_digest(supplied.encode("utf-8"), desktop_runtime.session_secret().encode("utf-8")):
+            return JSONResponse({"detail": "This desktop session requires its owning application."}, status_code=401)
+        if request.url.hostname != "127.0.0.1":
+            return JSONResponse({"detail": "Desktop requests require the loopback application origin."}, status_code=403)
     hostname = (request.url.hostname or "").lower()
     allowed = {"localhost", *(name.strip().lower() for name in os.environ.get("NAMAZU_ALLOWED_HOSTS", "").split(",") if name.strip())}
     try:
@@ -55,10 +112,11 @@ async def local_requests(request: Request, call_next):
         # Bound inputs before JSON parsing (raw OpenAPI plus derived view is duplicated).
         total = 0
         chunks = []
+        input_limit = 48 * 1024 * 1024 if request.url.path == "/api/bruno/sources" else 24 * 1024 * 1024
         async for chunk in request.stream():
             total += len(chunk)
-            if total > 24 * 1024 * 1024:
-                return JSONResponse({"detail": "Request exceeds 24 MiB"}, status_code=413)
+            if total > input_limit:
+                return JSONResponse({"detail": f"Request exceeds {input_limit // (1024 * 1024)} MiB"}, status_code=413)
             chunks.append(chunk)
         request._body = b"".join(chunks)
     response = await call_next(request)
@@ -78,6 +136,7 @@ class ConnectionInput(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+    credential_names: list[Annotated[str, Field(max_length=256)]] = Field(default_factory=list, max_length=100)
     verify_tls: bool = True
     timeout: float = Field(default=15, ge=1, le=120)
     # httpx would otherwise announce itself as python-httpx, which a WAF in
@@ -144,6 +203,9 @@ class AuditInput(ConnectionInput):
     budget: int = Field(default=60, ge=1, le=200)
     # None lets the profile choose. The engine caps the top end.
     concurrency: int | None = Field(default=None, ge=1, le=16)
+    request_budget: int | None = Field(default=None, ge=1, le=220)
+    requests_per_second: float | None = Field(default=None, ge=0.1, le=100)
+    response_comparison: dict | None = None
     # What a successful response looks like for this operation, including the
     # case where the correct answer is a refusal. See audit/baseline.py.
     expectation: dict | None = None
@@ -197,9 +259,40 @@ class MatrixInput(ConnectionInput):
     budget: int = Field(default=60, ge=1, le=200)
 
 
+class RunCreateInput(ConnectionInput):
+    """A reviewed plan handed to the server to own and execute as one run.
+
+    The browser has already reviewed scope, target, identity, profile, write
+    authorisation, budget and rate; this binds them. Changing any of them is a
+    new review and a new POST, never an edit of a live run.
+    """
+
+    spec: dict
+    base_url: str | None = None
+    profile: str = "readonly"
+    identities: dict[str, dict] = Field(default_factory=dict)
+    allow_mutating: bool = False
+    budget: int = Field(default=60, ge=1, le=10000)
+    concurrency: int | None = Field(default=None, ge=1, le=16)
+    requests_per_second: float | None = Field(default=None, ge=0.1, le=100)
+    response_comparison: dict | None = None
+    inventory: bool = False
+    # Each item is {operation_id, example?, expectation?} for one reviewed op.
+    operations: list[dict] = Field(default_factory=list, max_length=2000)
+    # Display/provenance only (title, version, environment, identity_label, base_url).
+    context: dict = Field(default_factory=dict)
+
+
 class CorrelateInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     findings: list[dict]
+
+
+class ReadinessInput(BaseModel):
+    """Offline preparation accepts no connection or credential configuration."""
+
+    model_config = ConfigDict(extra="allow")
+    credential_names: list[Annotated[str, Field(max_length=256)]] = Field(default_factory=list, max_length=100)
 
 
 @app.exception_handler(ValueError)
@@ -215,7 +308,8 @@ async def http_error(_request, exc):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "tool": "Namazu", "version": __version__}
+    from .desktop_build import public_identity
+    return {"status": "ok", "tool": "Namazu", "version": __version__, **public_identity()}
 
 
 @app.post("/api/import")
@@ -228,19 +322,23 @@ def import_document(body: ImportInput):
                                                   connection=body.connection())
         result = parse_spec(document, source)
         result["warnings"] = list(dict.fromkeys(result["warnings"] + warnings))
+        result["setup"] = setup_metadata(result, documentation_url=body.url)
         return result
-    return parse_spec(body.raw_spec, body.source_url)
+    result = parse_spec(body.raw_spec, body.source_url)
+    result["setup"] = setup_metadata(result)
+    return result
 
 
 @app.post("/api/prepare")
 def prepare(body: RequestInput):
-    return prepare_request(body.spec, body.operation_id, **body.options())
+    return prepare_request(body.spec, body.operation_id, credential_names=body.credential_names, **body.options())
 
 
 @app.post("/api/run")
 def run(body: RequestInput):
     return execute_request(body.spec, body.operation_id, allow_mutating=body.allow_mutating,
                            timeout=body.timeout, connection=body.connection(),
+                           credential_names=body.credential_names,
                            **body.options())
 
 
@@ -252,7 +350,22 @@ def audit(body: AuditInput):
                            identities=body.identities, profile=body.profile,
                            allow_mutating=body.allow_mutating, timeout=body.timeout,
                            concurrency=body.concurrency, connection=body.connection(),
-                           expectation=body.expectation, example=body.example)
+                           expectation=body.expectation, example=body.example,
+                           request_budget=body.request_budget,
+                           requests_per_second=body.requests_per_second,
+                           credential_names=body.credential_names,
+                           response_comparison=body.response_comparison)
+
+
+@app.post("/api/audit/plan")
+def plan_audit(body: AuditInput):
+    if not body.operation_id:
+        raise ValueError("Choose an operation to plan")
+    return audit_plan(body.spec, body.operation_id, base_url=body.base_url,
+                      identities=body.identities, profile=body.profile,
+                      allow_mutating=body.allow_mutating, example=body.example,
+                      credential_names=body.credential_names,
+                      request_budget=body.request_budget, response_comparison=body.response_comparison)
 
 
 @app.post("/api/replay")
@@ -269,13 +382,15 @@ def replay(body: ReplayInput):
     executor = transport.Executor(http, transport.Budget(body.budget), timeout=body.timeout,
                                   allow_mutating=body.allow_mutating,
                                   signature=Signature(quiet=link.quiet))
+    executor.redacted_names = credential_names_for({}, body.credential_names)
     try:
         result = capture.replay(case, executor=executor, identities=body.identities,
                                 attempts=body.attempts, allow_mutating=body.allow_mutating)
     finally:
         http.close()
-    return {**result.to_dict(), "case": case.to_dict(),
-            "requests_sent": executor.budget.spent}
+    return redact_evidence({**result.to_dict(), "case": case.to_dict(),
+                            "requests_sent": executor.budget.spent, "credential_names": sorted(executor.redacted_names)},
+                           sources=[body.model_dump()], credential_names=executor.redacted_names)
 
 
 @app.post("/api/sequence")
@@ -288,14 +403,17 @@ def sequence(body: SequenceInput):
     executor = transport.Executor(http, transport.Budget(body.budget), timeout=body.timeout,
                                   allow_mutating=body.allow_mutating,
                                   signature=Signature(quiet=link.quiet))
+    executor.redacted_names = credential_names_for({}, body.credential_names)
     try:
         result = matrix.run_sequence(body.steps, executor=executor,
                                      identities=body.identities, variables=body.variables,
                                      allow_mutating=body.allow_mutating)
     finally:
         http.close()
-    return {**result.to_dict(), "requests_sent": executor.budget.spent,
-            "log": [item.to_dict() for item in executor.exchanges]}
+    return redact_evidence({**result.to_dict(), "requests_sent": executor.budget.spent,
+                            "credential_names": sorted(executor.redacted_names),
+                            "log": [item.to_dict() for item in executor.exchanges]},
+                           sources=[body.model_dump()], credential_names=executor.redacted_names)
 
 
 @app.post("/api/matrix")
@@ -308,13 +426,16 @@ def permission_matrix(body: MatrixInput):
     executor = transport.Executor(http, transport.Budget(body.budget), timeout=body.timeout,
                                   allow_mutating=body.allow_mutating,
                                   signature=Signature(quiet=link.quiet))
+    executor.redacted_names = credential_names_for({}, body.credential_names)
     try:
         result = matrix.evaluate(body.rows, executor=executor, identities=body.identities,
                                  allow_mutating=body.allow_mutating)
     finally:
         http.close()
-    return {**result, "requests_sent": executor.budget.spent,
-            "log": [item.to_dict() for item in executor.exchanges]}
+    return redact_evidence({**result, "requests_sent": executor.budget.spent,
+                            "credential_names": sorted(executor.redacted_names),
+                            "log": [item.to_dict() for item in executor.exchanges]},
+                           sources=[body.model_dump()], credential_names=executor.redacted_names)
 
 
 @app.post("/api/correlate")
@@ -331,11 +452,101 @@ def correlate_findings(body: CorrelateInput):
             "merged": len(items) - len(kept), "received": len(items)}
 
 
+@app.post("/api/readiness/prepare")
+def prepare_successful_baseline(body: ReadinessInput):
+    return readiness.prepare(body.model_dump())
+
+
+@app.post("/api/readiness/plan")
+def plan_followup(body: ReadinessInput):
+    return readiness.plan(body.model_dump())
+
+
+@app.post("/api/audit/assess")
+def assess_saved_audit(body: dict):
+    """Review retained evidence offline, without constructing an HTTP client."""
+    from .audit.reporting import assess_saved_audit
+
+    return assess_saved_audit(body)
+
+
+@app.post("/api/audit/import")
+def import_saved_audit(body: dict):
+    """Mask retained credentials locally; importing never executes a request."""
+    from .audit.importing import sanitise_saved_audit
+
+    return sanitise_saved_audit(body)
+
+
 @app.post("/api/audit/inventory")
 def audit_surface(body: AuditInput):
     return audit_inventory(body.spec, base_url=body.base_url, identities=body.identities,
                            timeout=body.timeout, budget=body.budget,
+                           requests_per_second=body.requests_per_second,
+                           credential_names=body.credential_names,
                            concurrency=body.concurrency, connection=body.connection())
+
+
+# ---- Server-owned audit runs -------------------------------------------------
+# A run outlives the browser: it is created from a reviewed plan, executed on a
+# server thread against one shared budget/pacer/stop, persisted as it goes, and
+# polled by whatever viewer is attached. Reopening a run only reads it.
+
+@app.post("/api/runs")
+def create_run(body: RunCreateInput):
+    # connection() validates the route material and surfaces a clean 400 before
+    # a thread is ever started.
+    body.connection()
+    return run_service.manager().create(body.model_dump())
+
+
+@app.get("/api/runs")
+def list_runs():
+    return {"runs": run_service.manager().list_runs()}
+
+
+@app.get("/api/runs/{run_id}")
+def get_run(run_id: str):
+    snapshot = run_service.manager().snapshot(run_id)
+    if snapshot is None:
+        return JSONResponse({"detail": "No such run."}, status_code=404)
+    return snapshot
+
+
+@app.get("/api/runs/{run_id}/export")
+def export_run(run_id: str):
+    export = run_service.manager().export(run_id)
+    if export is None:
+        return JSONResponse({"detail": "No such run."}, status_code=404)
+    return export
+
+
+@app.post("/api/runs/{run_id}/stop")
+def stop_run(run_id: str):
+    if not run_service.manager().stop(run_id):
+        return JSONResponse({"detail": "No active run to stop; it may have already finished."},
+                            status_code=409)
+    return run_service.manager().snapshot(run_id)
+
+
+@app.post("/api/runs/{run_id}/withdraw-writes")
+def withdraw_run_writes(run_id: str):
+    if not run_service.manager().withdraw_writes(run_id):
+        return JSONResponse({"detail": "No active run; write authorisation cannot be withdrawn."},
+                            status_code=409)
+    return run_service.manager().snapshot(run_id)
+
+
+@app.delete("/api/runs/{run_id}")
+def delete_run(run_id: str):
+    if not run_service.manager().delete(run_id):
+        return JSONResponse({"detail": "No such run."}, status_code=404)
+    return {"deleted": run_id}
+
+
+@app.delete("/api/runs")
+def delete_all_runs():
+    return {"deleted": run_service.manager().delete_all()}
 
 
 class OAuthInput(ConnectionInput):
@@ -448,13 +659,17 @@ def oauth_callback(request: Request):
             message = f"Authorization failed: {result['error']}"
     except ValueError as exc:
         message = str(exc)
+    from . import desktop_runtime
+    footer = ('<p>Return to the Namazu desktop application. You can close this browser page.</p>'
+              if desktop_runtime.is_desktop() else '<p><a href="/">Back to the workbench</a></p>')
+    stylesheet = '' if desktop_runtime.is_desktop() else '<link rel="stylesheet" href="/static/style.css">'
     page = (
         "<!doctype html><html lang=en><head><meta charset=utf-8>"
         "<title>Namazu authorization</title>"
-        '<link rel="stylesheet" href="/static/style.css"></head>'
+        f'{stylesheet}</head>'
         '<body class="callback-page"><main class="callback"><h1>Namazu</h1>'
         f"<p>{html.escape(message)}</p>"
-        '<p><a href="/">Back to the workbench</a></p></main></body></html>'
+        f'{footer}</main></body></html>'
     )
     return HTMLResponse(page)
 

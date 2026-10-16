@@ -1,0 +1,25 @@
+meta {
+  name: Form body
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/echo?case=form
+  body: form-urlencoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  name: café 雪
+  label: space value
+  ~disabled: omitted
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

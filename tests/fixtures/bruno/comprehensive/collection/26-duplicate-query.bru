@@ -1,0 +1,25 @@
+meta {
+  name: Repeated and empty query values
+  type: http
+  seq: 28
+}
+
+get {
+  url: {{baseUrl}}/echo?tag=one&tag=two&empty=
+  body: none
+  auth: inherit
+}
+
+params:query {
+  tag: one
+  tag: two
+  empty: 
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

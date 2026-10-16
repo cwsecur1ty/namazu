@@ -1,0 +1,23 @@
+meta {
+  name: Script-dependent request
+  type: http
+  seq: 22
+}
+
+get {
+  url: {{baseUrl}}/echo?case=script
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  req.setHeader("X-Script", "fixture-script-ran");
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

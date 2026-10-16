@@ -1,0 +1,6 @@
+name: Global
+variables:
+  - name: global_value
+    value: from-workspace
+  - secret: true
+    name: shared_token

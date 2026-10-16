@@ -1,0 +1,19 @@
+meta {
+  name: Application denial
+  type: http
+  seq: 17
+}
+
+get {
+  url: {{baseUrl}}/denied
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 403
+}
+
+settings {
+  timeout: 200
+}

@@ -1,0 +1,19 @@
+meta {
+  name: Field validation
+  type: http
+  seq: 18
+}
+
+get {
+  url: {{baseUrl}}/validation
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 400
+}
+
+settings {
+  timeout: 200
+}

@@ -29,58 +29,41 @@ MAX_FETCHES = 24
 DEFAULT_USER_AGENT = f"Namazu/{__version__} (+https://github.com/cwsecur1ty/namazu)"
 
 
-# Headers a security product adds to its own block page. None of these belong
-# to an API's own error response, so one of them plus a refusal status is a
-# reliable way to say which hop answered.
-WAF_HEADERS = {
-    "x-iinfo": "Imperva",
-    "x-cdn": "Imperva",
-    "cf-ray": "Cloudflare",
-    "cf-mitigated": "Cloudflare",
-    "x-akamai-transformed": "Akamai",
-    "akamai-grn": "Akamai",
-    "x-sucuri-id": "Sucuri",
-    "x-amz-apigw-id": "AWS",
-    "x-amzn-waf-action": "AWS WAF",
-    "x-azure-ref": "Azure Front Door",
-}
-# Wording block pages use. "Support ID" and "Ray ID" are the reference numbers
-# Imperva and Cloudflare tell you to quote, so they are worth pulling out.
+# Diagnostic headers also occur on application responses. Only explicit page
+# content supports a block-page description, and it cannot establish whether
+# an upstream service processed the credentials.
 WAF_BODY = re.compile(
-    r"(?i)(blocked by our security service|request (?:was |has been )?blocked|"
-    r"attention required|access denied|incapsula|cloudflare|akamai|"
-    r"unusual (?:traffic|activity)|bot ?detect|security policy)")
+    r"(?i)(blocked by our security service|request (?:was |has been )?blocked)")
 WAF_REFERENCE = re.compile(
     r"(?i)(support id|ray id|reference (?:number|id))(?:\s+is)?[:\s#]*([0-9a-z-]{6,40})")
 
 
 def describe_block(status: int, headers: dict, body: str) -> str:
-    """Say so when a response is a security product refusing the request.
-
-    Returns an empty string when nothing suggests one, so the caller can fall
-    back to reporting the response on its own terms.
-    """
+    """Describe explicit HTML block evidence without guessing processing order."""
     lowered = {str(name).lower(): str(value) for name, value in (headers or {}).items()}
-    vendors = sorted({label for header, label in WAF_HEADERS.items() if header in lowered})
     sample = (body or "")[:4000]
+    if not re.search(r"<(?:html|body|iframe|h1|p)\b", sample, re.I):
+        return ""
     wording = WAF_BODY.search(sample)
-    if not vendors and not wording:
+    incapsula = (re.search(r"/_Incapsula_Resource\b", sample, re.I)
+                 and re.search(r"Incapsula\s+incident\s+ID|Request\s+unsuccessful", sample, re.I))
+    cloudflare = (re.search(r"\bcloudflare\b", sample, re.I)
+                  and re.search(r"attention required|sorry, you have been blocked", sample, re.I))
+    if not incapsula and not cloudflare and not wording:
         return ""
     reference = WAF_REFERENCE.search(sample)
-    who = " or ".join(vendors) if vendors else "a security service"
+    who = "Incapsula/Imperva" if incapsula else "Cloudflare" if cloudflare else "a security service"
     parts = [
-        f"HTTP {status} came from {who}, not from the authorization server. "
-        "The request was refused before it arrived, so this is not an OAuth error "
-        "and no credential of yours was rejected."
+        f"HTTP {status} contains an explicit block page identifying {who}. "
+        "Downstream handling is unknown. This response does not establish whether "
+        "the authorization server processed or accepted the credentials."
     ]
     if wording:
         parts.append(f"The response says: \u201c{wording.group(0)}\u201d.")
     if reference:
         parts.append(f"Quote {reference.group(1)} {reference.group(2)} if you raise it with them.")
-    if vendors:
-        shown = ", ".join(f"{name}: {lowered[name]}" for name in sorted(lowered)
-                          if name in WAF_HEADERS)
-        parts.append(f"Identifying headers: {shown}.")
+    if lowered.get("cf-mitigated") == "challenge":
+        parts.append("The cf-mitigated header also reports a challenge.")
     return " ".join(parts)
 
 
@@ -311,6 +294,12 @@ def _candidates(raw: str, url: str, value, conventional: bool) -> list[str]:
                 r'''SwaggerEndpoint\s*\(\s*["']([^"']+)["']''']
     for pattern in patterns:
         candidates.extend(re.findall(pattern, decoded, re.I))
+    # Download links are common in otherwise static documentation. Follow
+    # explicitly named OpenAPI/Swagger files, not every JSON link on a page.
+    for link in re.findall(r'''<a\b[^>]+href=["']([^"']+)["']''', decoded, re.I):
+        name = urlsplit(link).path.rsplit("/", 1)[-1]
+        if re.fullmatch(r"(?:openapi|swagger)(?:[-._][\w.-]+)?\.(?:json|ya?ml)", name, re.I):
+            candidates.append(link)
     for script in re.findall(r'''<script[^>]+src=["']([^"']+)["']''', decoded, re.I):
         name = urlsplit(script).path.rsplit("/", 1)[-1].lower()
         if name == "index.js" or "swagger-initializer" in name or "swagger-ui-init" in name:
@@ -406,4 +395,42 @@ def fetch_document(url: str, *, headers: dict | None = None, verify_tls: bool = 
             used_conventional_paths = used_conventional_paths or conventional
             # Follow explicit configuration chains before trying fallback paths.
             pending = [item for item in candidates if item not in visited] + pending
-    raise ValueError("No OpenAPI document found. Supply a direct JSON/YAML URL or paste the specification; this page may need browser login or unsupported JavaScript configuration.")
+    raise ValueError("No OpenAPI document found. Look for an OpenAPI/Swagger download link in the documentation, "
+                     "or use the browser Network panel to locate the JSON/YAML specification loaded by Swagger UI or ReDoc. "
+                     "Paste or upload that specification, or ask the API owner for it. "
+                     "This page may require browser login or unsupported JavaScript configuration. "
+                     "The documentation address is not necessarily the API server address.")
+
+
+def setup_metadata(spec: dict, *, documentation_url: str = "") -> dict:
+    """Describe target choices without selecting a documentation host as an API."""
+    declared = list(spec.get("servers") or [])
+    for operation in spec.get("operations") or []:
+        declared.extend(operation.get("servers") or [])
+    choices = []
+    unresolved = []
+    for value in dict.fromkeys(declared):
+        try:
+            check_url(value)
+            if "{" in value or "}" in value:
+                raise ValueError("Unresolved server variable")
+            choices.append(value)
+        except ValueError:
+            unresolved.append(value)
+    document = spec.get("document") or {}
+    has_declared_server = bool(document.get("servers") or document.get("host"))
+    for path in (document.get("paths") or {}).values():
+        if isinstance(path, dict):
+            has_declared_server |= bool(path.get("servers")) or any(
+                bool(value.get("servers")) for key, value in path.items()
+                if key.lower() in {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
+                and isinstance(value, dict))
+    required = len(choices) != 1 or bool(unresolved) or not has_declared_server
+    return {"documentation_url": documentation_url or None,
+            "specification_url": spec.get("source_url") or None,
+            "operation_count": len(spec.get("operations") or []),
+            "server_choices": choices, "unresolved_servers": unresolved,
+            "server_declarations_missing": not has_declared_server,
+            "target_selection_required": required,
+            "suggested_target": choices[0] if not required else None,
+            "discovery_requests_are_documentation_only": True}

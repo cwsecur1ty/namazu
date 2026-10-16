@@ -1,0 +1,16 @@
+headers {
+  X-Inherited: collection
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{shared_token}}
+}
+
+vars:pre-request {
+  base: http://127.0.0.1:9
+  layer: collection
+}

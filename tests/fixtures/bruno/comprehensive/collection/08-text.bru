@@ -1,0 +1,24 @@
+meta {
+  name: Text body
+  type: http
+  seq: 10
+}
+
+put {
+  url: {{baseUrl}}/echo?case=text
+  body: text
+  auth: inherit
+}
+
+body:text {
+  line one
+  café 雪
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

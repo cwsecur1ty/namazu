@@ -1,0 +1,27 @@
+info:
+  name: Inert script
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{base}}/echo?layer={{layer}}&global={{global_value}}"
+  body:
+    type: json
+    data: "false"
+  auth: inherit
+
+runtime:
+  variables:
+    - name: layer
+      value: request
+  scripts:
+    - type: before-request
+      code: throw new Error('DO NOT EXECUTE FIXTURE');
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true

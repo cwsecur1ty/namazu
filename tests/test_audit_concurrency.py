@@ -41,7 +41,7 @@ def _unbalanced(value: str) -> bool:
 # ── cookie parameters ───────────────────────────────────────────────────────
 
 def _cookie_spec(required=True, extra=()):
-    params = [{"name": "session", "in": "cookie", "required": required,
+    params = [{"name": "filter", "in": "cookie", "required": required,
                "schema": {"type": "string", "example": "abc123"}}]
     params += list(extra)
     return parse_spec({
@@ -66,14 +66,14 @@ def _cookies(request):
 def test_documented_cookie_parameter_is_probed():
     """A parameter declared in: cookie is an input the contract names."""
     def handler(request):
-        if _unbalanced(_cookies(request).get("session", "")):
+        if _unbalanced(_cookies(request).get("filter", "")):
             return httpx.Response(500, text="SQLSTATE[42000]: You have an error in your SQL syntax")
         return _json({"hits": 1})
 
     with _client(handler) as client:
         result = audit_operation(_cookie_spec(), "GET /search", base_url=BASE, client=client)
     hit = next(f for f in result["findings"]
-               if f["id"] == "input.sql-error" and f["parameter"] == "session")
+               if f["id"] == "input.sql-error" and f["parameter"] == "filter")
     assert hit["evidence"]["location"] == "cookie"
     assert hit["evidence"]["control"] == "''"
     assert "documented cookie parameter" in hit["detail"]
@@ -84,8 +84,8 @@ def test_cookie_parameter_the_request_omitted_is_still_probed():
     seen = []
 
     def handler(request):
-        seen.append(_cookies(request).get("session"))
-        if _unbalanced(_cookies(request).get("session", "")):
+        seen.append(_cookies(request).get("filter"))
+        if _unbalanced(_cookies(request).get("filter", "")):
             return httpx.Response(500, text="ORA-01756: quoted string not properly terminated")
         return _json({"hits": 1})
 
@@ -107,10 +107,11 @@ def test_cookie_probe_replaces_one_cookie_and_keeps_the_rest():
 
     with _client(handler) as client:
         audit_operation(_cookie_spec(), "GET /search", base_url=BASE, client=client,
-                        identities={"primary": {"Cookie": "session=abc123; tracking=keep-me"}})
-    probed = [jar for jar in jars if jar.get("session") not in (None, "abc123")]
-    assert probed, "the session cookie was never given a probe value"
+                        identities={"primary": {"Cookie": "filter=abc123; session=credential; tracking=keep-me"}})
+    probed = [jar for jar in jars if jar.get("filter") not in (None, "abc123")]
+    assert probed, "the filter cookie was never given a probe value"
     assert all(jar.get("tracking") == "keep-me" for jar in probed)
+    assert all(jar.get("session") == "credential" for jar in probed)
 
 
 def test_a_cookie_is_never_sent_a_line_break():

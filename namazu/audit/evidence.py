@@ -167,6 +167,16 @@ def assign_severity(proposed: str, *, category: str, origin: str,
 # A check whose id is not listed falls through to the prefix table below. Only
 # checks whose kind differs from their family's default need an entry.
 CATEGORY_BY_ID = {
+    "disclosure.implementation-detail": "informational",
+    "disclosure.potentially-sensitive": "informational",
+    "transport.header-observation": "informational",
+    "cors.wildcard": "informational",
+    "cors.private-network": "informational",
+    "cors.wildcard-with-credentials": "hardening",
+    "cors.origin-reflected": "hardening",
+    "cors.null-origin": "hardening",
+    "cookie.weak-flags": "hardening",
+    "clickjacking.missing-frame-controls": "hardening",
     # Reading a specification cannot find a weakness, only a stated intention.
     "spec.oauth-implicit-flow": "hardening",
     "spec.oauth-password-grant": "hardening",
@@ -181,10 +191,10 @@ CATEGORY_BY_ID = {
     # A 500 on a request the contract calls valid is a defect in the
     # implementation, not a disagreement about what the document says.
     "contract.server-error": "reliability",
-    # Cleartext is not a missing hardening control. Anything sent over that
-    # connection, including the credential, is readable in transit.
+    # Cleartext sends bytes in the clear. A redirect only advertises a
+    # destination unless following it and forwarding data were observed.
     "transport.cleartext": "security",
-    "transport.downgrade-redirect": "security",
+    "transport.downgrade-redirect": "hardening",
     # schemathesis check kinds, by what the disagreement actually is.
     "schemathesis.ignored-auth": "security",
     "schemathesis.server-error": "reliability",

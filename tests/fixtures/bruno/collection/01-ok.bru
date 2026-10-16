@@ -1,0 +1,23 @@
+meta {
+  name: ok
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/ok
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("resource content", function () { expect(res.body.id).to.equal("local-widget"); });
+}
+
+settings {
+  timeout: 200
+}

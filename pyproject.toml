@@ -52,7 +52,7 @@ namazu = "namazu.__main__:main"
 include = ["namazu*"]
 
 [tool.setuptools.package-data]
-namazu = ["static/*"]
+namazu = ["static/*", "bruno_node/*.cjs", "bruno_node/*.txt", "bruno_node/*.json", "bruno_node/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

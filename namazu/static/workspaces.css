@@ -1,0 +1,119 @@
+/* Multi-contract review uses the workbench's existing theme and typography. */
+.workspace-dialog { width: min(1510px, 97vw); height: min(960px, 95dvh); max-width: 97vw; max-height: 95dvh; padding: 0; border: 1px solid var(--line); border-radius: 7px; background: var(--app); color: var(--ink); overflow: hidden; }
+.workspace-dialog::backdrop { background: rgb(0 0 0 / .65); }
+.workspace-frame { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; height: 100%; }
+.workspace-header { display: flex; gap: 18px; align-items: center; padding: 18px 22px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.workspace-heading { flex: 1; min-width: 0; }
+.workspace-heading h2 { font-size: 20px; font-weight: 650; line-height: 1.25; }
+.workspace-heading p { margin-top: 5px; color: var(--muted); }
+.workspace-header-actions, .workspace-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.workspace-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); padding: 0 14px; background: var(--panel); overflow-x: auto; }
+.workspace-tab { padding: 12px 13px; color: var(--muted); white-space: nowrap; border-bottom: 2px solid transparent; }
+.workspace-tab[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--ink); background: var(--surface); }
+.workspace-tab .workspace-count { margin-left: 8px; }
+.workspace-count { display: inline-block; min-width: 20px; padding: 0 5px; font-size: 11px; font-variant-numeric: tabular-nums; background: var(--raised); color: var(--muted); border-radius: 3px; text-align: center; }
+.workspace-body { overflow: auto; min-height: 0; padding: 22px; }
+.workspace-footer { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 10px 22px; background: var(--panel); border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.workspace-footer p { overflow-wrap: anywhere; }
+.workspace-error { color: var(--bad); }
+.workspace-error:empty { display: none; }
+.workspace-section { margin-bottom: 24px; }
+.workspace-section > h3, .workspace-section-heading h3 { font-size: 16px; font-weight: 600; }
+.workspace-section > p { max-width: 82ch; color: var(--muted); margin: 7px 0 15px; }
+.workspace-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.workspace-import { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; padding: 18px; border: 1px solid var(--line); background: var(--panel); }
+.workspace-import h4 { margin-bottom: 8px; font-size: 13px; }
+.workspace-import p { margin: 8px 0; color: var(--muted); font-size: 12px; }
+.workspace-field { display: block; margin-bottom: 13px; min-width: 0; }
+.workspace-field > span { display: block; color: var(--muted); margin-bottom: 6px; font-size: 12px; }
+.workspace-field textarea { display: block; min-height: 68px; }
+.workspace-field input, .workspace-field select { min-height: 32px; }
+.workspace-field small { display: block; margin-top: 5px; color: var(--muted); }
+.workspace-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.workspace-layout { display: grid; grid-template-columns: 265px minmax(0, 1fr); gap: 20px; }
+.workspace-contract-list { display: flex; flex-direction: column; align-self: start; gap: 6px; }
+.workspace-contract-choice { padding: 12px; text-align: left; background: var(--panel); border: 1px solid var(--line); border-left: 3px solid transparent; border-radius: 3px; }
+.workspace-contract-choice[aria-current="true"] { background: var(--sel); border-left-color: var(--accent); }
+.workspace-contract-choice strong { display: block; font-weight: 600; }
+.workspace-contract-choice span { display: block; color: var(--muted); font-size: 11px; margin-top: 4px; overflow-wrap: anywhere; }
+.workspace-contract-choice .workspace-review-needed { color: var(--warnc); }
+.workspace-detail { min-width: 0; }
+.workspace-facts { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 7px 13px; margin: 13px 0 18px; font-size: 12px; }
+.workspace-facts dt { color: var(--muted); }
+.workspace-facts dd { overflow-wrap: anywhere; }
+.workspace-hash { font: 11px/1.6 var(--mono); }
+.workspace-callout { padding: 11px 13px; border-left: 3px solid var(--accent-line); background: var(--accent-bg); color: var(--ink); margin: 10px 0 16px; font-size: 12px; overflow-wrap: anywhere; }
+.workspace-callout.warning { border-left-color: var(--warnc); background: var(--warn-bg); }
+.workspace-operation { border-top: 1px solid var(--line); padding: 12px 0; }
+.workspace-operation > summary { cursor: pointer; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; list-style: none; }
+.workspace-operation > summary::before { content: "+"; color: var(--muted); font: 15px var(--mono); }
+.workspace-operation[open] > summary::before { content: "−"; }
+.workspace-operation > summary > strong { font: 12px/1.5 var(--mono); overflow-wrap: anywhere; min-width: 0; }
+.workspace-operation > summary > span:last-child { color: var(--muted); font-size: 12px; }
+.workspace-operation-body { padding: 14px 0 0 23px; }
+.workspace-check { display: flex; align-items: flex-start; gap: 9px; color: var(--ink); margin: 10px 0; font-size: 12px; }
+.workspace-check input { margin-top: 2px; }
+.workspace-check span { overflow-wrap: anywhere; }
+.workspace-check small { display: block; color: var(--muted); padding-top: 3px; }
+.workspace-code { font: 11px/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; margin: 10px 0; padding: 12px; background: var(--code); border: 1px solid var(--line); max-height: 350px; overflow: auto; }
+.workspace-json { font: 11px/1.6 var(--mono); min-height: 95px !important; }
+.workspace-disclosure { margin: 14px 0; }
+.workspace-disclosure > summary { color: var(--accent-ink); cursor: pointer; margin-bottom: 10px; }
+.workspace-profile, .workspace-overlap, .workspace-run, .workspace-assessment { padding: 17px; background: var(--panel); border: 1px solid var(--line); margin-bottom: 12px; min-width: 0; }
+.workspace-profile h4, .workspace-overlap h4, .workspace-run h4, .workspace-assessment h4 { font-size: 14px; margin-bottom: 7px; }
+.workspace-profile p, .workspace-overlap p, .workspace-run p, .workspace-assessment p { margin: 7px 0; }
+.workspace-assignment { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.workspace-assignment:last-child { border: 0; }
+.workspace-assignment .workspace-field { margin: 8px 0 0 24px; }
+.workspace-overlap ul, .workspace-blockers { margin: 10px 0; padding-left: 20px; }
+.workspace-overlap li, .workspace-blockers li { padding: 3px 0; overflow-wrap: anywhere; }
+.workspace-overlap-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; margin-top: 16px; }
+.workspace-overlap-controls .workspace-field { margin: 0; }
+.workspace-table-wrap { width: 100%; overflow: auto; border: 1px solid var(--line); margin: 13px 0; }
+.workspace-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.workspace-table th { background: var(--raised); color: var(--muted); text-align: left; font-weight: 500; padding: 9px 11px; }
+.workspace-table td { padding: 10px 11px; border-top: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+.workspace-table td small { display: block; margin-top: 4px; color: var(--muted); }
+.workspace-metrics { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--line); margin: 16px 0; background: var(--panel); }
+.workspace-metric { flex: 1 1 145px; padding: 13px 16px; border-right: 1px solid var(--line); }
+.workspace-metric:last-child { border-right: 0; }
+.workspace-metric strong { display: block; font-size: 21px; line-height: 1.4; font-weight: 600; font-variant-numeric: tabular-nums; }
+.workspace-metric span { font-size: 11px; color: var(--muted); }
+.workspace-empty { padding: 24px 0; color: var(--muted); }
+.workspace-evidence-contract { margin: 16px 0; border-top: 2px solid var(--accent-line); padding-top: 15px; }
+.workspace-evidence-contract > summary { display: flex; gap: 10px; cursor: pointer; font-size: 16px; font-weight: 600; }
+.workspace-evidence-contract .audit-test-results { margin-top: 16px; }
+.workspace-evidence-context { position: sticky; top: 0; z-index: 4; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.7fr) minmax(0, 1fr) auto; gap: 5px 14px; margin: 12px -1px; padding: 10px 12px; border: 1px solid var(--accent-line); background: var(--surface); box-shadow: 0 3px 0 var(--app); font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.workspace-evidence-context strong { color: var(--ink); font-weight: 600; }
+.workspace-report-nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.workspace-breadcrumb { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+.workspace-danger { color: var(--bad); }
+.workspace-muted { color: var(--muted); font-size: 12px; }
+.workspace-file-list { margin: 8px 0; max-height: 180px; overflow: auto; color: var(--muted); font-size: 12px; }
+.workspace-file-list li { overflow-wrap: anywhere; }
+@media (max-width: 800px) {
+  .workspace-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; border: 0; }
+  .workspace-header { padding: 13px 15px; gap: 9px; align-items: flex-start; flex-wrap: wrap; }
+  .workspace-heading { flex-basis: calc(100% - 66px); }
+  .workspace-header-actions { width: 100%; }
+  .workspace-heading h2 { font-size: 18px; }
+  .workspace-heading p { font-size: 11px; }
+  .workspace-tabs { padding: 0 5px; }
+  .workspace-tab { padding: 11px 10px; }
+  .workspace-body { padding: 15px; }
+  .workspace-footer { padding: 9px 15px; font-size: 11px; }
+  .workspace-import, .workspace-grid, .workspace-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .workspace-import { padding: 13px; }
+  .workspace-contract-list { flex-direction: row; overflow-x: auto; padding-bottom: 5px; }
+  .workspace-contract-choice { flex: 0 0 225px; }
+  .workspace-facts { grid-template-columns: 82px minmax(0, 1fr); gap: 7px 10px; }
+  .workspace-overlap-controls { grid-template-columns: minmax(0, 1fr); }
+  .workspace-overlap-controls .btn { justify-self: start; }
+  .workspace-section-heading { align-items: flex-start; flex-wrap: wrap; }
+  .workspace-operation-body { padding-left: 0; }
+  .workspace-metric { flex-basis: 45%; border-bottom: 1px solid var(--line); }
+  .workspace-profile, .workspace-overlap, .workspace-assessment { padding: 13px; }
+  .workspace-table { min-width: 560px; }
+  .workspace-evidence-context { grid-template-columns: minmax(0, 1fr); gap: 3px; padding: 9px 10px; margin-left: -4px; margin-right: -4px; }
+  #workspaces-open { display: inline-flex; }
+}

@@ -188,7 +188,7 @@ def test_jwt_without_expiry_is_reported():
 
 # ── CORS, headers, cookies ──────────────────────────────────────────────────
 
-def test_reflected_origin_with_credentials_is_high():
+def test_reflected_origin_with_credentials_is_a_hardening_observation():
     def handler(request):
         origin = request.headers.get("origin")
         headers = {}
@@ -201,7 +201,9 @@ def test_reflected_origin_with_credentials_is_high():
         result = audit_operation(_spec(), "GET /orders/{orderId}", base_url=BASE,
                                  identities={"primary": ALICE}, client=client)
     hit = next(f for f in result["findings"] if f["id"] == "cors.origin-reflected")
-    assert hit["severity"] == "high"
+    assert hit["severity"] == "low"
+    assert hit["assessment"]["category"] == "hardening"
+    assert hit["assessment"]["verification"] == "observed"
     assert hit["evidence"]["allow_credentials"] is True
 
 
@@ -273,8 +275,11 @@ def test_stack_trace_in_body_is_reported():
 
     with _client(handler) as client:
         result = audit_operation(_spec(), "GET /orders/{orderId}", base_url=BASE, client=client)
-    hit = next(f for f in result["findings"] if f["id"] == "disclosure.verbose-error")
+    hit = next(f for f in result["findings"] if f["id"] == "disclosure.potentially-sensitive"
+               and f["evidence"]["kind"] == "stack-trace")
     assert hit["evidence"]["signature"] == "Python traceback"
+    assert hit["severity"] == "info"
+    assert hit["assessment"]["category"] == "informational"
 
 
 # ── input probes ────────────────────────────────────────────────────────────
@@ -684,8 +689,8 @@ def test_host_level_findings_carry_host_scope():
         result = audit_operation(_spec(), "GET /orders/{orderId}", base_url=BASE,
                                  identities={"primary": ALICE}, client=client)
     scopes = {f["id"]: f["scope"] for f in result["findings"]}
-    assert scopes.get("transport.no-nosniff") == "host"
-    assert scopes.get("disclosure.version-banner") == "host"
-    assert scopes.get("cookie.weak-flags") == "host"
+    assert "transport.no-nosniff" not in scopes  # JSON alone establishes no browser MIME risk.
+    assert scopes.get("disclosure.implementation-detail") == "operation"
+    assert scopes.get("cookie.weak-flags") == "operation"
     # Per-route findings stay operation-scoped.
     assert scopes.get("exposure.undocumented-field", "operation") == "operation"

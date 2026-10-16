@@ -1,0 +1,19 @@
+meta {
+  name: False response value
+  type: http
+  seq: 32
+}
+
+get {
+  url: {{baseUrl}}/scalar-false
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

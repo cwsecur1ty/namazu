@@ -1,0 +1,19 @@
+opencollection: 1.0.0
+
+info:
+  name: Same collection
+
+request:
+  headers:
+    - name: X-Inherited
+      value: collection
+  auth:
+    type: bearer
+    token: "{{shared_token}}"
+  variables:
+    - name: base
+      value: http://127.0.0.1:9
+    - name: layer
+      value: collection
+bundled: false
+extensions: {}

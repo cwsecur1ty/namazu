@@ -1,0 +1,11 @@
+opencollection: 1.0.0
+info:
+  name: Official serializer workspace fixture
+  type: workspace
+collections:
+  - name: Same collection
+    path: collections/YAML
+  - name: Same collection
+    path: collections/BRU
+specs: []
+docs: ""

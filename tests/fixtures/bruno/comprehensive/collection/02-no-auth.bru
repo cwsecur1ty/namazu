@@ -1,0 +1,19 @@
+meta {
+  name: Explicit no auth
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/echo?case=no-auth
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

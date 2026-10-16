@@ -1,0 +1,23 @@
+meta {
+  name: XML body
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/echo?case=xml
+  body: xml
+  auth: inherit
+}
+
+body:xml {
+  <entry label="café"><value>space value</value></entry>
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  timeout: 200
+}

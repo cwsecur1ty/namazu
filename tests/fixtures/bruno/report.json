@@ -1,0 +1,808 @@
+[
+  {
+    "iterationIndex": 0,
+    "results": [
+      {
+        "test": {
+          "filename": "01-ok.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/ok",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Mon, 12 Oct 2026 13:56:17 GMT",
+            "content-type": "application/json",
+            "x-frame-options": "DENY"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user"
+          },
+          "url": "http://127.0.0.1/ok",
+          "responseTime": 16,
+          "duration": 16,
+          "size": 44
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "EC0CgdPtBsdmyDH-iUBGC",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [
+          {
+            "description": "resource content",
+            "status": "pass",
+            "uid": "Ngm70BNgLd309HN6XkgfT"
+          }
+        ],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0529375,
+        "name": "ok",
+        "suitename": "fixture/collection\\01-ok",
+        "path": "01-ok",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "02-failed.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/failed",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Mon, 12 Oct 2026 13:56:17 GMT",
+            "content-type": "application/json",
+            "x-frame-options": "DENY"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user"
+          },
+          "url": "http://127.0.0.1/failed",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 44
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "wgY-MygyH_OagDyrNI0SG",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 201",
+            "rhsOperand": "201",
+            "operator": "eq",
+            "status": "fail",
+            "error": "expected 200 to equal 201"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0039814,
+        "name": "failed",
+        "suitename": "fixture/collection\\02-failed",
+        "path": "02-failed",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "03-uniform.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/uniform",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Mon, 12 Oct 2026 13:56:17 GMT",
+            "content-type": "application/json",
+            "x-frame-options": "DENY"
+          },
+          "data": {
+            "detail": "Not entitled to this resource"
+          },
+          "url": "http://127.0.0.1/uniform",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 42
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "gUvlIDj5-67p6wWGClrys",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0034692,
+        "name": "uniform",
+        "suitename": "fixture/collection\\03-uniform",
+        "path": "03-uniform",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "04-uniform-again.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/uniform-again",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Mon, 12 Oct 2026 13:56:17 GMT",
+            "content-type": "application/json",
+            "x-frame-options": "DENY"
+          },
+          "data": {
+            "detail": "Not entitled to this resource"
+          },
+          "url": "http://127.0.0.1/uniform-again",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 42
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "TYzPgPY6KxLn6m16bG1xC",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0028956,
+        "name": "uniform-again",
+        "suitename": "fixture/collection\\04-uniform-again",
+        "path": "04-uniform-again",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "05-validation.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/validation",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 400,
+          "statusText": "Bad Request",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Mon, 12 Oct 2026 13:56:17 GMT",
+            "content-type": "application/json",
+            "x-frame-options": "DENY"
+          },
+          "data": {
+            "errors": {
+              "count": "must be a positive integer"
+            }
+          },
+          "url": "http://127.0.0.1/validation",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 49
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "NZAXapNdVGsHOb_Gh6Mo1",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 400",
+            "rhsOperand": "400",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0029846,
+        "name": "validation",
+        "suitename": "fixture/collection\\05-validation",
+        "path": "05-validation",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "06-edge.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/edge",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Mon, 12 Oct 2026 13:56:17 GMT",
+            "content-type": "text/html",
+            "x-frame-options": "DENY"
+          },
+          "data": "<html>Incapsula incident ID: local <iframe src=\"/_Incapsula_Resource\"></iframe></html>",
+          "url": "http://127.0.0.1/edge",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 86
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "TBniP3qOuDP3wB65bhy-a",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0032338,
+        "name": "edge",
+        "suitename": "fixture/collection\\06-edge",
+        "path": "06-edge",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "07-timeout.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/timeout",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "timeout of 200ms exceeded",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.2123,
+        "name": "timeout",
+        "suitename": "fixture/collection\\07-timeout",
+        "path": "07-timeout",
+        "iterationIndex": 0
+      }
+    ],
+    "summary": {
+      "totalRequests": 7,
+      "passedRequests": 5,
+      "failedRequests": 1,
+      "errorRequests": 1,
+      "skippedRequests": 0,
+      "skippedByBail": 0,
+      "totalAssertions": 6,
+      "passedAssertions": 5,
+      "failedAssertions": 1,
+      "totalTests": 1,
+      "passedTests": 1,
+      "failedTests": 0,
+      "totalPreRequestTests": 0,
+      "passedPreRequestTests": 0,
+      "failedPreRequestTests": 0,
+      "totalPostResponseTests": 0,
+      "passedPostResponseTests": 0,
+      "failedPostResponseTests": 0
+    }
+  },
+  {
+    "iterationIndex": 1,
+    "results": [
+      {
+        "test": {
+          "filename": "01-ok.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/ok",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Mon, 12 Oct 2026 13:56:17 GMT",
+            "content-type": "application/json",
+            "x-frame-options": "DENY"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user"
+          },
+          "url": "http://127.0.0.1/ok",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 44
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "FR8IkKa0YF3-g9JuM95lO",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [
+          {
+            "description": "resource content",
+            "status": "pass",
+            "uid": "R97lPj4y_b26Ru60jNBIP"
+          }
+        ],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0032033,
+        "name": "ok",
+        "suitename": "fixture/collection\\01-ok",
+        "path": "01-ok",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "02-failed.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/failed",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Mon, 12 Oct 2026 13:56:17 GMT",
+            "content-type": "application/json",
+            "x-frame-options": "DENY"
+          },
+          "data": {
+            "id": "local-widget",
+            "owner": "fixture-user"
+          },
+          "url": "http://127.0.0.1/failed",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 44
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "E23So4NcLQhw5CaOiBJ9W",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 201",
+            "rhsOperand": "201",
+            "operator": "eq",
+            "status": "fail",
+            "error": "expected 200 to equal 201"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0025236,
+        "name": "failed",
+        "suitename": "fixture/collection\\02-failed",
+        "path": "02-failed",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "03-uniform.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/uniform",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Mon, 12 Oct 2026 13:56:17 GMT",
+            "content-type": "application/json",
+            "x-frame-options": "DENY"
+          },
+          "data": {
+            "detail": "Not entitled to this resource"
+          },
+          "url": "http://127.0.0.1/uniform",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 42
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "Z7r0xnGxktYa4qL_H6Ax4",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0023364,
+        "name": "uniform",
+        "suitename": "fixture/collection\\03-uniform",
+        "path": "03-uniform",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "04-uniform-again.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/uniform-again",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Mon, 12 Oct 2026 13:56:17 GMT",
+            "content-type": "application/json",
+            "x-frame-options": "DENY"
+          },
+          "data": {
+            "detail": "Not entitled to this resource"
+          },
+          "url": "http://127.0.0.1/uniform-again",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 42
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "GG2OBsvRZbFek3YkdXBK6",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0018522,
+        "name": "uniform-again",
+        "suitename": "fixture/collection\\04-uniform-again",
+        "path": "04-uniform-again",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "05-validation.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/validation",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 400,
+          "statusText": "Bad Request",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Mon, 12 Oct 2026 13:56:17 GMT",
+            "content-type": "application/json",
+            "x-frame-options": "DENY"
+          },
+          "data": {
+            "errors": {
+              "count": "must be a positive integer"
+            }
+          },
+          "url": "http://127.0.0.1/validation",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 49
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "C18lYTrXKhJCm1kf1Nvpi",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 400",
+            "rhsOperand": "400",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0018887,
+        "name": "validation",
+        "suitename": "fixture/collection\\05-validation",
+        "path": "05-validation",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "06-edge.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/edge",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {
+            "server": "BaseHTTP/0.6 Python/3.14.0",
+            "date": "Mon, 12 Oct 2026 13:56:17 GMT",
+            "content-type": "text/html",
+            "x-frame-options": "DENY"
+          },
+          "data": "<html>Incapsula incident ID: local <iframe src=\"/_Incapsula_Resource\"></iframe></html>",
+          "url": "http://127.0.0.1/edge",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 86
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "4C8ITURZMk7BOry1loCqi",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0018325,
+        "name": "edge",
+        "suitename": "fixture/collection\\06-edge",
+        "path": "06-edge",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "07-timeout.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/timeout",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "bruno-runtime/4.2.1",
+            "Accept-Encoding": "gzip, compress, deflate, br",
+            "Host": "127.0.0.1:9876",
+            "Connection": "keep-alive",
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "timeout of 200ms exceeded",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.2013886,
+        "name": "timeout",
+        "suitename": "fixture/collection\\07-timeout",
+        "path": "07-timeout",
+        "iterationIndex": 1
+      }
+    ],
+    "summary": {
+      "totalRequests": 7,
+      "passedRequests": 5,
+      "failedRequests": 1,
+      "errorRequests": 1,
+      "skippedRequests": 0,
+      "skippedByBail": 0,
+      "totalAssertions": 6,
+      "passedAssertions": 5,
+      "failedAssertions": 1,
+      "totalTests": 1,
+      "passedTests": 1,
+      "failedTests": 0,
+      "totalPreRequestTests": 0,
+      "passedPreRequestTests": 0,
+      "failedPreRequestTests": 0,
+      "totalPostResponseTests": 0,
+      "passedPostResponseTests": 0,
+      "failedPostResponseTests": 0
+    }
+  }
+]

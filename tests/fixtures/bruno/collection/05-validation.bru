@@ -1,0 +1,19 @@
+meta {
+  name: validation
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/validation
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 400
+}
+
+settings {
+  timeout: 200
+}

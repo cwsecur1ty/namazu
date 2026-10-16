@@ -1,8 +1,8 @@
 """Analysis of one captured response. Sends no additional requests.
 
-Covers transport and browser-facing headers, cookie flags, technology
-disclosure, verbose errors, secrets in the body, and data the response returns
-that its own contract never documented.
+Covers contextual transport/browser headers, cookie flags, secrets in the
+body, and data the response returns that its contract never documented.
+Implementation disclosure is aggregated across exchanges by disclosure.py.
 """
 from __future__ import annotations
 
@@ -10,7 +10,9 @@ import re
 from urllib.parse import urlsplit
 
 from . import jwtlab
+from .identity import CREDENTIAL_HEADERS
 from .model import Exchange, finding, json_body, walk_json
+from .response_compare import edge_block_markers
 from .specscan import _resolve, _writable_properties
 
 SECRET_FIELDS = re.compile(
@@ -27,19 +29,16 @@ SECRET_VALUES = (
     (re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"), "Slack token"),
     (re.compile(r"(?i)\b(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis|amqp)://[^\s\"'<>]*:[^\s\"'<>@]+@"), "connection string with credentials"),
 )
-ERROR_SIGNATURES = (
-    (re.compile(r"Traceback \(most recent call last\)"), "Python traceback"),
-    (re.compile(r"\bat [\w.$]+\([\w.]+\.java:\d+\)"), "Java stack trace"),
-    (re.compile(r"(?i)\b(?:SQLSTATE|ORA-\d{5}|SQLiteException|PG::\w+Error|MySqlException|"
-                r"You have an error in your SQL syntax|Unclosed quotation mark)"), "database error"),
-    (re.compile(r"(?i)<b>(?:Warning|Fatal error|Notice)</b>:\s"), "PHP error output"),
-    (re.compile(r"(?i)\b(?:Microsoft \.NET Framework|System\.(?:Web|Data|NullReference)\w*Exception)"), ".NET exception"),
-    (re.compile(r"(?i)(?:^|[\s\"'])(?:/(?:home|var|usr|opt|srv)/[\w./-]{6,}|[A-Z]:\\\\(?:Users|inetpub|wwwroot)\\\\[\w\\\\.-]{4,})"), "server file path"),
-    (re.compile(r"(?i)\bWerkzeug\b.{0,40}\bDebugger\b|\bconsole\.py\b"), "interactive debugger"),
+SECURITY_HEADERS = (
+    "strict-transport-security", "x-content-type-options", "content-security-policy",
+    "content-security-policy-report-only", "x-frame-options", "referrer-policy",
+    "permissions-policy", "cache-control", "vary", "access-control-allow-origin",
+    "access-control-allow-credentials", "access-control-allow-private-network",
 )
-TECH_HEADERS = ("server", "x-powered-by", "x-aspnet-version", "x-aspnetmvc-version",
-                "x-generator", "x-drupal-cache", "x-runtime", "x-version", "x-backend-server")
-CACHE_SAFE = re.compile(r"(?i)\b(no-store|private)\b")
+RENDERABLE_TYPES = {"text/html", "application/xhtml+xml"}
+BROWSER_RESOURCE_TYPES = RENDERABLE_TYPES | {
+    "text/javascript", "application/javascript", "text/css",
+}
 
 
 def _header(exchange: Exchange, name: str) -> str:
@@ -61,13 +60,8 @@ def review(exchange: Exchange, *, endpoint: str, operation: dict | None = None,
     if not exchange.ok:
         return findings
     is_https = urlsplit(exchange.url).scheme == "https"
-    host = urlsplit(exchange.url).hostname or ""
-    local = host in ("localhost", "127.0.0.1", "::1") or host.endswith(".localhost")
-
-    findings += _transport(exchange, endpoint, is_https, local)
-    findings += _cors(exchange, endpoint)
+    findings += review_headers(exchange, endpoint=endpoint)
     findings += _cookies(exchange, endpoint, is_https)
-    findings += _disclosure(exchange, endpoint)
     findings += _body_secrets(exchange, endpoint)
     findings += _tokens(exchange, endpoint)
     if operation is not None:
@@ -75,7 +69,66 @@ def review(exchange: Exchange, *, endpoint: str, operation: dict | None = None,
     return findings
 
 
-def _transport(exchange: Exchange, endpoint: str, is_https: bool, local: bool) -> list:
+def header_context(exchange: Exchange, *, browser_use: bool | None = None) -> dict:
+    """Describe observed context without assuming every API has a browser client."""
+    content_type = exchange.header("content-type").split(";", 1)[0].strip().lower()
+    request_headers = {name.lower(): value for name, value in exchange.request_headers.items()}
+    attachment = exchange.header("content-disposition").lower().startswith("attachment")
+    edge = bool(edge_block_markers(exchange))
+    renderable = content_type in RENDERABLE_TYPES and not attachment
+    browser_evidence = browser_use is True or bool(
+        request_headers.get("origin") or request_headers.get("sec-fetch-mode") or renderable)
+    if browser_use is False:
+        browser_evidence = False
+    return {
+        "content_type": content_type or "unknown",
+        "response_source": "recognised-edge-block" if edge else "application-or-unattributed",
+        "browser_use": "declared" if browser_use is True else "not-declared" if browser_use is False
+        else "indicated-by-exchange" if browser_evidence else "unknown",
+        "browser_relevant": browser_evidence,
+        "renderable_document": renderable,
+        "attachment": attachment,
+        "credentials_sent": any(name in CREDENTIAL_HEADERS
+                                or name in {key.lower() for key in exchange.redacted_names}
+                                for name in request_headers),
+        "successful_response": 200 <= exchange.status < 300,
+    }
+
+
+def review_headers(exchange: Exchange, *, endpoint: str,
+                   browser_use: bool | None = None) -> list:
+    """Offline contextual assessment; presence never establishes effective protection."""
+    if not exchange.ok or not exchange.status:
+        return []
+    context = header_context(exchange, browser_use=browser_use)
+    host = urlsplit(exchange.url).hostname or ""
+    local = host in ("localhost", "127.0.0.1", "::1") or host.endswith(".localhost")
+    observed = {name: exchange.safe_text(exchange.header(name), redact_properties=False)
+                for name in SECURITY_HEADERS if exchange.header(name)}
+    out = []
+    if observed:
+        out.append(finding(
+            "transport.header-observation", "Response control headers observed",
+            "info", "confirmed", category="informational", endpoint=endpoint,
+            confirmed_claim="The listed header values were present on this response.",
+            method="Read the captured response headers and response/request context without sending a request.",
+            detail="The captured response includes " + ", ".join(observed) + ". Presence does not establish "
+                   "that the configuration is valid, enforced, or appropriate for its consumers.",
+            impact="No security consequence was demonstrated by these header values.",
+            limitations="Browser enforcement, cache isolation, permitted origins and header configuration "
+                        "correctness were not established by this observation.",
+            remediation="Review these values against the intended browser clients, authentication and cache policy.",
+            evidence={"headers": observed, "context": context}, exchanges=[exchange],
+        ))
+    # An explicit edge page describes the intermediary response, not application controls.
+    if context["response_source"] == "recognised-edge-block":
+        return out
+    out += _transport(exchange, endpoint, urlsplit(exchange.url).scheme == "https", local, context)
+    out += _cors(exchange, endpoint)
+    return out
+
+
+def _transport(exchange: Exchange, endpoint: str, is_https: bool, local: bool, context: dict) -> list:
     out = []
     if not is_https and not local:
         out.append(finding(
@@ -87,36 +140,43 @@ def _transport(exchange: Exchange, endpoint: str, is_https: bool, local: bool) -
             remediation="Serve the API over TLS only and redirect or reject plaintext requests.",
             evidence={"url": exchange.url, "status": exchange.status}, scope="host", exchanges=[exchange],
         ))
-    if is_https and not exchange.header("strict-transport-security"):
+    if is_https and not local and context["browser_relevant"] and not exchange.header("strict-transport-security"):
         out.append(finding(
             "transport.no-hsts", "No Strict-Transport-Security header",
             "low", "confirmed", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
-            detail="The HTTPS response does not set Strict-Transport-Security, so a browser client will "
-                   "still try the first request over HTTP.",
-            impact="Leaves a window for a downgrade on the initial connection.",
+            detail="This browser-relevant HTTPS response does not include Strict-Transport-Security.",
+            impact="An HSTS policy may reduce HTTP downgrade exposure for browser clients.",
+            limitations="The browser's stored HSTS policy, preload status, parent-domain policy and any "
+                        "actual downgrade were not checked. This response alone does not show exposure.",
             remediation="Send Strict-Transport-Security with a max-age of at least 31536000.",
-            evidence={}, scope="host", exchanges=[exchange],
+            evidence={"context": context}, exchanges=[exchange],
         ))
-    if not exchange.header("x-content-type-options"):
+    if (context["browser_relevant"] and context["content_type"] in BROWSER_RESOURCE_TYPES
+            and not context["attachment"] and not exchange.header("x-content-type-options")):
         out.append(finding(
             "transport.no-nosniff", "No X-Content-Type-Options header",
             "info", "confirmed", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
-            detail="Responses do not set X-Content-Type-Options: nosniff.",
-            impact="A browser may re-interpret an API response as HTML or script.",
-            remediation="Send X-Content-Type-Options: nosniff on every response.",
-            evidence={}, scope="host", exchanges=[exchange],
+            detail="This browser resource does not set X-Content-Type-Options: nosniff.",
+            impact="The header can constrain MIME interpretation in applicable browser fetch contexts.",
+            limitations="No MIME confusion, active content execution or browser exploit was demonstrated.",
+            remediation="Use an accurate Content-Type and consider nosniff for browser resources.",
+            evidence={"context": context}, exchanges=[exchange],
         ))
     cache = exchange.header("cache-control")
-    auth_sent = any(name.lower() in ("authorization", "cookie") for name in exchange.request_headers)
-    if auth_sent and exchange.status < 400 and exchange.body and not CACHE_SAFE.search(cache or ""):
+    safe_cache = exchange.safe_text(cache, redact_properties=False)
+    directives = {part.strip().split("=", 1)[0].lower() for part in cache.split(",")}
+    if (context["credentials_sent"] and context["successful_response"] and exchange.body
+            and directives & {"public", "s-maxage"} and not directives & {"private", "no-store"}):
         out.append(finding(
-            "transport.cacheable-private", "Authenticated response is not marked private",
-            "low", "probable", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
+            "transport.cacheable-private", "Credentialed response advertises shared caching",
+            "info", "confirmed", category="hardening", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
             detail=f"The request carried credentials and the response returned Cache-Control: "
-                   f"{cache or '(absent)'}. Shared caches may store and re-serve this body.",
-            impact="A proxy or CDN can serve one user's data to another.",
-            remediation="Send Cache-Control: no-store (or private) on authenticated responses.",
-            evidence={"cache_control": cache or None}, scope="host", exchanges=[exchange],
+                   f"{safe_cache}. This explicitly permits shared-cache handling and warrants policy review.",
+            impact="No cross-identity cache access or sensitive content disclosure was demonstrated.",
+            limitations="Credential use does not make every response private. Cache storage, cache keys, "
+                        "content sensitivity and cross-identity access remain untested.",
+            remediation="Confirm that shared caching is intended; use private or no-store for private data.",
+            evidence={"cache_control": safe_cache, "context": context}, exchanges=[exchange],
         ))
     return out
 
@@ -127,33 +187,36 @@ def _cors(exchange: Exchange, endpoint: str) -> list:
     out = []
     if origin == "*" and credentials:
         out.append(finding(
-            "cors.wildcard-with-credentials", "CORS allows any origin together with credentials",
-            "high", "confirmed", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
+            "cors.wildcard-with-credentials", "CORS wildcard and credential headers coexist",
+            "info", "confirmed", category="hardening", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
             detail="The response sets Access-Control-Allow-Origin: * and Access-Control-Allow-Credentials: "
-                   "true. Browsers reject that pair, but any gateway or client that honours it would let "
-                   "any site read authenticated responses.",
-            impact="Indicates the origin policy is not actually restricting anything.",
+                   "true. Browsers do not permit credentialed reads using this wildcard origin value.",
+            impact="This combination may prevent an intended browser integration from reading the response.",
+            limitations="Header presence alone does not establish cross-origin access, credential delivery, "
+                        "sensitive response content or exploitation.",
             remediation="Echo a single allow-listed origin, and send credentials only to that origin.",
-            evidence={"allow_origin": origin, "allow_credentials": True}, scope="host", exchanges=[exchange],
+            evidence={"allow_origin": origin, "allow_credentials": True}, exchanges=[exchange],
         ))
     elif origin == "*":
         out.append(finding(
             "cors.wildcard", "CORS allows any origin",
-            "low", "confirmed", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
-            detail="Access-Control-Allow-Origin: * lets any website read this response without credentials.",
-            impact="Acceptable for public data; a problem if the route is meant to be restricted.",
+            "info", "confirmed", category="informational", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
+            detail="Access-Control-Allow-Origin: * advertises uncredentialed cross-origin reads.",
+            impact="This can be intentional for public data; no unauthorized read was demonstrated.",
+            limitations="Browser access and the intended confidentiality of this response were not tested.",
             remediation="Restrict the allowed origins if this data is not public.",
-            evidence={"allow_origin": origin}, scope="host", exchanges=[exchange],
+            evidence={"allow_origin": origin}, exchanges=[exchange],
         ))
     if exchange.header("access-control-allow-private-network").lower() == "true":
         out.append(finding(
-            "cors.private-network", "CORS grants private-network access",
-            "medium", "confirmed", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
-            detail="Access-Control-Allow-Private-Network: true lets a public website reach this host "
-                   "inside the user's network.",
-            impact="A visited page can pivot into an internal service through the browser.",
-            remediation="Remove the header unless an internal tool genuinely needs it.",
-            evidence={}, scope="host", exchanges=[exchange],
+            "cors.private-network", "Private-network CORS header observed",
+            "info", "confirmed", category="informational", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
+            detail="This response includes Access-Control-Allow-Private-Network: true.",
+            impact="No browser access to a private-network resource was demonstrated.",
+            limitations="The header does not establish network location, browser support, permission, "
+                        "successful preflight, credential delivery or response readability.",
+            remediation="Review whether this header is needed by the supported browser clients.",
+            evidence={"allow_private_network": True}, exchanges=[exchange],
         ))
     return out
 
@@ -162,56 +225,31 @@ def _cookies(exchange: Exchange, endpoint: str, is_https: bool) -> list:
     out = []
     for cookie in _set_cookies(exchange):
         name = cookie.split("=", 1)[0].strip()
-        lowered = cookie.lower()
+        attributes = {part.strip().split("=", 1)[0].lower() for part in cookie.split(";")[1:]}
         missing = []
-        if "httponly" not in lowered:
+        if "httponly" not in attributes:
             missing.append("HttpOnly")
-        if is_https and "secure" not in lowered:
+        if is_https and "secure" not in attributes:
             missing.append("Secure")
-        if "samesite" not in lowered:
+        if "samesite" not in attributes:
             missing.append("SameSite")
         if missing:
             session_like = re.search(r"(?i)(session|sid|auth|token|jwt|login|remember)", name) is not None
             out.append(finding(
                 "cookie.weak-flags", f"Cookie “{name}” is set without {', '.join(missing)}",
-                "medium" if session_like and "HttpOnly" in missing else "low", "confirmed",
+                "medium" if session_like and "HttpOnly" in missing else "low", "confirmed", category="hardening",
                 owasp="API8:2023 Security Misconfiguration", endpoint=endpoint, parameter=name,
                 detail=f"Set-Cookie for “{name}” omits {', '.join(missing)}.",
-                impact=("Script on the page can read a session cookie without HttpOnly, and a missing "
-                        "SameSite allows cross-site submission."),
-                remediation="Set HttpOnly, Secure and SameSite=Lax or Strict on session cookies.",
-                evidence={"cookie": name, "missing": missing, "attributes": cookie[:200]},
-                scope="host", exchanges=[exchange],
-            ))
-    return out
-
-
-def _disclosure(exchange: Exchange, endpoint: str) -> list:
-    out = []
-    banners = {name: exchange.header(name) for name in TECH_HEADERS if exchange.header(name)}
-    detailed = {name: value for name, value in banners.items() if re.search(r"\d+\.\d+", value)}
-    if detailed:
-        out.append(finding(
-            "disclosure.version-banner", "Response headers disclose software versions",
-            "low", "confirmed", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
-            detail="The response advertises " + ", ".join(f"{k}: {v}" for k, v in detailed.items()) + ".",
-            impact="Version strings let an attacker map the host straight to published vulnerabilities.",
-            remediation="Suppress or genericise server and framework banners.",
-            evidence={"headers": detailed}, scope="host", exchanges=[exchange],
-        ))
-    for pattern, label in ERROR_SIGNATURES:
-        if pattern.search(exchange.body or ""):
-            match = pattern.search(exchange.body)
-            out.append(finding(
-                "disclosure.verbose-error", f"Response body contains a {label}",
-                "medium", "confirmed", owasp="API8:2023 Security Misconfiguration", endpoint=endpoint,
-                detail=f"The HTTP {exchange.status} response exposes a {label} rather than a handled error.",
-                impact="Internal paths, queries and library versions guide a targeted attack.",
-                remediation="Return a generic error body and log the detail server-side; disable debug mode.",
-                evidence={"signature": label, "excerpt": (exchange.body[max(0, match.start() - 60):match.end() + 140])},
+                impact="Missing cookie attributes may weaken an application cookie's intended isolation.",
+                limitations="A cookie name does not prove its authentication role. Script access, cross-site "
+                            "delivery, browser SameSite defaults and an attack consequence were not tested.",
+                remediation="Set cookie attributes according to its use; authentication cookies normally need "
+                            "Secure and HttpOnly plus an explicit suitable SameSite policy.",
+                evidence={"cookie": name, "missing": missing, "session_like_name": session_like,
+                          "attributes": exchange.safe_text(name + "=<credential>" + (
+                              ";" + cookie.split(";", 1)[1] if ";" in cookie else ""))},
                 exchanges=[exchange],
             ))
-            break
     return out
 
 

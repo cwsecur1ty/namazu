@@ -1,0 +1,608 @@
+[
+  {
+    "iterationIndex": 0,
+    "results": [
+      {
+        "test": {
+          "filename": "01-ok.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/ok",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/ok",
+          "responseTime": 9,
+          "duration": 9,
+          "size": 44
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "CsIVtCuyuW8gjjSR02ElM",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [
+          {
+            "description": "resource content",
+            "status": "pass",
+            "uid": "kQNnn9QpenxQyUSFYH1Np"
+          }
+        ],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0539028,
+        "name": "ok",
+        "suitename": "fixture/collection\\01-ok",
+        "path": "01-ok",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "02-failed.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/failed",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/failed",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 44
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "I2rg8DyzgwleksqXUM_NC",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 201",
+            "rhsOperand": "201",
+            "operator": "eq",
+            "status": "fail",
+            "error": "expected 200 to equal 201"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0041983,
+        "name": "failed",
+        "suitename": "fixture/collection\\02-failed",
+        "path": "02-failed",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "03-uniform.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/uniform",
+          "headers": {}
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {},
+          "url": "http://127.0.0.1/uniform",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 42
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "5d6BPZgzUU9pEFSuCqIwy",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0038475,
+        "name": "uniform",
+        "suitename": "fixture/collection\\03-uniform",
+        "path": "03-uniform",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "04-uniform-again.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/uniform-again",
+          "headers": {}
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {},
+          "url": "http://127.0.0.1/uniform-again",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 42
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "tYsHatRkciuTobRbU-Pi7",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0030043,
+        "name": "uniform-again",
+        "suitename": "fixture/collection\\04-uniform-again",
+        "path": "04-uniform-again",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "05-validation.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/validation",
+          "headers": {}
+        },
+        "response": {
+          "status": 400,
+          "statusText": "Bad Request",
+          "headers": {},
+          "url": "http://127.0.0.1/validation",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 49
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "TwyQTVZ-rV1Cf_VwqU3VW",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 400",
+            "rhsOperand": "400",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0036543,
+        "name": "validation",
+        "suitename": "fixture/collection\\05-validation",
+        "path": "05-validation",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "06-edge.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/edge",
+          "headers": {}
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {},
+          "url": "http://127.0.0.1/edge",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 86
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "m_Tp1Zc7F3zLZCarU87yp",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0029146,
+        "name": "edge",
+        "suitename": "fixture/collection\\06-edge",
+        "path": "06-edge",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "07-timeout.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/timeout",
+          "headers": {}
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": {},
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "timeout of 200ms exceeded",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.2109824,
+        "name": "timeout",
+        "suitename": "fixture/collection\\07-timeout",
+        "path": "07-timeout",
+        "iterationIndex": 0
+      }
+    ],
+    "summary": {
+      "totalRequests": 7,
+      "passedRequests": 5,
+      "failedRequests": 1,
+      "errorRequests": 1,
+      "skippedRequests": 0,
+      "skippedByBail": 0,
+      "totalAssertions": 6,
+      "passedAssertions": 5,
+      "failedAssertions": 1,
+      "totalTests": 1,
+      "passedTests": 1,
+      "failedTests": 0,
+      "totalPreRequestTests": 0,
+      "passedPreRequestTests": 0,
+      "failedPreRequestTests": 0,
+      "totalPostResponseTests": 0,
+      "passedPostResponseTests": 0,
+      "failedPostResponseTests": 0
+    }
+  },
+  {
+    "iterationIndex": 1,
+    "results": [
+      {
+        "test": {
+          "filename": "01-ok.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/ok",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/ok",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 44
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "tuG1vf5cCvPVlkFdwQwLu",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [
+          {
+            "description": "resource content",
+            "status": "pass",
+            "uid": "WVVWdyC4bBul3VhNJPGO2"
+          }
+        ],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0031177,
+        "name": "ok",
+        "suitename": "fixture/collection\\01-ok",
+        "path": "01-ok",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "02-failed.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/failed",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/failed",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 44
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "NsLEkLRJ2bFn1jHeJipA0",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 201",
+            "rhsOperand": "201",
+            "operator": "eq",
+            "status": "fail",
+            "error": "expected 200 to equal 201"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0023881,
+        "name": "failed",
+        "suitename": "fixture/collection\\02-failed",
+        "path": "02-failed",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "03-uniform.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/uniform",
+          "headers": {}
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {},
+          "url": "http://127.0.0.1/uniform",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 42
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "h1Wm2rNyiXDLLCkcpMy4q",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0026619,
+        "name": "uniform",
+        "suitename": "fixture/collection\\03-uniform",
+        "path": "03-uniform",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "04-uniform-again.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/uniform-again",
+          "headers": {}
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {},
+          "url": "http://127.0.0.1/uniform-again",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 42
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "YvIwDllkGccYxIVoLSSBe",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0022117,
+        "name": "uniform-again",
+        "suitename": "fixture/collection\\04-uniform-again",
+        "path": "04-uniform-again",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "05-validation.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/validation",
+          "headers": {}
+        },
+        "response": {
+          "status": 400,
+          "statusText": "Bad Request",
+          "headers": {},
+          "url": "http://127.0.0.1/validation",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 49
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "qJlgl6_1ydF9CMjkBK7eE",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 400",
+            "rhsOperand": "400",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0019717,
+        "name": "validation",
+        "suitename": "fixture/collection\\05-validation",
+        "path": "05-validation",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "06-edge.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/edge",
+          "headers": {}
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {},
+          "url": "http://127.0.0.1/edge",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 86
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "WckB2LM6JPj5BFwPSW-sI",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0023044,
+        "name": "edge",
+        "suitename": "fixture/collection\\06-edge",
+        "path": "06-edge",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "07-timeout.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/timeout",
+          "headers": {}
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": {},
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "timeout of 200ms exceeded",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.2166643,
+        "name": "timeout",
+        "suitename": "fixture/collection\\07-timeout",
+        "path": "07-timeout",
+        "iterationIndex": 1
+      }
+    ],
+    "summary": {
+      "totalRequests": 7,
+      "passedRequests": 5,
+      "failedRequests": 1,
+      "errorRequests": 1,
+      "skippedRequests": 0,
+      "skippedByBail": 0,
+      "totalAssertions": 6,
+      "passedAssertions": 5,
+      "failedAssertions": 1,
+      "totalTests": 1,
+      "passedTests": 1,
+      "failedTests": 0,
+      "totalPreRequestTests": 0,
+      "passedPreRequestTests": 0,
+      "failedPreRequestTests": 0,
+      "totalPostResponseTests": 0,
+      "passedPostResponseTests": 0,
+      "failedPostResponseTests": 0
+    }
+  }
+]

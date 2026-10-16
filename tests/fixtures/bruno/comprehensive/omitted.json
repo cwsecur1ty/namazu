@@ -1,0 +1,2932 @@
+[
+  {
+    "iterationIndex": 0,
+    "results": [
+      {
+        "test": {
+          "filename": "Nested folder\\Child with spaces\\Same request.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/space path/café?layer=folder",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/space%20path/caf%C3%A9?layer=folder",
+          "responseTime": 17,
+          "duration": 17,
+          "size": 465
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "wNbFEtfvl73V_8UPqmNUE",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0551012,
+        "name": "Same request",
+        "suitename": "fixture/comprehensive/collection\\Nested folder\\Child with spaces\\Same request",
+        "path": "Nested folder\\Child with spaces\\Same request",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Nested folder\\Same request.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?layer=request&message=café 雪",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?layer=request&message=caf%C3%A9%20%E9%9B%AA",
+          "responseTime": 3,
+          "duration": 3,
+          "size": 480
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "Q4fbz4ojJVW5FyAaK9OJT",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0042971,
+        "name": "Same request",
+        "suitename": "fixture/comprehensive/collection\\Nested folder\\Same request",
+        "path": "Nested folder\\Same request",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Other folder\\Same request.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?layer=environment",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?layer=environment",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 437
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "Bvm6WtUq_1ckmKxP3GMqs",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.004052,
+        "name": "Same request",
+        "suitename": "fixture/comprehensive/collection\\Other folder\\Same request",
+        "path": "Other folder\\Same request",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "01-request-auth-override.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?case=override",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=override",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 434
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "7dBh7nsNd13-T9oi5rfsC",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0030781,
+        "name": "Request bearer override",
+        "suitename": "fixture/comprehensive/collection\\01-request-auth-override",
+        "path": "01-request-auth-override",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "02-no-auth.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?case=no-auth",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=no-auth",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 384
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "MZr-MdZK_-HwfFBrVXhdc",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0041622,
+        "name": "Explicit no auth",
+        "suitename": "fixture/comprehensive/collection\\02-no-auth",
+        "path": "02-no-auth",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "03-json-object.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 566
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "5-6dxqT3UVNDfKBsO4p4J",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0049075,
+        "name": "JSON object and Unicode",
+        "suitename": "fixture/comprehensive/collection\\03-json-object",
+        "path": "03-json-object",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "04-json-null.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=null",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=null",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 493
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "k1U7HFamHVlCn5TWI84xo",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0037521,
+        "name": "JSON null",
+        "suitename": "fixture/comprehensive/collection\\04-json-null",
+        "path": "04-json-null",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "05-json-false.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=false",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=false",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 495
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "GO6YOMIZhf1MgKLeLP_fg",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0026577,
+        "name": "JSON false",
+        "suitename": "fixture/comprehensive/collection\\05-json-false",
+        "path": "05-json-false",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "06-json-zero.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=zero",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=zero",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 490
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "O_KoYAx9-8lAtMPpr5523",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0034506,
+        "name": "JSON zero",
+        "suitename": "fixture/comprehensive/collection\\06-json-zero",
+        "path": "06-json-zero",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "07-json-string.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=string",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=string",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 505
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "tKc12Em0G0Ff-SbapQIBo",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0034067,
+        "name": "JSON string",
+        "suitename": "fixture/comprehensive/collection\\07-json-string",
+        "path": "07-json-string",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "08-text.bru"
+        },
+        "request": {
+          "method": "PUT",
+          "url": "http://127.0.0.1:9876/echo?case=text",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=text",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 502
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "USRXxvGj8SY2PgYRkFYKX",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0027501,
+        "name": "Text body",
+        "suitename": "fixture/comprehensive/collection\\08-text",
+        "path": "08-text",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "09-xml.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=xml",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=xml",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 545
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "4LFw_4e6C4EHGv5bZ4__M",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0034677,
+        "name": "XML body",
+        "suitename": "fixture/comprehensive/collection\\09-xml",
+        "path": "09-xml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "10-form.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=form",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=form",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 506
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "4jR0IOON8j1Q46Y0rgTio",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0027354,
+        "name": "Form body",
+        "suitename": "fixture/comprehensive/collection\\10-form",
+        "path": "10-form",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "11-no-body.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=absent",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=absent",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 455
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "Ucbt44ZUNI0aonKML3vpP",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0023953,
+        "name": "POST without body",
+        "suitename": "fixture/comprehensive/collection\\11-no-body",
+        "path": "11-no-body",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "12-empty-response.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/empty",
+          "headers": {}
+        },
+        "response": {
+          "status": 204,
+          "statusText": "No Content",
+          "headers": {},
+          "url": "http://127.0.0.1/empty",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 0
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "wHVkqy7tHvGXcQSzvyZcx",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 204",
+            "rhsOperand": "204",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0023962,
+        "name": "Empty response",
+        "suitename": "fixture/comprehensive/collection\\12-empty-response",
+        "path": "12-empty-response",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "13-successful-tests.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/ok",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/ok",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 411
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "8jBp02fTMBBq5wsnFlG7g",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [
+          {
+            "description": "resource content",
+            "status": "pass",
+            "uid": "srvk6GXmeMQUJ9575Jyf6"
+          }
+        ],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0054277,
+        "name": "Successful assertions and script tests",
+        "suitename": "fixture/comprehensive/collection\\13-successful-tests",
+        "path": "13-successful-tests",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "14-failed-tests.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/ok",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/ok",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 411
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "NWfuOwEbNdp8FIgUvujuI",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 201",
+            "rhsOperand": "201",
+            "operator": "eq",
+            "status": "fail",
+            "error": "expected 200 to equal 201"
+          }
+        ],
+        "testResults": [
+          {
+            "description": "deliberate failure",
+            "status": "fail",
+            "error": "expected 'local-widget' to equal 'different-widget'",
+            "actual": "local-widget",
+            "expected": "different-widget",
+            "stack": "AssertionError: expected 'local-widget' to equal 'different-widget'\n    at fixture/comprehensive/collection\\14-failed-tests.bru:4:65\n    at C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\test.js:3:11\n    at test (C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\utils\\results.js:35:21)\n    at fixture/comprehensive/collection\\14-failed-tests.bru:4:1\n    at fixture/comprehensive/collection\\14-failed-tests.bru:5:3\n    at fixture/comprehensive/collection\\14-failed-tests.bru:6:11\n    at Script.runInContext (node:vm:149:12)\n    at runScript (C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\sandbox\\node-vm\\index.js:135:48)\n    at runScriptInNodeVm (C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\sandbox\\node-vm\\index.js:141:17)\n    at TestRuntime.runTests (C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\runtime\\test-runtime.js:115:15)",
+            "errorName": "AssertionError",
+            "uid": "sKQoxmezPA2KB6mQJK_3O"
+          }
+        ],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0059032,
+        "name": "Failed assertion and script test",
+        "suitename": "fixture/comprehensive/collection\\14-failed-tests",
+        "path": "14-failed-tests",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "15-denial.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/denied",
+          "headers": {}
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {},
+          "url": "http://127.0.0.1/denied",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 43
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "CUYnpe3G6Zpxz0RWbrjFU",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.003497,
+        "name": "Application denial",
+        "suitename": "fixture/comprehensive/collection\\15-denial",
+        "path": "15-denial",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "16-validation.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/validation",
+          "headers": {}
+        },
+        "response": {
+          "status": 400,
+          "statusText": "Bad Request",
+          "headers": {},
+          "url": "http://127.0.0.1/validation",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 51
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "JSPc9LnlljDgk1vMJOo8Y",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 400",
+            "rhsOperand": "400",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0028958,
+        "name": "Field validation",
+        "suitename": "fixture/comprehensive/collection\\16-validation",
+        "path": "16-validation",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "17-edge.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/edge",
+          "headers": {}
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {},
+          "url": "http://127.0.0.1/edge",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 86
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "T3djaHvMvkQsFS8Lt_2L_",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0026787,
+        "name": "Edge block",
+        "suitename": "fixture/comprehensive/collection\\17-edge",
+        "path": "17-edge",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "18-timeout.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/timeout",
+          "headers": {}
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": {},
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "timeout of 200ms exceeded",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.2157436,
+        "name": "Timeout",
+        "suitename": "fixture/comprehensive/collection\\18-timeout",
+        "path": "18-timeout",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "19-unresolved-query.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?unresolved={{missingValue}}",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?unresolved={{missingValue}}",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 447
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "EjWNqDu8reX7xlQlhFw3J",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0025093,
+        "name": "Unresolved static input",
+        "suitename": "fixture/comprehensive/collection\\19-unresolved-query",
+        "path": "19-unresolved-query",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "20-inert-script.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?case=script",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=script",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 465
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "fGlLsJtCjEafB9vcuupOn",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0030714,
+        "name": "Script-dependent request",
+        "suitename": "fixture/comprehensive/collection\\20-inert-script",
+        "path": "20-inert-script",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "21-graphql.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=graphql",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=graphql",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 554
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "OkXYrkcWp5PIX3H-1U_Qk",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020311,
+        "name": "Unsupported GraphQL conversion",
+        "suitename": "fixture/comprehensive/collection\\21-graphql",
+        "path": "21-graphql",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "22-json-escapes.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=escapes",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=escapes",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 623
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "O-iW_gmgX3dbq3bEYZ_C9",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0018863,
+        "name": "Escaped JSON strings",
+        "suitename": "fixture/comprehensive/collection\\22-json-escapes",
+        "path": "22-json-escapes",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "23-disabled-variable.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?disabled=collection-value",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?disabled=collection-value",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 445
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "-GYxrR0OJTkR6iH5EPwtJ",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0016273,
+        "name": "Disabled override keeps lower scope",
+        "suitename": "fixture/comprehensive/collection\\23-disabled-variable",
+        "path": "23-disabled-variable",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "24-opaque-auth-reference.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?case=opaque-auth",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=opaque-auth",
+          "responseTime": 0,
+          "duration": 0,
+          "size": 441
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "vduogZbTTZS7d6XMf79xr",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0016225,
+        "name": "Opaque auth reference",
+        "suitename": "fixture/comprehensive/collection\\24-opaque-auth-reference",
+        "path": "24-opaque-auth-reference",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "25-empty-text.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=empty-text-block",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=empty-text-block",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 529
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002069,
+        "name": "Empty text block parser boundary",
+        "suitename": "fixture/comprehensive/collection\\25-empty-text",
+        "path": "25-empty-text",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "26-duplicate-query.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?tag=one&tag=two&empty=",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?tag=one&tag=two&empty=",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 449
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "AOLBapiU8zUBjxF2qB95I",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0021476,
+        "name": "Repeated and empty query values",
+        "suitename": "fixture/comprehensive/collection\\26-duplicate-query",
+        "path": "26-duplicate-query",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "27-custom-content-type.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=content-type",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=content-type",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 525
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "WfJZvnt7610FdyXsshscD",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0026178,
+        "name": "Explicit content type casing",
+        "suitename": "fixture/comprehensive/collection\\27-custom-content-type",
+        "path": "27-custom-content-type",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "28-owned-file.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=file",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=file",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 527
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "7z_OzASLj7nUhe_bQkO5N",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0033384,
+        "name": "Owned fixture file upload",
+        "suitename": "fixture/comprehensive/collection\\28-owned-file",
+        "path": "28-owned-file",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "29-owned-multipart.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=multipart",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=multipart",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 511
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "QZ9zwvgPhV4UUZy3sL8BB",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0022096,
+        "name": "Owned fixture multipart",
+        "suitename": "fixture/comprehensive/collection\\29-owned-multipart",
+        "path": "29-owned-multipart",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "30-response-false.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/scalar-false",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/scalar-false",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 5
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "M5YVTe7SdsbXuyQ-h5le1",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020589,
+        "name": "False response value",
+        "suitename": "fixture/comprehensive/collection\\30-response-false",
+        "path": "30-response-false",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "31-response-zero.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/scalar-zero",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/scalar-zero",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 1
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "y9EAfko3VOhhZn5nz3oOa",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0019649,
+        "name": "Zero response value",
+        "suitename": "fixture/comprehensive/collection\\31-response-zero",
+        "path": "31-response-zero",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "32-response-null.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/scalar-null",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/scalar-null",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 4
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "s3WYB7UkejO_1C6GFF9wN",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0022845,
+        "name": "Null response value",
+        "suitename": "fixture/comprehensive/collection\\32-response-null",
+        "path": "32-response-null",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "33-empty-text-mode.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=empty-text",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=empty-text",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 489
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "FcA-jIKaK4vPLYdFx8koQ",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020059,
+        "name": "Empty text mode without a block",
+        "suitename": "fixture/comprehensive/collection\\33-empty-text-mode",
+        "path": "33-empty-text-mode",
+        "iterationIndex": 0
+      }
+    ],
+    "summary": {
+      "totalRequests": 36,
+      "passedRequests": 34,
+      "failedRequests": 1,
+      "errorRequests": 1,
+      "skippedRequests": 0,
+      "skippedByBail": 0,
+      "totalAssertions": 34,
+      "passedAssertions": 33,
+      "failedAssertions": 1,
+      "totalTests": 2,
+      "passedTests": 1,
+      "failedTests": 1,
+      "totalPreRequestTests": 0,
+      "passedPreRequestTests": 0,
+      "failedPreRequestTests": 0,
+      "totalPostResponseTests": 0,
+      "passedPostResponseTests": 0,
+      "failedPostResponseTests": 0
+    }
+  },
+  {
+    "iterationIndex": 1,
+    "results": [
+      {
+        "test": {
+          "filename": "Nested folder\\Child with spaces\\Same request.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/space path/café?layer=folder",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/space%20path/caf%C3%A9?layer=folder",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 465
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "OmGg6tx-hiiWtNvqkWbid",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002266,
+        "name": "Same request",
+        "suitename": "fixture/comprehensive/collection\\Nested folder\\Child with spaces\\Same request",
+        "path": "Nested folder\\Child with spaces\\Same request",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "Nested folder\\Same request.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?layer=request&message=café 雪",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?layer=request&message=caf%C3%A9%20%E9%9B%AA",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 480
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "8lABXGAc-KPczabBhduEA",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0019981,
+        "name": "Same request",
+        "suitename": "fixture/comprehensive/collection\\Nested folder\\Same request",
+        "path": "Nested folder\\Same request",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "Other folder\\Same request.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?layer=environment",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?layer=environment",
+          "responseTime": 0,
+          "duration": 0,
+          "size": 437
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "hplQKp9hElkczNoH60W0x",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0017776,
+        "name": "Same request",
+        "suitename": "fixture/comprehensive/collection\\Other folder\\Same request",
+        "path": "Other folder\\Same request",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "01-request-auth-override.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?case=override",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=override",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 434
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "fmftUE7WID1b1VhXPI84Q",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0016934,
+        "name": "Request bearer override",
+        "suitename": "fixture/comprehensive/collection\\01-request-auth-override",
+        "path": "01-request-auth-override",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "02-no-auth.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?case=no-auth",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=no-auth",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 384
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "_zCioUfQkTqsrqcpJOPxb",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0015145,
+        "name": "Explicit no auth",
+        "suitename": "fixture/comprehensive/collection\\02-no-auth",
+        "path": "02-no-auth",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "03-json-object.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 566
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "Gqi4VU1KeO3gCLI9k_Ug3",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020193,
+        "name": "JSON object and Unicode",
+        "suitename": "fixture/comprehensive/collection\\03-json-object",
+        "path": "03-json-object",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "04-json-null.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=null",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=null",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 493
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "9YwM3bBKYxs-s0UK5-uJn",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002162,
+        "name": "JSON null",
+        "suitename": "fixture/comprehensive/collection\\04-json-null",
+        "path": "04-json-null",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "05-json-false.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=false",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=false",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 495
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "D-7d69rRVtbDkw7eBEJov",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020009,
+        "name": "JSON false",
+        "suitename": "fixture/comprehensive/collection\\05-json-false",
+        "path": "05-json-false",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "06-json-zero.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=zero",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=zero",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 490
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "MCb0cCECgLpE9zUYeb9U2",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0021901,
+        "name": "JSON zero",
+        "suitename": "fixture/comprehensive/collection\\06-json-zero",
+        "path": "06-json-zero",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "07-json-string.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=string",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=string",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 505
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "s0xb1gehRu8j0Nrp5AWYq",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0021068,
+        "name": "JSON string",
+        "suitename": "fixture/comprehensive/collection\\07-json-string",
+        "path": "07-json-string",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "08-text.bru"
+        },
+        "request": {
+          "method": "PUT",
+          "url": "http://127.0.0.1:9876/echo?case=text",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=text",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 502
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "zTowp0SzTaf-MiKkhGyQu",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020854,
+        "name": "Text body",
+        "suitename": "fixture/comprehensive/collection\\08-text",
+        "path": "08-text",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "09-xml.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=xml",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=xml",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 545
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "Gbgzm7tSUKQOrC2OYPkoR",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0023461,
+        "name": "XML body",
+        "suitename": "fixture/comprehensive/collection\\09-xml",
+        "path": "09-xml",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "10-form.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=form",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=form",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 506
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "cVJZaB0wKYmmbuxe95cHV",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0022713,
+        "name": "Form body",
+        "suitename": "fixture/comprehensive/collection\\10-form",
+        "path": "10-form",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "11-no-body.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=absent",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=absent",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 455
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "K_FXoz85oyPc2Iy4ymlzk",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0029096,
+        "name": "POST without body",
+        "suitename": "fixture/comprehensive/collection\\11-no-body",
+        "path": "11-no-body",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "12-empty-response.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/empty",
+          "headers": {}
+        },
+        "response": {
+          "status": 204,
+          "statusText": "No Content",
+          "headers": {},
+          "url": "http://127.0.0.1/empty",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 0
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "QkAkCpxnNLf3erg-iLpNa",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 204",
+            "rhsOperand": "204",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0023613,
+        "name": "Empty response",
+        "suitename": "fixture/comprehensive/collection\\12-empty-response",
+        "path": "12-empty-response",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "13-successful-tests.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/ok",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/ok",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 411
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "Dp7KzSA1xxJO57USBTATv",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [
+          {
+            "description": "resource content",
+            "status": "pass",
+            "uid": "rDqTgtr-5EvvH3SE3vdl0"
+          }
+        ],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0030384,
+        "name": "Successful assertions and script tests",
+        "suitename": "fixture/comprehensive/collection\\13-successful-tests",
+        "path": "13-successful-tests",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "14-failed-tests.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/ok",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/ok",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 411
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "iicm2efA521Cu6Q8Grtfm",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 201",
+            "rhsOperand": "201",
+            "operator": "eq",
+            "status": "fail",
+            "error": "expected 200 to equal 201"
+          }
+        ],
+        "testResults": [
+          {
+            "description": "deliberate failure",
+            "status": "fail",
+            "error": "expected 'local-widget' to equal 'different-widget'",
+            "actual": "local-widget",
+            "expected": "different-widget",
+            "stack": "AssertionError: expected 'local-widget' to equal 'different-widget'\n    at fixture/comprehensive/collection\\14-failed-tests.bru:4:65\n    at C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\test.js:3:11\n    at test (C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\utils\\results.js:35:21)\n    at fixture/comprehensive/collection\\14-failed-tests.bru:4:1\n    at fixture/comprehensive/collection\\14-failed-tests.bru:5:3\n    at fixture/comprehensive/collection\\14-failed-tests.bru:6:11\n    at Script.runInContext (node:vm:149:12)\n    at runScript (C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\sandbox\\node-vm\\index.js:135:48)\n    at runScriptInNodeVm (C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\sandbox\\node-vm\\index.js:141:17)\n    at TestRuntime.runTests (C:\\Users\\camer\\Desktop\\Desktop\\Kanine\\namazu\\.local-reports\\bruno-tools\\node_modules\\@usebruno\\js\\src\\runtime\\test-runtime.js:115:15)",
+            "errorName": "AssertionError",
+            "uid": "bVf8y7L7QVZZ4Mx4KGH83"
+          }
+        ],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0039017,
+        "name": "Failed assertion and script test",
+        "suitename": "fixture/comprehensive/collection\\14-failed-tests",
+        "path": "14-failed-tests",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "15-denial.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/denied",
+          "headers": {}
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {},
+          "url": "http://127.0.0.1/denied",
+          "responseTime": 3,
+          "duration": 3,
+          "size": 43
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "Eifx4GfTVpfEnxTBFqz5f",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0046718,
+        "name": "Application denial",
+        "suitename": "fixture/comprehensive/collection\\15-denial",
+        "path": "15-denial",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "16-validation.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/validation",
+          "headers": {}
+        },
+        "response": {
+          "status": 400,
+          "statusText": "Bad Request",
+          "headers": {},
+          "url": "http://127.0.0.1/validation",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 51
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "bBsaXme1-TPdXDuXYoSBM",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 400",
+            "rhsOperand": "400",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0024114,
+        "name": "Field validation",
+        "suitename": "fixture/comprehensive/collection\\16-validation",
+        "path": "16-validation",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "17-edge.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/edge",
+          "headers": {}
+        },
+        "response": {
+          "status": 403,
+          "statusText": "Forbidden",
+          "headers": {},
+          "url": "http://127.0.0.1/edge",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 86
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "ALfDa-_wcm-OIuLXv8s8J",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 403",
+            "rhsOperand": "403",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0022533,
+        "name": "Edge block",
+        "suitename": "fixture/comprehensive/collection\\17-edge",
+        "path": "17-edge",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "18-timeout.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/timeout",
+          "headers": {}
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": {},
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "timeout of 200ms exceeded",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.2112628,
+        "name": "Timeout",
+        "suitename": "fixture/comprehensive/collection\\18-timeout",
+        "path": "18-timeout",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "19-unresolved-query.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?unresolved={{missingValue}}",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?unresolved={{missingValue}}",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 447
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "Kp2xOFPj1SckVCc7wQbxH",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0026365,
+        "name": "Unresolved static input",
+        "suitename": "fixture/comprehensive/collection\\19-unresolved-query",
+        "path": "19-unresolved-query",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "20-inert-script.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?case=script",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=script",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 465
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "Ws3xp2xuuWXbgAIW5sOU9",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0029817,
+        "name": "Script-dependent request",
+        "suitename": "fixture/comprehensive/collection\\20-inert-script",
+        "path": "20-inert-script",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "21-graphql.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=graphql",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=graphql",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 554
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "UTLwNIycf0x1LA-5Sib84",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0022056,
+        "name": "Unsupported GraphQL conversion",
+        "suitename": "fixture/comprehensive/collection\\21-graphql",
+        "path": "21-graphql",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "22-json-escapes.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=escapes",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=escapes",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 623
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "ZycBOzWyvi0DKj3tOOhJ9",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020524,
+        "name": "Escaped JSON strings",
+        "suitename": "fixture/comprehensive/collection\\22-json-escapes",
+        "path": "22-json-escapes",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "23-disabled-variable.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?disabled=collection-value",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?disabled=collection-value",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 445
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "KlbS9jODoD6fPeK_m_rFm",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0027937,
+        "name": "Disabled override keeps lower scope",
+        "suitename": "fixture/comprehensive/collection\\23-disabled-variable",
+        "path": "23-disabled-variable",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "24-opaque-auth-reference.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?case=opaque-auth",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=opaque-auth",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 441
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "AWlgbKdzuVGkcFN8H3GQc",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020135,
+        "name": "Opaque auth reference",
+        "suitename": "fixture/comprehensive/collection\\24-opaque-auth-reference",
+        "path": "24-opaque-auth-reference",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "25-empty-text.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=empty-text-block",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=empty-text-block",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 529
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0018609,
+        "name": "Empty text block parser boundary",
+        "suitename": "fixture/comprehensive/collection\\25-empty-text",
+        "path": "25-empty-text",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "26-duplicate-query.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/echo?tag=one&tag=two&empty=",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?tag=one&tag=two&empty=",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 449
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "yb7v5d-gmOKWxkxJR0XOr",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020138,
+        "name": "Repeated and empty query values",
+        "suitename": "fixture/comprehensive/collection\\26-duplicate-query",
+        "path": "26-duplicate-query",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "27-custom-content-type.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=content-type",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=content-type",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 525
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "hpXKaTqQlLIhqOsOz7jY6",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002631,
+        "name": "Explicit content type casing",
+        "suitename": "fixture/comprehensive/collection\\27-custom-content-type",
+        "path": "27-custom-content-type",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "28-owned-file.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=file",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=file",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 527
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "JHJQ8Sq3PReY4Q4cZOl7z",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0030204,
+        "name": "Owned fixture file upload",
+        "suitename": "fixture/comprehensive/collection\\28-owned-file",
+        "path": "28-owned-file",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "29-owned-multipart.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=multipart",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=multipart",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 511
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "zMCUahPTVS1zygAr7XmEL",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0018262,
+        "name": "Owned fixture multipart",
+        "suitename": "fixture/comprehensive/collection\\29-owned-multipart",
+        "path": "29-owned-multipart",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "30-response-false.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/scalar-false",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/scalar-false",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 5
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "0FXRZfejrpuH3xdU5AUSF",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0016072,
+        "name": "False response value",
+        "suitename": "fixture/comprehensive/collection\\30-response-false",
+        "path": "30-response-false",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "31-response-zero.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/scalar-zero",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/scalar-zero",
+          "responseTime": 2,
+          "duration": 2,
+          "size": 1
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "vTyTrDoKpKOP6iOyAS4wH",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020469,
+        "name": "Zero response value",
+        "suitename": "fixture/comprehensive/collection\\31-response-zero",
+        "path": "31-response-zero",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "32-response-null.bru"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:9876/scalar-null",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/scalar-null",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 4
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "cga3gQ3Uuw43oRzhAp5ae",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020699,
+        "name": "Null response value",
+        "suitename": "fixture/comprehensive/collection\\32-response-null",
+        "path": "32-response-null",
+        "iterationIndex": 1
+      },
+      {
+        "test": {
+          "filename": "33-empty-text-mode.bru"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://127.0.0.1:9876/echo?case=empty-text",
+          "headers": {}
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "headers": {},
+          "url": "http://127.0.0.1/echo?case=empty-text",
+          "responseTime": 1,
+          "duration": 1,
+          "size": 489
+        },
+        "error": null,
+        "status": "pass",
+        "assertionResults": [
+          {
+            "uid": "Iyk9SwpN9ngk9kaJbrxLn",
+            "lhsExpr": "res.status",
+            "rhsExpr": "eq 200",
+            "rhsOperand": "200",
+            "operator": "eq",
+            "status": "pass"
+          }
+        ],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0019146,
+        "name": "Empty text mode without a block",
+        "suitename": "fixture/comprehensive/collection\\33-empty-text-mode",
+        "path": "33-empty-text-mode",
+        "iterationIndex": 1
+      }
+    ],
+    "summary": {
+      "totalRequests": 36,
+      "passedRequests": 34,
+      "failedRequests": 1,
+      "errorRequests": 1,
+      "skippedRequests": 0,
+      "skippedByBail": 0,
+      "totalAssertions": 34,
+      "passedAssertions": 33,
+      "failedAssertions": 1,
+      "totalTests": 2,
+      "passedTests": 1,
+      "failedTests": 1,
+      "totalPreRequestTests": 0,
+      "passedPreRequestTests": 0,
+      "failedPreRequestTests": 0,
+      "totalPostResponseTests": 0,
+      "passedPostResponseTests": 0,
+      "failedPostResponseTests": 0
+    }
+  }
+]

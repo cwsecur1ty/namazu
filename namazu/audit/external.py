@@ -74,6 +74,8 @@ def _schemathesis_command() -> list[str] | None:
             return None
     except (ImportError, ValueError):
         return None
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--bundled-schemathesis"]
     return [sys.executable, "-m", "schemathesis.cli"]
 
 
@@ -131,6 +133,7 @@ def _version(command: list) -> str | None:
     try:
         done = subprocess.run(command, capture_output=True, text=True, timeout=30,
                               encoding="utf-8", errors="replace",
+                              creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                               env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"})
     except (OSError, subprocess.SubprocessError):
         return None
@@ -147,7 +150,8 @@ def _run(command: list, timeout: int) -> tuple[int, str, str, str]:
     child_env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
     try:
         done = subprocess.run(command, capture_output=True, text=True, timeout=timeout,
-                              encoding="utf-8", errors="replace", env=child_env)
+                              encoding="utf-8", errors="replace", env=child_env,
+                              creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
     except subprocess.TimeoutExpired:
         return -1, "", "", f"The tool did not finish within {timeout}s and was stopped."
     except OSError as exc:

@@ -1,10 +1,4 @@
-"""A security product's block page must be named, not reported as a bad API.
-
-"The token endpoint returned a non-JSON response (HTTP 403)" is true and
-useless. It reads as a broken authorization server, so the operator goes
-looking at their client secret, when the request never arrived anywhere near
-one. The distinction the report has to make is which hop refused it.
-"""
+"""Name explicit block-page evidence without guessing which services saw a request."""
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -17,6 +11,7 @@ IMPERVA_BODY = (
     "<html><head><title>Access Denied</title></head><body>"
     "<h2>What happened?</h2>"
     "<p>This request was blocked by our security service</p>"
+    '<iframe src="/_Incapsula_Resource"></iframe>Incapsula incident ID: test'
     "<p>Your support ID is: 8841267799113344556</p></body></html>"
 )
 
@@ -24,14 +19,14 @@ IMPERVA_BODY = (
 def test_an_imperva_block_page_is_named():
     message = describe_block(403, {"X-Iinfo": "7-1234-5678 NNNY CT(1 1 0)"}, IMPERVA_BODY)
     assert "Imperva" in message
-    assert "not from the authorization server" in message
-    assert "no credential of yours was rejected" in message
+    assert "Downstream handling is unknown" in message
+    assert "does not establish" in message
     assert "8841267799113344556" in message
 
 
 def test_a_cloudflare_block_page_is_named():
     message = describe_block(403, {"CF-Ray": "8f2a1b4c-LHR"},
-                             "<h1>Attention Required!</h1><p>Ray ID: 8f2a1b4c</p>")
+                             "<h1>Attention Required!</h1><p>Cloudflare Ray ID: 8f2a1b4c</p>")
     assert "Cloudflare" in message
     assert "8f2a1b4c" in message
 
@@ -55,6 +50,13 @@ def test_a_real_oauth_error_is_left_alone():
 
 def test_a_plain_404_is_left_alone():
     assert describe_block(404, {}, "<html><body>Not Found</body></html>") == ""
+
+
+@pytest.mark.parametrize("headers", [{"x-iinfo": "diagnostic"}, {"cf-ray": "diagnostic"},
+                                     {"x-amzn-waf-action": "diagnostic"}, {}])
+def test_application_denial_with_diagnostic_headers_does_not_prove_edge_block(headers):
+    assert describe_block(403, headers, '{"detail":"Access denied: missing resource permission"}') == ""
+    assert describe_block(403, headers, "<html><body>Access denied</body></html>") == ""
 
 
 @pytest.fixture
@@ -114,7 +116,7 @@ def test_a_blocked_token_exchange_blames_nothing_on_the_credential(blocking_serv
                              "refresh_token": "refresh-token-dRowssaP"},
                             client_id="client-abc", client_secret="secret-hunter2")
     message = str(caught.value)
-    assert "no credential of yours was rejected" in message
+    assert "does not establish whether the authorization server processed or accepted the credentials" in message
     assert "invalid" not in message.lower()
     # Nothing secret travels into an error an operator will paste into a ticket.
     assert "hunter2" not in message

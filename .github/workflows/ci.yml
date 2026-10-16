@@ -21,6 +21,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
@@ -51,6 +55,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
@@ -89,3 +96,20 @@ jobs:
           node-version: "20"
       - name: Check app.js parses
         run: node --check namazu/static/app.js
+      - name: Check workspace JavaScript
+        run: |
+          node --check namazu/static/workspaces.js
+          node --check namazu/static/desktop-model.js
+          node --check namazu/static/desktop-workbench.js
+          node --check namazu/static/desktop-testing.js
+          node --check namazu/static/audit-results-view.js
+      - name: Check Bruno integration JavaScript
+        run: |
+          node --check namazu/static/bruno.js
+          node --check namazu/bruno_node/bridge.cjs
+          node --check namazu/bruno_node/parser.cjs
+      - name: Reproduce bundled official Bruno parser
+        run: |
+          npm --prefix namazu/bruno_node ci --ignore-scripts --no-audit --no-fund
+          npm --prefix namazu/bruno_node run build
+          git diff --exit-code -- namazu/bruno_node/parser.cjs

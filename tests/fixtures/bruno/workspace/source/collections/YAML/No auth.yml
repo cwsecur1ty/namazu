@@ -1,0 +1,23 @@
+info:
+  name: No auth
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{base}}/echo?layer={{layer}}&global={{global_value}}"
+  body:
+    type: json
+    data: "null"
+
+runtime:
+  variables:
+    - name: layer
+      value: request
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true

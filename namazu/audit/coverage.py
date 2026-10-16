@@ -24,15 +24,16 @@ claim about the target and "completed" is a statement about the audit.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-STATES = ("completed", "blocked", "skipped", "inconclusive", "not-applicable", "attempted")
+STATES = ("completed", "blocked", "skipped", "inconclusive", "not-applicable", "attempted",
+          "budget-exhausted", "execution-error")
 
 # Which state wins when two are recorded for one check. Most serious first, so
 # a gap can never be overwritten by a later success: a check blocked on one
 # endpoint and completed on another has a gap, and that is what the report has
 # to show. The browser labels a check across endpoints with the same order.
-PRECEDENCE = ("blocked", "inconclusive", "completed", "not-applicable", "skipped",
+PRECEDENCE = ("execution-error", "budget-exhausted", "blocked", "inconclusive", "completed", "not-applicable", "skipped",
               "attempted")
 
 # Every probe family the engine can run, with what it needs and what it means.
@@ -46,8 +47,8 @@ CHECKS: dict[str, dict] = {
         "needs_baseline": False},
     "response-contract": {
         "title": "Response conformance",
-        "what": "Compares the baseline response against the schema and media type the "
-                "operation declares.",
+        "what": "Reviews every captured response against its matching operation contract. "
+                "Separates explicit edge block pages, unmatched operations and incomplete evidence.",
         "needs_baseline": False,
         "needs_response": True},
     "passive-review": {
@@ -101,10 +102,19 @@ CHECKS: dict[str, dict] = {
     "input-handling": {
         "title": "Input handling",
         "what": "Injection and traversal batteries over documented inputs.",
-        "needs_baseline": True},
+        "needs_baseline": False,
+        "needs_response": True},
+    "schema-inputs": {
+        "title": "Schema input campaign",
+        "what": "One-field request-schema mutations, including denied baselines; validation rejections are observations and unexplained differences are leads.",
+        "needs_response": True},
+    "jwt-offline": {
+        "title": "Offline token inspection",
+        "what": "Inspects a supplied JWT without sending requests.",
+        "needs_baseline": False},
     "jwt": {
         "title": "Token handling",
-        "what": "Offline analysis of the supplied token, and replay of forged variants.",
+        "what": "Replay of forged token variants; requires a successful positive control.",
         "needs_baseline": True},
     # Sends an inert twin of each payload as its own control and compares the
     # two, so it concludes without reference to the baseline at all.
@@ -124,7 +134,8 @@ CHECKS: dict[str, dict] = {
     "body-injection": {
         "title": "Request body injection",
         "what": "The injection battery over request body fields.",
-        "needs_baseline": True},
+        "needs_baseline": False,
+        "needs_response": True},
     "inventory": {
         "title": "Surface inventory",
         "what": "Shadow routes, exposed documents and source around the documented surface.",
@@ -142,6 +153,8 @@ class Entry:
     remediation: str = ""
     findings: int = 0
     requests: int = 0
+    reason_codes: list = field(default_factory=list)
+    missing_prerequisites: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         meta = CHECKS.get(self.check, {})
@@ -152,6 +165,8 @@ class Entry:
             "state": self.state,
             "findings": self.findings,
             "requests": self.requests,
+            "reason_codes": list(self.reason_codes),
+            "missing_prerequisites": list(self.missing_prerequisites),
         }
         if self.reason:
             out["reason"] = self.reason
@@ -208,8 +223,25 @@ class Ledger:
         entry.findings += findings
         entry.requests += requests
 
-    def block(self, check: str, reason: str, remediation: str = "") -> None:
-        self._record(check, "blocked", reason, remediation)
+    def block(self, check: str, reason: str, remediation: str = "", *,
+              code: str = "blocked-prerequisite") -> None:
+        previous = self._entries.get(check)
+        previous_reason = previous.reason if previous is not None and previous.state == "blocked" else ""
+        entry = self._record(check, "blocked", reason, remediation)
+        if code not in entry.reason_codes:
+            entry.reason_codes.append(code)
+        if reason not in entry.missing_prerequisites:
+            entry.missing_prerequisites.append(reason)
+        if previous_reason and reason not in previous_reason:
+            entry.reason = previous_reason + "; " + reason
+
+    def budget_exhausted(self, check: str) -> None:
+        entry = self._record(check, "budget-exhausted", "Request budget exhausted before all probes ran.")
+        entry.reason_codes.append("budget-exhausted")
+
+    def execution_error(self, check: str) -> None:
+        entry = self._record(check, "execution-error", "A probe failed to execute; inspect its exchange.")
+        entry.reason_codes.append("execution-error")
 
     def skip(self, check: str, reason: str) -> None:
         self._record(check, "skipped", reason)
@@ -245,14 +277,15 @@ class Ledger:
                         "tested. Nothing in this result says the boundary holds.",
                         "Add a second identity on the Auth tab, ideally one that owns a "
                         "different object on the same operation, and record which object each "
-                        "identity owns so a read can be checked by content.")
-        if verdict.usable:
+                        "identity owns so a read can be checked by content.", code="missing-second-identity")
+        if verdict.positive_control:
             return
-        reason = f"The baseline did not succeed ({verdict.outcome}). {verdict.reason}"
+        reason = (f"No successful positive control ({verdict.outcome}). {verdict.reason} "
+                  "An expected denial does not demonstrate successful access.")
         for check, meta in CHECKS.items():
             if not meta.get("needs_baseline"):
                 continue
-            self.block(check, reason, verdict.remediation)
+            self.block(check, reason, verdict.remediation, code="positive-control-required")
 
     def summary(self) -> dict:
         counts = dict.fromkeys(STATES, 0)

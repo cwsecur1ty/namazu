@@ -1,0 +1,9 @@
+{
+  "cli": "@usebruno/cli@4.2.1",
+  "parser": "@usebruno/lang@0.40.0",
+  "command": "bru run --env Local --iteration-count 2 --sandbox developer --noproxy --reporter-json report.json",
+  "generator": "tests/bruno_fixture.py",
+  "target": "loopback ThreadingHTTPServer only",
+  "sanitization": "Ephemeral loopback port replaced with 9876 and absolute collection path replaced with fixture/collection; synthetic data only. CLI timings retained; report has no execution timestamp.",
+  "expected_exit_code": 1
+}
